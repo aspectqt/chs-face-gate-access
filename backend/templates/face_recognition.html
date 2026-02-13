@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Face Recognition</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-6">
+
+<div class="container mx-auto">
+
+    <h1 class="text-2xl font-bold mb-6">Face Recognition</h1>
+
+    <!-- REGISTER FACE -->
+    <div class="bg-white p-4 rounded shadow mb-6">
+        <h2 class="font-semibold mb-2">Register Student Face</h2>
+        <form id="registerFaceForm" method="POST" action="/students" enctype="multipart/form-data">
+            <div class="grid grid-cols-2 gap-4">
+                <input type="text" name="student_id" placeholder="Student ID" class="border p-2 rounded" required>
+                <input type="text" name="name" placeholder="Full Name" class="border p-2 rounded" required>
+                <input type="text" name="grade" placeholder="Grade" class="border p-2 rounded" required>
+                <input type="text" name="section" placeholder="Section" class="border p-2 rounded" required>
+                <input type="text" name="parent_contact" placeholder="Parent Contact" class="border p-2 rounded" required>
+                <input type="file" name="photo" accept="image/*" class="border p-2 rounded" required>
+            </div>
+            <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded mt-4 hover:bg-blue-700">Register Face</button>
+        </form>
+    </div>
+
+    <!-- RECOGNIZE FACE -->
+    <div class="bg-white p-4 rounded shadow">
+        <h2 class="font-semibold mb-2">Recognize Student</h2>
+        <input type="file" id="recognizePhoto" accept="image/*" class="border p-2 rounded mb-2">
+        <button onclick="recognizeFace()" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Recognize</button>
+        <p id="recognizeResult" class="mt-2 font-medium"></p>
+    </div>
+
+</div>
+
+<script>
+    async function recognizeFace() {
+        const fileInput = document.getElementById('recognizePhoto');
+        const result = document.getElementById('recognizeResult');
+
+        if (!fileInput.files.length) {
+            result.textContent = "Please select a photo.";
+            result.className = "text-red-600 mt-2 font-medium";
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('photo', fileInput.files[0]);
+
+        const res = await fetch('/recognize-face', {
+            method: 'POST',
+            body: formData
+        });
+
+        const data = await res.json();
+
+        if (data.status === "SUCCESS") {
+            result.textContent = `Matched: ${data.student.name}. SMS Sent: "${data.sms}"`;
+            result.className = "text-green-600 mt-2 font-medium";
+        } else {
+            result.textContent = data.error;
+            result.className = "text-red-600 mt-2 font-medium";
+        }
+    }
+</script>
+
+</body>
+</html>

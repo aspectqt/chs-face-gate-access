@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Gate Logs</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-100 h-screen overflow-hidden">
+
+<div class="flex h-full">
+
+    <!-- SIDEBAR -->
+    <aside class="w-64 bg-emerald-700 text-white flex flex-col shadow-xl">
+        <!-- Brand -->
+        <div class="flex items-center gap-3 px-6 py-5 border-b border-emerald-800">
+            <img src="/static/logo.png" class="h-10 w-10 rounded-full ring-2 ring-white/30" alt="Logo">
+            <div>
+                <p class="text-lg font-semibold">CHS Gate Access</p>
+                <p class="text-xs text-emerald-200">Administration</p>
+            </div>
+        </div>
+
+        <!-- Navigation -->
+        <nav class="flex-1 px-4 py-6 space-y-1 text-sm font-medium">
+            <a href="/dashboard" class="sidebar-link flex items-center gap-3 px-4 py-2.5 rounded-lg transition">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                    <path d="M3 10.5L12 3l9 7.5V21a1 1 0 01-1 1h-5v-6H9v6H4a1 1 0 01-1-1z"/>
+                </svg>
+                Dashboard
+            </a>
+
+            <a href="/students" class="sidebar-link flex items-center gap-3 px-4 py-2.5 rounded-lg transition">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                    <path d="M12 11a4 4 0 100-8 4 4 0 000 8z"/>
+                    <path d="M4 21v-1a6 6 0 0112 0v1"/>
+                </svg>
+                Students
+            </a>
+
+            <a href="/gate-logs" class="sidebar-link flex items-center gap-3 px-4 py-2.5 rounded-lg transition bg-emerald-800 shadow-lg">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                    <rect x="4" y="3" width="16" height="18" rx="2"/>
+                    <path d="M8 7h8M8 11h8M8 15h6"/>
+                </svg>
+                Gate Logs
+            </a>
+
+            <a href="/sms-logs" class="sidebar-link flex items-center gap-3 px-4 py-2.5 rounded-lg transition">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                    <path d="M21 12c0 4.4-4 8-9 8l-4 1 1-4c-4-1-6-4-6-7 0-4.4 4-8 9-8s9 3.6 9 8z"/>
+                </svg>
+                SMS Logs
+            </a>
+        </nav>
+    </aside>
+
+    <!-- MAIN -->
+    <div class="flex-1 flex flex-col">
+
+        <!-- HEADER -->
+        <header class="h-16 bg-white shadow-sm flex items-center justify-between px-6">
+            <h1 class="text-lg font-semibold text-gray-800">Gate Logs</h1>
+
+            <!-- User Dropdown -->
+            <div class="relative">
+                <button id="userMenuButton" class="flex items-center gap-2 bg-gray-100 px-4 py-2 rounded-full hover:bg-gray-200 transition">
+                    <span class="text-gray-700 font-medium">Admin</span>
+                    <svg class="h-4 w-4 text-gray-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                </button>
+
+                <div id="userDropdown" class="absolute right-0 mt-2 w-44 bg-white rounded-lg shadow-lg border border-gray-200 hidden">
+                    <a href="/settings" class="block px-4 py-2 text-gray-700 hover:bg-gray-100 transition">Settings</a>
+                    <a href="/logout" class="block px-4 py-2 text-red-600 hover:bg-red-50 transition">Logout</a>
+                </div>
+            </div>
+        </header>
+
+        <!-- CONTENT -->
+        <main class="flex-1 overflow-y-auto p-6 space-y-6">
+
+            <!-- QUICK ACTION -->
+            <div class="bg-white rounded-xl shadow p-5 flex flex-col gap-4">
+                <h2 class="font-semibold">Quick Actions</h2>
+                <div class="flex gap-3">
+                    <input id="studentIdInput" placeholder="Enter Student ID"
+                        class="flex-1 border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500 outline-none">
+                    <button onclick="simulateGate()"
+                        class="bg-emerald-600 text-white px-5 py-2 rounded-lg hover:bg-emerald-700 transition">
+                        Simulate Entry
+                    </button>
+                </div>
+                <p id="quickActionResult" class="text-sm mt-1 text-gray-600"></p>
+            </div>
+
+            <!-- SUMMARY CARDS -->
+            <div class="grid grid-cols-3 gap-6">
+                <div class="bg-white rounded-xl shadow p-5 flex items-center gap-4">
+                    <div class="p-3 rounded-lg bg-blue-100 text-blue-700">
+                        <svg class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path d="M12 14l9-5-9-5-9 5 9 5z"/>
+                            <path d="M12 14l6.16-3.422M12 14l-6.16-3.422M12 14v7"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <p class="text-xs uppercase text-gray-500">Total Entries</p>
+                        <p class="text-2xl font-semibold">{{ total_entries }}</p>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl shadow p-5 flex items-center gap-4">
+                    <div class="p-3 rounded-lg bg-green-100 text-green-700">
+                        <svg class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path d="M9 12l2 2 4-4"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <p class="text-xs uppercase text-gray-500">Total IN</p>
+                        <p class="text-2xl font-semibold">{{ total_in }}</p>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl shadow p-5 flex items-center gap-4">
+                    <div class="p-3 rounded-lg bg-red-100 text-red-700">
+                        <svg class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path d="M15 12l-2-2-4 4"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <p class="text-xs uppercase text-gray-500">Total OUT</p>
+                        <p class="text-2xl font-semibold">{{ total_out }}</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- GATE LOGS TABLE -->
+            <div class="bg-white rounded-xl shadow overflow-hidden">
+                <div class="px-6 py-4 border-b font-semibold text-gray-700 bg-gray-50">
+                    Student Entry / Exit Records
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-gray-700">
+                        <thead class="bg-gray-100 uppercase text-gray-600 text-xs font-semibold tracking-wide">
+                            <tr>
+                                <th class="p-3 text-left">Student ID</th>
+                                <th class="p-3 text-left">Name</th>
+                                <th class="p-3 text-left">Action</th>
+                                <th class="p-3 text-left">Time In</th>
+                                <th class="p-3 text-left">Time Out</th>
+                                <th class="p-3 text-left">Date</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-200" id="logsTable">
+                            {% for log in logs %}
+                            <tr class="hover:bg-gray-50 transition">
+                                <td class="p-3 font-medium">{{ log.student_id }}</td>
+                                <td class="p-3">{{ log.name }}</td>
+                                <td class="p-3">
+                                    <span class="px-3 py-1 text-xs font-semibold rounded-full
+                                        {% if log.action == 'IN' %}
+                                            bg-green-100 text-green-800
+                                        {% else %}
+                                            bg-red-100 text-red-800
+                                        {% endif %}">
+                                        {{ log.action }}
+                                    </span>
+                                </td>
+                                <td class="p-3">{{ log.time_in }}</td>
+                                <td class="p-3">{{ log.time_out or '-' }}</td>
+                                <td class="p-3">{{ log.date }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </main>
+    </div>
+</div>
+
+<!-- SCRIPTS -->
+
+<script>
+function simulateGate() {
+    const studentId = document.getElementById("studentIdInput").value.trim();
+    const result = document.getElementById("quickActionResult");
+
+    if (!studentId) {
+        result.textContent = "Please enter a Student ID.";
+        result.className = "text-red-600";
+        return;
+    }
+
+    fetch(`/simulate-gate/${studentId}`)
+        .then(res => res.json())
+        .then(data => {
+            if (data.status === "SUCCESS") {
+                result.textContent = `Student ${data.name} ${data.action === 'IN' ? 'entered' : 'exited'} successfully.`;
+                result.className = data.action === 'IN' ? "text-green-600" : "text-red-600";
+                // Refresh the table automatically
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                result.textContent = data.error;
+                result.className = "text-red-600";
+            }
+        });
+}
+</script>
+
+<script>
+    // Highlight active sidebar link
+    const links = document.querySelectorAll('.sidebar-link');
+    links.forEach(link => {
+        if (link.href === window.location.href) {
+            link.classList.add('bg-emerald-800', 'shadow-lg');
+        }
+        link.addEventListener('mouseenter', () => link.classList.add('bg-emerald-700', 'shadow-md'));
+        link.addEventListener('mouseleave', () => {
+            if (!link.classList.contains('bg-emerald-800')) link.classList.remove('bg-emerald-700', 'shadow-md');
+        });
+    });
+
+    // Filter/Search
+    const searchInput = document.getElementById('searchInput');
+    const fromDate = document.getElementById('fromDate');
+    const toDate = document.getElementById('toDate');
+    const filterBtn = document.getElementById('filterBtn');
+    const logsTable = document.getElementById('logsTable');
+
+    filterBtn.addEventListener('click', () => {
+        const search = searchInput.value.toLowerCase();
+        const from = fromDate.value;
+        const to = toDate.value;
+
+        const rows = logsTable.querySelectorAll('tr');
+        rows.forEach(row => {
+            const studentId = row.children[0].textContent.toLowerCase();
+            const name = row.children[1].textContent.toLowerCase();
+            const date = row.children[5].textContent;
+
+            const matchesSearch = studentId.includes(search) || name.includes(search);
+            const matchesFrom = from ? date >= from : true;
+            const matchesTo = to ? date <= to : true;
+
+            row.style.display = matchesSearch && matchesFrom && matchesTo ? '' : 'none';
+        });
+    });
+
+    // Toggle user dropdown
+    const userBtn = document.getElementById('userMenuButton');
+    const userDropdown = document.getElementById('userDropdown');
+    userBtn.addEventListener('click', () => {
+        userDropdown.classList.toggle('hidden');
+    });
+</script>
+
+</body>
+</html>

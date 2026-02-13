@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>SMS Logs</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-100 h-screen overflow-hidden">
+
+<div class="flex h-full">
+
+    <!-- SIDEBAR (DO NOT TOUCH) -->
+    <aside class="w-64 bg-emerald-700 text-white flex flex-col shadow-xl">
+        <div class="flex items-center gap-3 px-6 py-5 border-b border-emerald-800">
+            <img src="/static/logo.png" class="h-10 w-10 rounded-full ring-2 ring-white/30" alt="Logo">
+            <div>
+                <p class="text-lg font-semibold">CHS Gate Access</p>
+                <p class="text-xs text-emerald-200">Administration</p>
+            </div>
+        </div>
+
+        <nav class="flex-1 px-4 py-6 space-y-1 text-sm font-medium">
+            <a href="/dashboard" class="sidebar-link flex items-center gap-3 px-4 py-2.5 rounded-lg transition">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                    <path d="M3 10.5L12 3l9 7.5V21a1 1 0 01-1 1h-5v-6H9v6H4a1 1 0 01-1-1z"/>
+                </svg>
+                Dashboard
+            </a>
+
+            <a href="/students" class="sidebar-link flex items-center gap-3 px-4 py-2.5 rounded-lg transition">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                    <path d="M12 11a4 4 0 100-8 4 4 0 000 8z"/>
+                    <path d="M4 21v-1a6 6 0 0112 0v1"/>
+                </svg>
+                Students
+            </a>
+
+            <a href="/gate-logs" class="sidebar-link flex items-center gap-3 px-4 py-2.5 rounded-lg transition">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                    <rect x="4" y="3" width="16" height="18" rx="2"/>
+                    <path d="M8 7h8M8 11h8M8 15h6"/>
+                </svg>
+                Gate Logs
+            </a>
+
+            <a href="/sms-logs" class="sidebar-link flex items-center gap-3 px-4 py-2.5 rounded-lg transition">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                    <path d="M21 12c0 4.4-4 8-9 8l-4 1 1-4c-4-1-6-4-6-7 0-4.4 4-8 9-8s9 3.6 9 8z"/>
+                </svg>
+                SMS Logs
+            </a>
+        </nav>
+    </aside>
+
+    <!-- MAIN -->
+    <div class="flex-1 flex flex-col">
+
+        <!-- HEADER -->
+        <header class="h-16 bg-white shadow-sm flex items-center justify-between px-6">
+            <h1 class="text-lg font-semibold text-gray-800">SMS Logs</h1>
+
+            <div class="relative">
+                <button id="userMenuButton" class="flex items-center gap-2 bg-gray-100 px-4 py-2 rounded-full hover:bg-gray-200 transition">
+                    <span class="font-medium text-gray-700">Admin</span>
+                    <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path d="M19 9l-7 7-7-7"/>
+                    </svg>
+                </button>
+
+                <div id="userDropdown" class="hidden absolute right-0 mt-2 w-44 bg-white rounded-lg shadow border">
+                    <a href="/settings" class="block px-4 py-2 hover:bg-gray-100">Settings</a>
+                    <a href="/logout" class="block px-4 py-2 text-red-600 hover:bg-red-50">Logout</a>
+                </div>
+            </div>
+        </header>
+
+        <!-- CONTENT -->
+        <main class="flex-1 overflow-y-auto p-6 space-y-6">
+
+            <!-- FILTER BAR -->
+            <div class="bg-white rounded-xl shadow p-4 flex flex-wrap gap-4 items-end">
+                <div class="flex-1">
+                    <label class="block text-sm font-medium text-gray-600 mb-1">Search</label>
+                    <input id="searchInput" type="text" placeholder="Student ID or Name"
+                           class="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-600 mb-1">From</label>
+                    <input id="fromDate" type="date" class="border rounded-lg px-3 py-2">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-600 mb-1">To</label>
+                    <input id="toDate" type="date" class="border rounded-lg px-3 py-2">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-600 mb-1">Status</label>
+                    <select id="statusFilter" class="border rounded-lg px-3 py-2">
+                        <option value="">All</option>
+                        <option value="SENT">Sent</option>
+                        <option value="FAILED">Failed</option>
+                    </select>
+                </div>
+
+                <button id="filterBtn"
+                        class="bg-emerald-600 text-white px-6 py-2 rounded-lg hover:bg-emerald-700 transition">
+                    Filter
+                </button>
+            </div>
+
+            <!-- TABLE -->
+            <div class="bg-white rounded-xl shadow overflow-hidden">
+                <div class="px-6 py-4 border-b bg-gray-50 font-semibold text-gray-700">
+                    Parent Notification Records
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead class="bg-gray-100 text-xs uppercase text-gray-600">
+                            <tr>
+                                <th class="p-3 text-left">Student ID</th>
+                                <th class="p-3 text-left">Name</th>
+                                <th class="p-3 text-left">Parent Contact</th>
+                                <th class="p-3 text-left">Message</th>
+                                <th class="p-3 text-left">Date</th>
+                                <th class="p-3 text-left">Time</th>
+                                <th class="p-3 text-left">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="smsTable" class="divide-y">
+                            {% for log in logs %}
+                            <tr class="hover:bg-gray-50">
+                                <td class="p-3 font-medium">{{ log.student_id }}</td>
+                                <td class="p-3">{{ log.name }}</td>
+                                <td class="p-3">{{ log.parent_contact }}</td>
+                                <td class="p-3 max-w-md truncate">{{ log.message }}</td>
+                                <td class="p-3">{{ log.date }}</td>
+                                <td class="p-3">{{ log.time }}</td>
+                                <td class="p-3">
+                                    <span class="px-3 py-1 rounded-full text-xs font-semibold
+                                        {% if log.status == 'SENT' %}
+                                            bg-green-100 text-green-800
+                                        {% else %}
+                                            bg-red-100 text-red-800
+                                        {% endif %}">
+                                        {{ log.status }}
+                                    </span>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </main>
+    </div>
+</div>
+
+<!-- DROPDOWN -->
+<script>
+document.getElementById("userMenuButton").onclick = () =>
+    document.getElementById("userDropdown").classList.toggle("hidden");
+</script>
+
+<!-- FILTER SCRIPT -->
+<script>
+document.getElementById("filterBtn").addEventListener("click", () => {
+    const search = document.getElementById("searchInput").value.toLowerCase();
+    const from = document.getElementById("fromDate").value;
+    const to = document.getElementById("toDate").value;
+    const status = document.getElementById("statusFilter").value;
+
+    document.querySelectorAll("#smsTable tr").forEach(row => {
+        const id = row.children[0].textContent.toLowerCase();
+        const name = row.children[1].textContent.toLowerCase();
+        const date = row.children[4].textContent;
+        const rowStatus = row.children[6].textContent.trim();
+
+        const matchSearch = id.includes(search) || name.includes(search);
+        const matchFrom = from ? date >= from : true;
+        const matchTo = to ? date <= to : true;
+        const matchStatus = status ? rowStatus === status : true;
+
+        row.style.display = (matchSearch && matchFrom && matchTo && matchStatus) ? "" : "none";
+    });
+});
+</script>
+
+</body>
+</html>

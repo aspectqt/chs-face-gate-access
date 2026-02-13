@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2 class="text-2xl font-bold mb-4 text-blue-600">Add New Student</h2>
+
+<form id="studentForm" class="bg-white p-6 rounded shadow-md space-y-4">
+    <input type="text" name="student_id" placeholder="Student ID" class="w-full p-2 border rounded" required>
+    <input type="text" name="name" placeholder="Student Name" class="w-full p-2 border rounded" required>
+    <input type="text" name="grade" placeholder="Grade" class="w-full p-2 border rounded" required>
+    <input type="text" name="section" placeholder="Section" class="w-full p-2 border rounded" required>
+    <input type="text" name="parent_contact" placeholder="Parent Contact (+639...)" class="w-full p-2 border rounded" required>
+    <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Add Student</button>
+</form>
+
+<div id="message" class="mt-4 text-green-600 font-semibold"></div>
+
+<script>
+document.getElementById('studentForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const formData = Object.fromEntries(new FormData(this).entries());
+    
+    const response = await fetch('/students', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData)
+    });
+    
+    const data = await response.json();
+    document.getElementById('message').innerText = data.message;
+    this.reset();
+});
+</script>
+{% endblock %}

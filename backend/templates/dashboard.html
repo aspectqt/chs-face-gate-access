@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Admin Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body class="bg-slate-100 h-screen overflow-hidden text-slate-800">
+
+<div class="flex h-full">
+
+    <!-- SIDEBAR -->
+    <aside class="w-64 bg-emerald-700 text-white flex flex-col shadow-xl">
+        <!-- Brand -->
+        <div class="flex items-center gap-3 px-6 py-5 border-b border-emerald-800">
+            <img src="/static/logo.png" class="h-10 w-10 rounded-full ring-2 ring-white/30" alt="Logo">
+            <div>
+                <p class="text-lg font-semibold">CHS Gate Access</p>
+                <p class="text-xs text-emerald-200">Administration</p>
+            </div>
+        </div>
+
+        <!-- Navigation -->
+        <nav class="flex-1 px-4 py-6 space-y-1 text-sm font-medium">
+            <!-- Dashboard -->
+            <a href="/dashboard" class="sidebar-link flex items-center gap-3 px-4 py-2.5 rounded-lg transition">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                    <path d="M3 10.5L12 3l9 7.5V21a1 1 0 01-1 1h-5v-6H9v6H4a1 1 0 01-1-1z"/>
+                </svg>
+                Dashboard
+            </a>
+
+            <!-- Students -->
+            <a href="/students" class="sidebar-link flex items-center gap-3 px-4 py-2.5 rounded-lg transition">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                    <path d="M12 11a4 4 0 100-8 4 4 0 000 8z"/>
+                    <path d="M4 21v-1a6 6 0 0112 0v1"/>
+                </svg>
+                Students
+            </a>
+
+            <!-- Gate Logs -->
+            <a href="/gate-logs" class="sidebar-link flex items-center gap-3 px-4 py-2.5 rounded-lg transition">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                    <rect x="4" y="3" width="16" height="18" rx="2"/>
+                    <path d="M8 7h8M8 11h8M8 15h6"/>
+                </svg>
+                Gate Logs
+            </a>
+
+            <!-- SMS Logs -->
+            <a href="/sms-logs" class="sidebar-link flex items-center gap-3 px-4 py-2.5 rounded-lg transition">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                    <path d="M21 12c0 4.4-4 8-9 8l-4 1 1-4c-4-1-6-4-6-7 0-4.4 4-8 9-8s9 3.6 9 8z"/>
+                </svg>
+                SMS Logs
+            </a>
+        </nav>
+    </aside>
+
+    <!-- MAIN -->
+    <div class="flex-1 flex flex-col">
+
+        <!-- HEADER -->
+<header class="h-16 bg-white shadow-sm flex items-center justify-between px-6">
+
+    <!-- Dashboard Title -->
+    <h1 class="text-lg font-semibold text-gray-800">
+        Admin Dashboard
+    </h1>
+
+    <!-- User Dropdown -->
+    <div class="relative">
+        <button id="userMenuButton" class="flex items-center gap-2 bg-gray-100 px-4 py-2 rounded-full hover:bg-gray-200 transition">
+            <span class="text-gray-700 font-medium">Admin</span>
+            <svg class="h-4 w-4 text-gray-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+            </svg>
+        </button>
+
+        <!-- Dropdown Menu -->
+        <div id="userDropdown" class="absolute right-0 mt-2 w-44 bg-white rounded-lg shadow-lg border border-gray-200 hidden">
+            <a href="/settings" class="block px-4 py-2 text-gray-700 hover:bg-gray-100 transition">Settings</a>
+            <a href="/logout" class="block px-4 py-2 text-red-600 hover:bg-red-50 transition">Logout</a>
+        </div>
+    </div>
+
+</header>
+
+        <!-- CONTENT -->
+<main class="flex-1 overflow-y-auto p-6 space-y-6">
+
+    <!-- STATS CARDS -->
+    <div class="grid grid-cols-4 gap-6">
+
+        <!-- Total Students -->
+        <div class="bg-white rounded-xl p-5 shadow-sm flex items-center gap-4">
+            <div class="p-3 rounded-lg bg-blue-100 text-blue-700">
+                <svg class="h-7 w-7" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                    <path d="M12 11a4 4 0 100-8 4 4 0 000 8z"/>
+                    <path d="M4 21v-1a6 6 0 0112 0v1"/>
+                </svg>
+            </div>
+            <div>
+                <p class="text-xs uppercase text-gray-500">Total Students</p>
+                <p class="text-2xl font-semibold">{{ total_students }}</p>
+            </div>
+        </div>
+
+        <!-- Gate Logs -->
+        <div class="bg-white rounded-xl p-5 shadow-sm flex items-center gap-4">
+            <div class="p-3 rounded-lg bg-emerald-100 text-emerald-700">
+                <svg class="h-7 w-7" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                    <rect x="4" y="3" width="16" height="18" rx="2"/>
+                </svg>
+            </div>
+            <div>
+                <p class="text-xs uppercase text-gray-500">Gate Logs</p>
+                <p class="text-2xl font-semibold">{{ total_gate_logs }}</p>
+            </div>
+        </div>
+
+        <!-- SMS -->
+        <div class="bg-white rounded-xl p-5 shadow-sm flex items-center gap-4">
+            <div class="p-3 rounded-lg bg-yellow-100 text-yellow-700">
+                <svg class="h-7 w-7" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                    <path d="M21 12c0 4.4-4 8-9 8l-4 1 1-4c-4-1-6-4-6-7"/>
+                </svg>
+            </div>
+            <div>
+                <p class="text-xs uppercase text-gray-500">SMS Sent</p>
+                <p class="text-2xl font-semibold">{{ total_sms }}</p>
+            </div>
+        </div>
+
+        <!-- System Status -->
+        <div class="bg-white rounded-xl p-5 shadow-sm flex items-center gap-4">
+            <div class="p-3 rounded-lg bg-emerald-100 text-emerald-700">
+                <svg class="h-7 w-7" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                    <path d="M5 13l4 4L19 7"/>
+                </svg>
+            </div>
+            <div>
+                <p class="text-xs uppercase text-gray-500">System Status</p>
+                <p class="font-semibold text-emerald-600">ONLINE</p>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- QUICK ACTION + DAILY GATE ENTRIES -->
+    <div class="grid grid-cols-4 gap-6">
+
+        <!-- Quick Actions Card (Enhanced, spans 2 columns) -->
+        <div class="bg-white rounded-xl shadow-sm p-5 col-span-2 flex flex-col justify-between">
+            <h2 class="font-semibold mb-4 text-lg">Quick Actions</h2>
+
+            <!-- Action Buttons -->
+            <div class="grid grid-cols-1 gap-3 mb-4">
+                <div class="flex gap-3 items-center">
+                    <input id="studentIdInput" placeholder="Enter Student ID"
+                           class="flex-1 border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500 outline-none">
+                    <button onclick="simulateGate()"
+                            class="bg-emerald-600 text-white px-5 py-2 rounded-lg hover:bg-emerald-700 transition">
+                        Simulate Entry
+                    </button>
+                </div>
+
+                <div class="flex gap-3 items-center">
+                    <input id="studentProfileInput" placeholder="Enter Student ID to View Profile"
+                           class="flex-1 border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none">
+                    <button onclick="viewProfile()"
+                            class="bg-blue-600 text-white px-5 py-2 rounded-lg hover:bg-blue-700 transition">
+                        View Profile
+                    </button>
+                </div>
+
+                <div class="flex gap-3 items-center">
+                    <input id="smsInput" placeholder="Enter Student ID to Send SMS"
+                           class="flex-1 border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-yellow-500 outline-none">
+                    <button onclick="sendSMS()"
+                            class="bg-yellow-500 text-white px-5 py-2 rounded-lg hover:bg-yellow-600 transition">
+                        Send SMS
+                    </button>
+                </div>
+            </div>
+
+            <!-- Recent Quick Summary -->
+            <div class="bg-gray-50 rounded-lg p-3">
+                <h3 class="text-sm font-semibold mb-2">Recent Entries</h3>
+                <ul class="text-xs text-gray-600 space-y-1">
+                    {% for entry in recent_entries %}
+                        <li>
+                            <span class="font-medium">{{ entry.student_id }}</span> - {{ entry.action }} at {{ entry.time }}
+                        </li>
+                    {% else %}
+                        <li>No recent entries</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+
+        <!-- Daily Gate Entries Chart -->
+        <div class="bg-white rounded-xl shadow-sm p-5 col-span-2 flex flex-col">
+            <h2 class="font-semibold mb-3 text-lg">Daily Gate Entries</h2>
+            <div class="flex-1 bg-gray-50 p-4 rounded-lg">
+                <canvas id="dailyChart"></canvas>
+            </div>
+        </div>
+
+    </div>
+</main>
+
+
+<script>
+new Chart(document.getElementById("dailyChart"), {
+    type: "bar",
+    data: {
+        labels: {{ dates | tojson }},
+        datasets: [{
+            label: "Entries",
+            data: {{ counts | tojson }},
+            backgroundColor: "#2563eb"
+        }]
+    },
+    options: { responsive: true, plugins: { legend: { display: false } } }
+});
+</script>
+
+<script>
+function simulateGate() {
+    const studentId = document.getElementById("studentIdInput").value.trim();
+    const result = document.getElementById("quickActionResult");
+
+    if (!studentId) {
+        result.textContent = "Please enter a Student ID.";
+        result.className = "text-red-600";
+        return;
+    }
+
+    fetch(`/simulate-gate/${studentId}`)
+        .then(res => res.json())
+        .then(data => {
+            if (data.status === "SUCCESS") {
+                result.textContent = `Student ${data.name} entered successfully.`;
+                result.className = "text-emerald-600";
+                location.reload();
+            } else {
+                result.textContent = data.error;
+                result.className = "text-red-600";
+            }
+        });
+}
+</script>
+
+<script>
+const links = document.querySelectorAll(".sidebar-link");
+links.forEach(link => {
+    if (link.href === window.location.href) {
+        link.classList.add("bg-emerald-800");
+    }
+});
+</script>
+<script>
+    const userMenuButton = document.getElementById('userMenuButton');
+    const userDropdown = document.getElementById('userDropdown');
+
+    // Toggle dropdown visibility
+    userMenuButton.addEventListener('click', () => {
+        userDropdown.classList.toggle('hidden');
+    });
+
+    // Close dropdown if clicked outside
+    window.addEventListener('click', (e) => {
+        if (!userMenuButton.contains(e.target) && !userDropdown.contains(e.target)) {
+            userDropdown.classList.add('hidden');
+        }
+    });
+</script>
+</body>
+</html>

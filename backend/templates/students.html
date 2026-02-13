@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Students Management</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Face thumbnails: fixed size, cover and center crop */
+        .face-thumb {
+            width: 48px;
+            height: 48px;
+            object-fit: cover;  /* Crop to fill */
+            object-position: center; /* Center face */
+            border-radius: 0.25rem; /* Rounded corners */
+            border: 1px solid #d1fae5; /* Emerald border */
+        }
+    </style>
+</head>
+<body class="bg-gray-100 h-screen overflow-hidden">
+<div class="flex h-full">
+
+    <!-- SIDEBAR -->
+    <aside class="w-64 bg-emerald-700 text-white flex flex-col shadow-xl">
+        <div class="flex items-center gap-3 px-6 py-5 border-b border-emerald-800">
+            <img src="/static/logo.png" class="h-10 w-10 rounded-full">
+            <div>
+                <p class="text-lg font-semibold">CHS Gate Access</p>
+                <p class="text-xs text-emerald-200">Administration</p>
+            </div>
+        </div>
+        <nav class="flex-1 px-4 py-6 space-y-1 text-sm font-medium">
+            <a href="/dashboard" class="sidebar-link block px-4 py-2 rounded-lg hover:bg-emerald-600">Dashboard</a>
+            <a href="/students" class="sidebar-link block px-4 py-2 rounded-lg bg-emerald-800">Students</a>
+            <a href="/gate-logs" class="sidebar-link block px-4 py-2 rounded-lg hover:bg-emerald-600">Gate Logs</a>
+            <a href="/sms-logs" class="sidebar-link block px-4 py-2 rounded-lg hover:bg-emerald-600">SMS Logs</a>
+        </nav>
+    </aside>
+
+    <!-- MAIN -->
+    <div class="flex-1 flex flex-col">
+
+        <header class="h-16 bg-white shadow-sm flex items-center px-6">
+            <h1 class="text-lg font-semibold text-gray-800">Students Management</h1>
+        </header>
+
+        <main class="flex-1 overflow-y-auto p-6 space-y-6">
+
+            <!-- ADD STUDENT FORM -->
+            <form id="studentForm" method="POST" class="bg-white p-6 rounded-xl shadow space-y-6" onsubmit="return validateForm()">
+
+                <div class="grid grid-cols-3 gap-4">
+                    <input name="student_id" placeholder="Student ID" class="border p-2 rounded-lg" required>
+                    <input name="name" placeholder="Name" class="border p-2 rounded-lg" required>
+                    <input name="grade" placeholder="Grade" class="border p-2 rounded-lg" required>
+                    <input name="section" placeholder="Section" class="border p-2 rounded-lg" required>
+                    <input name="parent_contact" placeholder="Parent Contact" class="border p-2 rounded-lg" required>
+                </div>
+
+                <!-- FACE REGISTRATION -->
+                <div class="border-2 border-dashed border-emerald-400 p-6 rounded-xl text-center space-y-4">
+                    <h2 class="font-semibold text-lg">AI Face Enrollment (5 Samples)</h2>
+                    <p id="instruction" class="text-emerald-600 font-medium">Step 1: Look Straight</p>
+
+                    <video id="video" autoplay class="mx-auto rounded-lg shadow w-72 h-56 bg-black"></video>
+                    <canvas id="canvas" class="hidden"></canvas>
+
+                    <div class="flex justify-center gap-3">
+                        <button type="button" onclick="startCamera()" 
+                                class="bg-blue-600 text-white px-4 py-2 rounded-lg">Open Camera</button>
+
+                        <button type="button" onclick="captureFace()" 
+                                class="bg-emerald-600 text-white px-4 py-2 rounded-lg">Capture</button>
+                    </div>
+
+                    <div id="loading" class="hidden text-emerald-600 font-medium">
+                        Processing AI Face Check...
+                    </div>
+
+                    <div class="grid grid-cols-5 gap-2 mt-4">
+                        <img id="preview0" class="face-thumb hidden">
+                        <img id="preview1" class="face-thumb hidden">
+                        <img id="preview2" class="face-thumb hidden">
+                        <img id="preview3" class="face-thumb hidden">
+                        <img id="preview4" class="face-thumb hidden">
+                    </div>
+
+                    <input type="hidden" name="faces" id="facesData">
+                </div>
+
+                <button type="submit" class="w-full bg-emerald-600 text-white p-2 rounded-lg hover:bg-emerald-700">
+                    Add Student
+                </button>
+
+            </form>
+
+            <!-- STUDENTS TABLE -->
+            <div class="bg-white rounded-xl shadow overflow-x-auto mt-6">
+                <table class="w-full text-sm table-auto">
+                    <thead class="bg-gray-100 text-gray-700 uppercase text-xs">
+                        <tr>
+                            <th class="p-3">Student ID</th>
+                            <th class="p-3">Name</th>
+                            <th class="p-3">Grade</th>
+                            <th class="p-3">Section</th>
+                            <th class="p-3">Parent Contact</th>
+                            <th class="p-3">Face Samples</th>
+                            <th class="p-3">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="text-gray-800">
+                        {% for s in students %}
+                        <tr class="border-t hover:bg-gray-50 transition">
+                            <td>{{ s.student_id }}</td>
+                            <td>{{ s.name }}</td>
+                            <td>{{ s.grade }}</td>
+                            <td>{{ s.section }}</td>
+                            <td>{{ s.parent_contact }}</td>
+                            <td class="flex gap-1">
+                                {% for i in range(5) %}
+                                    <img src="/faces/{{ s.student_id }}_{{ i }}.jpg" class="face-thumb" onerror="this.style.display='none'">
+                                {% endfor %}
+                            </td>
+                            <td class="flex gap-2">
+                                <form method="POST" action="/students/edit/{{ s._id }}">
+                                    <button class="bg-green-600 text-white px-3 py-1 rounded-lg hover:bg-green-700">Save</button>
+                                </form>
+                                <a href="/students/delete/{{ s._id }}" class="bg-red-600 text-white px-3 py-1 rounded-lg hover:bg-red-700">Delete</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+        </main>
+    </div>
+</div>
+
+<script>
+    const video = document.getElementById("video");
+    const canvas = document.getElementById("canvas");
+    const instruction = document.getElementById("instruction");
+    const loading = document.getElementById("loading");
+    const facesData = document.getElementById("facesData");
+
+    const steps = ["Look Straight", "Turn Right", "Turn Left", "Tilt Left", "Tilt Right"];
+    let captures = [];
+    let step = 0;
+
+    function startCamera() {
+        navigator.mediaDevices.getUserMedia({video:true})
+            .then(stream => video.srcObject = stream)
+            .catch(()=>alert("Camera access denied"));
+    }
+
+    async function captureFace() {
+        if(step >= 5){
+            alert("All samples captured!");
+            return;
+        }
+
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(video,0,0);
+
+        const imageData = canvas.toDataURL("image/jpeg");
+        loading.classList.remove("hidden");
+
+        try {
+            const response = await fetch("/process-face", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({image: imageData})
+            });
+
+            const result = await response.json();
+            loading.classList.add("hidden");
+
+            if(!result.success){
+                alert(result.message);
+                return;
+            }
+
+            captures.push(result.image);
+            const preview = document.getElementById("preview" + step);
+            preview.src = result.image;
+            preview.classList.remove("hidden");
+
+            step++;
+            instruction.innerText = step < 5 ? `Step ${step+1}: ${steps[step]}` : "All samples captured ✔";
+
+            facesData.value = JSON.stringify(captures);
+
+        } catch(err) {
+            loading.classList.add("hidden");
+            alert("Face processing failed: " + err);
+        }
+    }
+
+    function validateForm(){
+        if(captures.length < 5){
+            alert("Please capture all 5 face samples before adding a student.");
+            return false;
+        }
+        return true;
+    }
+</script>
+</body>
+</html>
