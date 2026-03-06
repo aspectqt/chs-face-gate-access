@@ -1,0 +1,36 @@
+# Python cache and artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+.venv/
+backend/venv/
+backend/.venv/
+
+# Environment files
+.env
+.env.*
+!.env.example
+*api key*.txt
+*apikey*.txt
+backend/.env
+backend/.env.*
+!backend/.env.example
+
+# Runtime/generated assets
+backend/encodings.pkl
+backend/faces/
+backend/known_faces/
+backend/static/avatars/
+backend/static/student_faces/
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+
+# IDE files
+.vscode/
+.idea/

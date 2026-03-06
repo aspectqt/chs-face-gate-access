@@ -1,261 +1,503 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Gate Logs</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gate Logs</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32x32.png') }}">
+  <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon-16x16.png') }}">
+  <link rel="shortcut icon" href="{{ url_for('static', filename='favicon-32x32.png') }}">
+  <script src="https://cdn.tailwindcss.com"></script>
+  {% include 'partials/theme_assets.html' %}
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <style>
+    [x-cloak] { display: none !important; }
+  </style>
 </head>
-
-<body class="bg-gray-100 h-screen overflow-hidden">
-
+<body class="bg-slate-100 h-screen overflow-hidden text-slate-800" data-authenticated="1" data-user-theme="{{ current_theme|default('') }}">
 <div class="flex h-full">
+    {% include 'partials/sidebar.html' %}
 
-    <!-- SIDEBAR -->
-    <aside class="w-64 bg-emerald-700 text-white flex flex-col shadow-xl">
-        <!-- Brand -->
-        <div class="flex items-center gap-3 px-6 py-5 border-b border-emerald-800">
-            <img src="/static/logo.png" class="h-10 w-10 rounded-full ring-2 ring-white/30" alt="Logo">
+  <div class="flex-1 flex flex-col" x-data="gateLogsPage()">
+    <header class="h-16 bg-white shadow-sm flex items-center justify-between px-6">
+      <h1 class="text-lg font-semibold text-gray-800">Gate Logs</h1>
+      <div class="flex items-center gap-2">
+        {% set theme_toggle_classes = 'relative p-2 rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200 transition focus:outline-none focus:ring-2 focus:ring-emerald-400' %}
+        {% include 'partials/theme_toggle_button.html' %}
+      </div>
+    </header>
+
+    <div x-cloak x-show="toast.show" x-transition
+         class="fixed right-5 top-5 z-[105] rounded-xl border px-4 py-3 text-sm shadow-lg"
+         :class="toast.type === 'error' ? 'border-red-200 bg-red-50 text-red-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'">
+      <p x-text="toast.message"></p>
+    </div>
+
+    <main class="flex-1 overflow-y-auto p-6 space-y-5">
+      <section class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+        <article class="relative overflow-hidden rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-emerald-100/70 p-4 shadow-sm">
+          <div class="absolute -right-4 -top-4 h-16 w-16 rounded-full bg-emerald-200/40 blur-xl"></div>
+          <div class="relative flex items-start justify-between gap-2">
             <div>
-                <p class="text-lg font-semibold">CHS Gate Access</p>
-                <p class="text-xs text-emerald-200">Administration</p>
+              <p class="text-[11px] uppercase tracking-[0.12em] text-emerald-700 font-semibold">Total Entries</p>
+              <p class="text-3xl font-bold mt-2 text-slate-900">{{ stats.total_entries }}</p>
+              <p class="text-[11px] text-slate-500 mt-1">Filtered gate records</p>
             </div>
+            <span class="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-emerald-200 bg-white text-emerald-700">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M5 4h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5a1 1 0 011-1Zm3 4h8m-8 4h8m-8 4h5" />
+              </svg>
+            </span>
+          </div>
+        </article>
+
+        <article class="relative overflow-hidden rounded-2xl border border-cyan-200 bg-gradient-to-br from-cyan-50 via-white to-cyan-100/70 p-4 shadow-sm">
+          <div class="absolute -right-4 -top-4 h-16 w-16 rounded-full bg-cyan-200/40 blur-xl"></div>
+          <div class="relative flex items-start justify-between gap-2">
+            <div>
+              <p class="text-[11px] uppercase tracking-[0.12em] text-cyan-700 font-semibold">Verified In</p>
+              <p class="text-3xl font-bold mt-2 text-slate-900">{{ stats.total_in }}</p>
+              <p class="text-[11px] text-slate-500 mt-1">Successful inbound scans</p>
+            </div>
+            <span class="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-cyan-200 bg-white text-cyan-700">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="m5 13 4 4L19 7" />
+              </svg>
+            </span>
+          </div>
+        </article>
+
+        <article class="relative overflow-hidden rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50 via-white to-blue-100/70 p-4 shadow-sm">
+          <div class="absolute -right-4 -top-4 h-16 w-16 rounded-full bg-blue-200/40 blur-xl"></div>
+          <div class="relative flex items-start justify-between gap-2">
+            <div>
+              <p class="text-[11px] uppercase tracking-[0.12em] text-blue-700 font-semibold">Verified Out</p>
+              <p class="text-3xl font-bold mt-2 text-slate-900">{{ stats.total_out }}</p>
+              <p class="text-[11px] text-slate-500 mt-1">Successful outbound scans</p>
+            </div>
+            <span class="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-blue-200 bg-white text-blue-700">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19 11H7m0 0 4-4m-4 4 4 4" />
+              </svg>
+            </span>
+          </div>
+        </article>
+
+        <article class="relative overflow-hidden rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 via-white to-amber-100/70 p-4 shadow-sm">
+          <div class="absolute -right-4 -top-4 h-16 w-16 rounded-full bg-amber-200/40 blur-xl"></div>
+          <div class="relative flex items-start justify-between gap-2">
+            <div>
+              <p class="text-[11px] uppercase tracking-[0.12em] text-amber-700 font-semibold">Late</p>
+              <p class="text-3xl font-bold mt-2 text-slate-900">{{ stats.late_count }}</p>
+              <p class="text-[11px] text-slate-500 mt-1">Late attendance detections</p>
+            </div>
+            <span class="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-amber-200 bg-white text-amber-700">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="9" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 7v5l3 2" />
+              </svg>
+            </span>
+          </div>
+        </article>
+      </section>
+
+      <section class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 lg:p-5">
+        <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
+          <div>
+            <h2 class="text-base font-semibold text-slate-800">Quick Search & Filters</h2>
+            <p class="text-xs text-slate-500 mt-1">Refine gate logs by student, date range, session, and attendance status.</p>
+          </div>
+          <div class="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
+            Live from MongoDB
+          </div>
         </div>
 
-        <!-- Navigation -->
-        <nav class="flex-1 px-4 py-6 space-y-1 text-sm font-medium">
-            <a href="/dashboard" class="sidebar-link flex items-center gap-3 px-4 py-2.5 rounded-lg transition">
-                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
-                    <path d="M3 10.5L12 3l9 7.5V21a1 1 0 01-1 1h-5v-6H9v6H4a1 1 0 01-1-1z"/>
+        <form method="GET" action="/gate-logs" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-3 items-end">
+          <div class="xl:col-span-3">
+            <label class="text-xs uppercase text-slate-500 font-semibold">Search</label>
+            <div class="relative mt-1">
+              <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-4.35-4.35M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Z" />
                 </svg>
-                Dashboard
-            </a>
-
-            <a href="/students" class="sidebar-link flex items-center gap-3 px-4 py-2.5 rounded-lg transition">
-                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
-                    <path d="M12 11a4 4 0 100-8 4 4 0 000 8z"/>
-                    <path d="M4 21v-1a6 6 0 0112 0v1"/>
-                </svg>
-                Students
-            </a>
-
-            <a href="/gate-logs" class="sidebar-link flex items-center gap-3 px-4 py-2.5 rounded-lg transition bg-emerald-800 shadow-lg">
-                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
-                    <rect x="4" y="3" width="16" height="18" rx="2"/>
-                    <path d="M8 7h8M8 11h8M8 15h6"/>
-                </svg>
-                Gate Logs
-            </a>
-
-            <a href="/sms-logs" class="sidebar-link flex items-center gap-3 px-4 py-2.5 rounded-lg transition">
-                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
-                    <path d="M21 12c0 4.4-4 8-9 8l-4 1 1-4c-4-1-6-4-6-7 0-4.4 4-8 9-8s9 3.6 9 8z"/>
-                </svg>
-                SMS Logs
-            </a>
-        </nav>
-    </aside>
-
-    <!-- MAIN -->
-    <div class="flex-1 flex flex-col">
-
-        <!-- HEADER -->
-        <header class="h-16 bg-white shadow-sm flex items-center justify-between px-6">
-            <h1 class="text-lg font-semibold text-gray-800">Gate Logs</h1>
-
-            <!-- User Dropdown -->
-            <div class="relative">
-                <button id="userMenuButton" class="flex items-center gap-2 bg-gray-100 px-4 py-2 rounded-full hover:bg-gray-200 transition">
-                    <span class="text-gray-700 font-medium">Admin</span>
-                    <svg class="h-4 w-4 text-gray-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
-                    </svg>
-                </button>
-
-                <div id="userDropdown" class="absolute right-0 mt-2 w-44 bg-white rounded-lg shadow-lg border border-gray-200 hidden">
-                    <a href="/settings" class="block px-4 py-2 text-gray-700 hover:bg-gray-100 transition">Settings</a>
-                    <a href="/logout" class="block px-4 py-2 text-red-600 hover:bg-red-50 transition">Logout</a>
-                </div>
+              </span>
+              <input type="text" name="q" value="{{ filters.q }}" placeholder="Student name, ID, date" class="w-full rounded-xl border border-slate-300 pl-10 pr-3 py-2 text-sm">
             </div>
-        </header>
+          </div>
+          <div class="xl:col-span-2">
+            <label class="text-xs uppercase text-slate-500 font-semibold">From</label>
+            <input type="date" name="start_date" value="{{ filters.start_date }}" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
+          </div>
+          <div class="xl:col-span-2">
+            <label class="text-xs uppercase text-slate-500 font-semibold">To</label>
+            <input type="date" name="end_date" value="{{ filters.end_date }}" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
+          </div>
+          <div class="xl:col-span-1">
+            <label class="text-xs uppercase text-slate-500 font-semibold">Status</label>
+            <select name="status" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
+              <option value="">Any</option>
+              <option value="Present" {% if filters.status == 'Present' %}selected{% endif %}>Present</option>
+              <option value="Late" {% if filters.status == 'Late' %}selected{% endif %}>Late</option>
+              <option value="Absent" {% if filters.status == 'Absent' %}selected{% endif %}>Absent</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-xs uppercase text-slate-500 font-semibold">Session</label>
+            <select name="session" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
+              <option value="">Any</option>
+              <option value="IN" {% if filters.session == 'IN' %}selected{% endif %}>In</option>
+              <option value="OUT" {% if filters.session == 'OUT' %}selected{% endif %}>Out</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-xs uppercase text-slate-500 font-semibold">Sort</label>
+            <select name="sort" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
+              <option value="newest" {% if filters.sort != 'oldest' %}selected{% endif %}>Newest</option>
+              <option value="oldest" {% if filters.sort == 'oldest' %}selected{% endif %}>Oldest</option>
+            </select>
+          </div>
+          <div class="xl:col-span-2 flex items-end gap-2">
+            <button type="submit" class="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black transition">Apply</button>
+            <a href="/gate-logs" class="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition">Reset</a>
+          </div>
+        </form>
 
-        <!-- CONTENT -->
-        <main class="flex-1 overflow-y-auto p-6 space-y-6">
+        <div class="mt-4 pt-4 border-t border-slate-200 flex flex-wrap items-center gap-2">
+          <a href="/gate-logs/export?{{ export_query }}" class="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 transition">Export CSV</a>
+          <div class="flex gap-2">
+            <input id="simulateStudentId" type="text" placeholder="Student ID for simulate" class="rounded-xl border border-slate-300 px-3 py-2 text-sm">
+            <button @click="simulateGate()" class="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 transition">Simulate Scan</button>
+          </div>
+          <p class="text-sm" :class="simulateType === 'error' ? 'text-red-600' : 'text-emerald-600'" x-text="simulateMessage"></p>
+        </div>
+      </section>
 
-            <!-- QUICK ACTION -->
-            <div class="bg-white rounded-xl shadow p-5 flex flex-col gap-4">
-                <h2 class="font-semibold">Quick Actions</h2>
-                <div class="flex gap-3">
-                    <input id="studentIdInput" placeholder="Enter Student ID"
-                        class="flex-1 border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500 outline-none">
-                    <button onclick="simulateGate()"
-                        class="bg-emerald-600 text-white px-5 py-2 rounded-lg hover:bg-emerald-700 transition">
-                        Simulate Entry
-                    </button>
-                </div>
-                <p id="quickActionResult" class="text-sm mt-1 text-gray-600"></p>
-            </div>
-
-            <!-- SUMMARY CARDS -->
-            <div class="grid grid-cols-3 gap-6">
-                <div class="bg-white rounded-xl shadow p-5 flex items-center gap-4">
-                    <div class="p-3 rounded-lg bg-blue-100 text-blue-700">
-                        <svg class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                            <path d="M12 14l9-5-9-5-9 5 9 5z"/>
-                            <path d="M12 14l6.16-3.422M12 14l-6.16-3.422M12 14v7"/>
+      <section class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="min-w-full divide-y divide-slate-200">
+            <thead class="bg-slate-900 text-white text-xs uppercase">
+              <tr>
+                <th class="px-4 py-3 text-left">Student</th>
+                <th class="px-4 py-3 text-left">Session</th>
+                <th class="px-4 py-3 text-left">Status</th>
+                <th class="px-4 py-3 text-left">Date</th>
+                <th class="px-4 py-3 text-left">Time</th>
+                <th class="px-4 py-3 text-left">Timestamp</th>
+                <th class="px-4 py-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="gateLogsBody" class="divide-y divide-slate-100">
+              {% for log in logs %}
+              <tr data-log-id="{{ log._id }}" class="hover:bg-slate-50 transition">
+                <td class="px-4 py-3">
+                  <p class="font-semibold text-slate-800">{{ log.name or '-' }}</p>
+                  <p class="text-xs text-slate-500">ID: {{ log.student_id or '-' }}</p>
+                </td>
+                <td class="px-4 py-3">
+                  <span class="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold {% if log.action == 'OUT' %}bg-blue-100 text-blue-700{% else %}bg-emerald-100 text-emerald-700{% endif %}">
+                    {{ log.verification_label or ('Verified Out' if log.action == 'OUT' else 'Verified In') }}
+                  </span>
+                </td>
+                <td class="px-4 py-3">
+                  <span class="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold {% if log.status == 'Late' %}bg-amber-100 text-amber-700{% else %}bg-slate-100 text-slate-700{% endif %}">
+                    {{ log.status }}
+                  </span>
+                </td>
+                <td class="px-4 py-3 text-sm">{{ log.date }}</td>
+                <td class="px-4 py-3 text-sm">{{ log.time }}</td>
+                <td class="px-4 py-3 text-xs text-slate-500">{{ log.timestamp }}</td>
+                <td class="px-4 py-3">
+                  <div class="flex justify-end gap-2">
+                    <div class="relative group">
+                      <button type="button"
+                              class="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+                              @click='openDetails({{ log | tojson | safe }})'
+                              aria-label="View Gate Log">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S3.732 16.057 2.458 12Z" />
+                          <circle cx="12" cy="12" r="3" />
                         </svg>
+                      </button>
+                      <span class="pointer-events-none absolute -top-9 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-[10px] text-white opacity-0 group-hover:opacity-100 transition">View</span>
                     </div>
-                    <div>
-                        <p class="text-xs uppercase text-gray-500">Total Entries</p>
-                        <p class="text-2xl font-semibold">{{ total_entries }}</p>
-                    </div>
-                </div>
-
-                <div class="bg-white rounded-xl shadow p-5 flex items-center gap-4">
-                    <div class="p-3 rounded-lg bg-green-100 text-green-700">
-                        <svg class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                            <path d="M9 12l2 2 4-4"/>
+                    {% if current_role == 'Full Admin' %}
+                    <div class="relative group">
+                      <button type="button"
+                              class="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100"
+                              @click='openDelete("{{ log._id }}", {{ (log.name or "Selected student") | tojson | safe }})'
+                              aria-label="Delete Gate Log">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M6 7h12M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2m-7 0l.75 12a1 1 0 001 .94h4.5a1 1 0 001-.94L17 7" />
                         </svg>
+                      </button>
+                      <span class="pointer-events-none absolute -top-9 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-[10px] text-white opacity-0 group-hover:opacity-100 transition">Delete</span>
                     </div>
-                    <div>
-                        <p class="text-xs uppercase text-gray-500">Total IN</p>
-                        <p class="text-2xl font-semibold">{{ total_in }}</p>
-                    </div>
-                </div>
-
-                <div class="bg-white rounded-xl shadow p-5 flex items-center gap-4">
-                    <div class="p-3 rounded-lg bg-red-100 text-red-700">
-                        <svg class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                            <path d="M15 12l-2-2-4 4"/>
+                    {% else %}
+                    <div class="relative group">
+                      <button type="button"
+                              disabled
+                              class="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed"
+                              aria-label="Delete Gate Log">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M6 7h12M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2m-7 0l.75 12a1 1 0 001 .94h4.5a1 1 0 001-.94L17 7" />
                         </svg>
+                      </button>
+                      <span class="pointer-events-none absolute -top-9 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-[10px] text-white opacity-0 group-hover:opacity-100 transition">Full Admin only</span>
                     </div>
-                    <div>
-                        <p class="text-xs uppercase text-gray-500">Total OUT</p>
-                        <p class="text-2xl font-semibold">{{ total_out }}</p>
-                    </div>
-                </div>
+                    {% endif %}
+                  </div>
+                </td>
+              </tr>
+              {% else %}
+              <tr><td colspan="7" class="px-4 py-10 text-center text-sm text-slate-500">No gate logs found for current filters.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <div class="border-t border-slate-200 px-4 py-3 flex flex-col md:flex-row md:items-center md:justify-between gap-3 bg-slate-50/70">
+          <p class="text-xs text-slate-600">Showing {{ ((pagination.page - 1) * pagination.per_page) + 1 if pagination.total else 0 }}-{{ ((pagination.page - 1) * pagination.per_page) + (logs|length) if pagination.total else 0 }} of {{ pagination.total }} logs</p>
+          <div class="flex gap-1.5">
+            {% if pagination.has_prev %}<a href="{{ pagination.prev_url }}" class="px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-semibold hover:bg-slate-100">Previous</a>{% else %}<span class="px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-100 text-xs text-slate-400">Previous</span>{% endif %}
+            {% for p in pagination.page_numbers %}
+            <a href="{{ pagination.page_links[p] }}" class="px-3 py-1.5 rounded-lg text-xs font-semibold {% if p == pagination.page %}bg-emerald-600 text-white{% else %}border border-slate-300 bg-white text-slate-700 hover:bg-slate-100{% endif %}">{{ p }}</a>
+            {% endfor %}
+            {% if pagination.has_next %}<a href="{{ pagination.next_url }}" class="px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-semibold hover:bg-slate-100">Next</a>{% else %}<span class="px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-100 text-xs text-slate-400">Next</span>{% endif %}
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <div x-cloak x-show="detailOpen" x-transition class="fixed inset-0 bg-black/50 p-4 flex items-center justify-center z-[95]" @click.self="closeDetails()">
+      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div class="border-b border-slate-200 px-5 py-4 flex items-center justify-between">
+          <h3 class="text-lg font-semibold text-slate-800">Gate Log Details</h3>
+          <button type="button" class="text-slate-500 hover:text-slate-700 text-2xl leading-none" @click="closeDetails()">&times;</button>
+        </div>
+        <div class="p-5 space-y-4">
+          <div class="flex items-center gap-4 rounded-xl border border-slate-200 p-4">
+            <div class="h-20 w-20 rounded-xl border border-slate-200 bg-slate-100 overflow-hidden flex items-center justify-center">
+              <img x-show="detailLog.profile_photo" :src="detailLog.profile_photo || ''" alt="Student profile photo" class="h-full w-full object-cover">
+              <div x-show="!detailLog.profile_photo" class="text-[11px] font-semibold text-slate-500">No Photo</div>
             </div>
-
-            <!-- GATE LOGS TABLE -->
-            <div class="bg-white rounded-xl shadow overflow-hidden">
-                <div class="px-6 py-4 border-b font-semibold text-gray-700 bg-gray-50">
-                    Student Entry / Exit Records
-                </div>
-
-                <div class="overflow-x-auto">
-                    <table class="w-full text-sm text-gray-700">
-                        <thead class="bg-gray-100 uppercase text-gray-600 text-xs font-semibold tracking-wide">
-                            <tr>
-                                <th class="p-3 text-left">Student ID</th>
-                                <th class="p-3 text-left">Name</th>
-                                <th class="p-3 text-left">Action</th>
-                                <th class="p-3 text-left">Time In</th>
-                                <th class="p-3 text-left">Time Out</th>
-                                <th class="p-3 text-left">Date</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-gray-200" id="logsTable">
-                            {% for log in logs %}
-                            <tr class="hover:bg-gray-50 transition">
-                                <td class="p-3 font-medium">{{ log.student_id }}</td>
-                                <td class="p-3">{{ log.name }}</td>
-                                <td class="p-3">
-                                    <span class="px-3 py-1 text-xs font-semibold rounded-full
-                                        {% if log.action == 'IN' %}
-                                            bg-green-100 text-green-800
-                                        {% else %}
-                                            bg-red-100 text-red-800
-                                        {% endif %}">
-                                        {{ log.action }}
-                                    </span>
-                                </td>
-                                <td class="p-3">{{ log.time_in }}</td>
-                                <td class="p-3">{{ log.time_out or '-' }}</td>
-                                <td class="p-3">{{ log.date }}</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
+            <div>
+              <p class="text-base font-semibold text-slate-800" x-text="detailLog.name || 'Unknown Student'"></p>
+              <p class="text-sm text-slate-500" x-text="`Student ID: ${detailLog.student_id || '-'}`"></p>
             </div>
-
-        </main>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+            <div class="rounded-lg border border-slate-200 p-3"><p class="text-xs text-slate-500">Action</p><p class="font-semibold" x-text="detailLog.action || '-'"></p></div>
+            <div class="rounded-lg border border-slate-200 p-3"><p class="text-xs text-slate-500">Verification Label</p><p class="font-semibold" x-text="detailLog.verification_label || '-'"></p></div>
+            <div class="rounded-lg border border-slate-200 p-3"><p class="text-xs text-slate-500">Session</p><p class="font-semibold" x-text="detailLog.session || '-'"></p></div>
+            <div class="rounded-lg border border-slate-200 p-3"><p class="text-xs text-slate-500">Status</p><p class="font-semibold" x-text="detailLog.status || '-'"></p></div>
+            <div class="rounded-lg border border-slate-200 p-3"><p class="text-xs text-slate-500">Date</p><p class="font-semibold" x-text="detailLog.date || '-'"></p></div>
+            <div class="rounded-lg border border-slate-200 p-3"><p class="text-xs text-slate-500">Time</p><p class="font-semibold" x-text="detailLog.time || '-'"></p></div>
+            <div class="rounded-lg border border-slate-200 p-3 sm:col-span-2"><p class="text-xs text-slate-500">Timestamp</p><p class="font-semibold break-all" x-text="detailLog.timestamp || '-'"></p></div>
+          </div>
+        </div>
+      </div>
     </div>
+
+    <div x-cloak x-show="deleteOpen" x-transition class="fixed inset-0 bg-black/50 p-4 flex items-center justify-center z-[96]" @click.self="closeDelete()">
+      <div class="bg-white w-full max-w-md rounded-2xl max-h-[85vh] overflow-y-auto">
+        <div class="border-b px-5 py-4 flex justify-between items-center">
+          <h3 class="text-lg font-semibold text-rose-700">Delete Gate Log</h3>
+          <button type="button" class="text-slate-500 hover:text-slate-700 text-2xl leading-none" @click="closeDelete()">&times;</button>
+        </div>
+        <div class="p-5 space-y-4">
+          <p class="text-sm text-slate-700">Are you sure you want to delete this gate log entry?</p>
+          <p class="text-xs text-slate-500">This action cannot be undone.</p>
+          <p class="text-sm font-semibold text-slate-700" x-text="deleteTarget.label || 'Selected log'"></p>
+          <div class="flex justify-end gap-2 pt-2">
+            <button type="button" class="rounded-xl border px-4 py-2 text-sm" @click="closeDelete()" :disabled="deleteSubmitting">Cancel</button>
+            <button type="button" class="rounded-xl bg-rose-600 px-4 py-2 text-sm text-white hover:bg-rose-700 disabled:opacity-60" @click="confirmDelete()" :disabled="deleteSubmitting">
+              <span x-text="deleteSubmitting ? 'Deleting...' : 'Delete'"></span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
-<!-- SCRIPTS -->
-
 <script>
-function simulateGate() {
-    const studentId = document.getElementById("studentIdInput").value.trim();
-    const result = document.getElementById("quickActionResult");
+function gateLogsPage() {
+  return {
+    detailOpen: false,
+    detailLog: {},
+    deleteOpen: false,
+    deleteSubmitting: false,
+    deleteTarget: { id: '', label: '' },
+    simulateMessage: '',
+    simulateType: 'success',
+    toast: { show: false, message: '', type: 'success', timer: null },
+    latestId: '{{ logs[0]._id if logs else "" }}',
+    realtimeEnabled: {{ 'true' if (not filters.q and not filters.start_date and not filters.end_date and not filters.status and not filters.session and filters.sort != 'oldest' and pagination.page == 1) else 'false' }},
+    pollingLatest: false,
+    changesStream: null,
+    changesReconnectTimer: null,
+    changesInitialized: false,
+    changesSnapshot: { revision: 0, gate_logs: 0 },
 
-    if (!studentId) {
-        result.textContent = "Please enter a Student ID.";
-        result.className = "text-red-600";
+    openDetails(log) {
+      this.detailLog = log || {};
+      this.detailOpen = true;
+    },
+
+    closeDetails() {
+      this.detailOpen = false;
+      this.detailLog = {};
+    },
+
+    showToast(message, type = 'success') {
+      if (this.toast.timer) {
+        clearTimeout(this.toast.timer);
+        this.toast.timer = null;
+      }
+      this.toast.message = String(message || '').trim() || 'Action completed.';
+      this.toast.type = type === 'error' ? 'error' : 'success';
+      this.toast.show = true;
+      this.toast.timer = setTimeout(() => {
+        this.toast.show = false;
+        this.toast.timer = null;
+      }, 2800);
+    },
+
+    openDelete(id, label = 'Selected log') {
+      if (!id) return;
+      this.deleteTarget = { id, label: label || 'Selected log' };
+      this.deleteOpen = true;
+    },
+
+    closeDelete(force = false) {
+      if (this.deleteSubmitting && !force) return;
+      this.deleteOpen = false;
+      this.deleteSubmitting = false;
+      this.deleteTarget = { id: '', label: '' };
+    },
+
+    async confirmDelete() {
+      if (!this.deleteTarget.id || this.deleteSubmitting) return;
+      this.deleteSubmitting = true;
+      try {
+        const res = await fetch(`/gate-logs/delete/${this.deleteTarget.id}`, { method: 'DELETE' });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.status !== 'ok') {
+          this.showToast(data.message || 'Failed to delete log.', 'error');
+          return;
+        }
+        const row = document.querySelector(`tr[data-log-id="${this.deleteTarget.id}"]`);
+        if (row) row.remove();
+        this.closeDelete(true);
+        this.showToast('Gate log deleted successfully.');
+        setTimeout(() => window.location.reload(), 450);
+      } catch (error) {
+        this.showToast('Failed to delete log.', 'error');
+      } finally {
+        if (this.deleteOpen) {
+          this.deleteSubmitting = false;
+        }
+      }
+    },
+
+    async simulateGate() {
+      const studentId = (document.getElementById('simulateStudentId')?.value || '').trim();
+      if (!studentId) {
+        this.simulateType = 'error';
+        this.simulateMessage = 'Please enter a Student ID.';
         return;
-    }
+      }
+      const res = await fetch(`/simulate-gate/${studentId}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.status !== 'SUCCESS') {
+        this.simulateType = 'error';
+        this.simulateMessage = data.error || 'Simulation failed.';
+        return;
+      }
+      this.simulateType = 'success';
+      this.simulateMessage = `Simulated ${data.name} ${data.action === 'OUT' ? 'Verified Out' : 'Verified In'}.`;
+    },
 
-    fetch(`/simulate-gate/${studentId}`)
-        .then(res => res.json())
-        .then(data => {
-            if (data.status === "SUCCESS") {
-                result.textContent = `Student ${data.name} ${data.action === 'IN' ? 'entered' : 'exited'} successfully.`;
-                result.className = data.action === 'IN' ? "text-green-600" : "text-red-600";
-                // Refresh the table automatically
-                setTimeout(() => location.reload(), 1000);
-            } else {
-                result.textContent = data.error;
-                result.className = "text-red-600";
-            }
-        });
+    async pollLatest() {
+      if (!this.realtimeEnabled || this.pollingLatest) return;
+      this.pollingLatest = true;
+      try {
+        const res = await fetch(`/api/gate-logs/latest?since_id=${this.latestId}`);
+        if (!res.ok) return;
+        const data = await res.json().catch(() => ({}));
+        const logs = data.logs || [];
+        if (!logs.length) return;
+        this.latestId = logs[logs.length - 1]._id || this.latestId;
+        window.location.reload();
+      } finally {
+        this.pollingLatest = false;
+      }
+    },
+
+    closeRealtime() {
+      if (this.changesStream) {
+        this.changesStream.close();
+        this.changesStream = null;
+      }
+      if (this.changesReconnectTimer) {
+        clearTimeout(this.changesReconnectTimer);
+        this.changesReconnectTimer = null;
+      }
+    },
+
+    connectRealtime() {
+      if (!this.realtimeEnabled || !('EventSource' in window)) return false;
+      this.closeRealtime();
+      this.changesStream = new EventSource('/api/changes/stream');
+
+      this.changesStream.addEventListener('data_change', event => {
+        let payload = {};
+        try {
+          payload = JSON.parse(event.data || '{}');
+        } catch (error) {
+          console.error('Failed to parse data_change event:', error);
+          return;
+        }
+
+        const snapshot = {
+          revision: Number.parseInt(payload.revision || 0, 10) || 0,
+          gate_logs: Number.parseInt(payload.gate_logs || 0, 10) || 0,
+        };
+
+        if (!this.changesInitialized) {
+          this.changesInitialized = true;
+          this.changesSnapshot = snapshot;
+          return;
+        }
+
+        if (snapshot.revision <= this.changesSnapshot.revision) return;
+        const changed = snapshot.gate_logs !== this.changesSnapshot.gate_logs;
+        this.changesSnapshot = snapshot;
+        if (changed) this.pollLatest();
+      });
+
+      this.changesStream.onerror = () => {
+        this.closeRealtime();
+        if (this.changesReconnectTimer || !this.realtimeEnabled) return;
+        this.changesReconnectTimer = setTimeout(() => {
+          this.changesReconnectTimer = null;
+          this.connectRealtime();
+        }, 4000);
+      };
+      return true;
+    },
+
+    init() {
+      if (!this.realtimeEnabled) return;
+      const usingRealtimeStream = this.connectRealtime();
+      if (!usingRealtimeStream) {
+        setInterval(() => this.pollLatest(), 5000);
+      }
+      window.addEventListener('beforeunload', () => this.closeRealtime());
+    }
+  };
 }
 </script>
-
-<script>
-    // Highlight active sidebar link
-    const links = document.querySelectorAll('.sidebar-link');
-    links.forEach(link => {
-        if (link.href === window.location.href) {
-            link.classList.add('bg-emerald-800', 'shadow-lg');
-        }
-        link.addEventListener('mouseenter', () => link.classList.add('bg-emerald-700', 'shadow-md'));
-        link.addEventListener('mouseleave', () => {
-            if (!link.classList.contains('bg-emerald-800')) link.classList.remove('bg-emerald-700', 'shadow-md');
-        });
-    });
-
-    // Filter/Search
-    const searchInput = document.getElementById('searchInput');
-    const fromDate = document.getElementById('fromDate');
-    const toDate = document.getElementById('toDate');
-    const filterBtn = document.getElementById('filterBtn');
-    const logsTable = document.getElementById('logsTable');
-
-    filterBtn.addEventListener('click', () => {
-        const search = searchInput.value.toLowerCase();
-        const from = fromDate.value;
-        const to = toDate.value;
-
-        const rows = logsTable.querySelectorAll('tr');
-        rows.forEach(row => {
-            const studentId = row.children[0].textContent.toLowerCase();
-            const name = row.children[1].textContent.toLowerCase();
-            const date = row.children[5].textContent;
-
-            const matchesSearch = studentId.includes(search) || name.includes(search);
-            const matchesFrom = from ? date >= from : true;
-            const matchesTo = to ? date <= to : true;
-
-            row.style.display = matchesSearch && matchesFrom && matchesTo ? '' : 'none';
-        });
-    });
-
-    // Toggle user dropdown
-    const userBtn = document.getElementById('userMenuButton');
-    const userDropdown = document.getElementById('userDropdown');
-    userBtn.addEventListener('click', () => {
-        userDropdown.classList.toggle('hidden');
-    });
-</script>
-
 </body>
 </html>
+
+

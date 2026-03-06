@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Analytics</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32x32.png') }}">
+  <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon-16x16.png') }}">
+  <link rel="shortcut icon" href="{{ url_for('static', filename='favicon-32x32.png') }}">
+  <script src="https://cdn.tailwindcss.com"></script>
+  {% include 'partials/theme_assets.html' %}
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body class="bg-slate-100 h-screen overflow-hidden text-slate-800" data-authenticated="1" data-user-theme="{{ current_theme|default('') }}">
+<div class="flex h-full">
+    {% include 'partials/sidebar.html' %}
+
+  <div class="flex-1 flex flex-col">
+    <header class="h-16 bg-white shadow-sm flex items-center justify-between px-6">
+      <h1 class="text-lg font-semibold text-gray-800">Analytics</h1>
+      <div class="flex items-center gap-2">
+        {% set theme_toggle_classes = 'relative p-2 rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200 transition focus:outline-none focus:ring-2 focus:ring-emerald-400' %}
+        {% include 'partials/theme_toggle_button.html' %}
+      </div>
+    </header>
+
+    <main class="flex-1 overflow-y-auto p-6 space-y-5">
+      <section class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 lg:p-5">
+        <div class="grid grid-cols-1 xl:grid-cols-12 gap-4 items-end">
+          <div class="xl:col-span-4">
+            <h2 class="text-lg font-semibold text-slate-800">Analytics Filters</h2>
+            <p class="text-xs text-slate-500 mt-1">Set range filters to recalculate charts and summary cards from MongoDB.</p>
+            <div class="mt-3 inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
+              Active Range: {{ filters.range|upper }}
+            </div>
+          </div>
+          <form method="GET" action="/analytics" class="xl:col-span-8 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+            <label class="block">
+              <span class="text-xs uppercase text-slate-500 font-semibold">Range</span>
+              <select id="rangeSelect" name="range" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
+                <option value="week" {% if filters.range == 'week' %}selected{% endif %}>Week</option>
+                <option value="month" {% if filters.range == 'month' %}selected{% endif %}>Month</option>
+                <option value="custom" {% if filters.range == 'custom' %}selected{% endif %}>Custom</option>
+              </select>
+            </label>
+            <label class="block">
+              <span class="text-xs uppercase text-slate-500 font-semibold">Start Date</span>
+              <input id="startDateInput" type="date" name="start_date" value="{{ filters.start_date }}" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
+            </label>
+            <label class="block">
+              <span class="text-xs uppercase text-slate-500 font-semibold">End Date</span>
+              <input id="endDateInput" type="date" name="end_date" value="{{ filters.end_date }}" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
+            </label>
+            <div class="flex sm:justify-start xl:justify-end items-end gap-2">
+              <button type="submit" class="rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-900 transition">Apply</button>
+              <a href="/analytics" class="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition">Reset</a>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <section class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+        <article class="relative overflow-hidden rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-emerald-100/70 p-4 shadow-sm">
+          <div class="absolute -right-4 -top-4 h-16 w-16 rounded-full bg-emerald-200/40 blur-xl"></div>
+          <div class="relative flex items-start justify-between gap-2">
+            <div>
+              <p class="text-[11px] uppercase tracking-[0.12em] text-emerald-700 font-semibold">Total Gate Entries</p>
+              <p class="text-3xl font-bold mt-2 text-slate-900">{{ stats.total_gate_entries }}</p>
+              <p class="text-[11px] text-slate-500 mt-1">Within selected range</p>
+            </div>
+            <span class="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-emerald-200 bg-white text-emerald-700">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h10" />
+              </svg>
+            </span>
+          </div>
+        </article>
+        <article class="relative overflow-hidden rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50 via-white to-blue-100/70 p-4 shadow-sm">
+          <div class="absolute -right-4 -top-4 h-16 w-16 rounded-full bg-blue-200/40 blur-xl"></div>
+          <div class="relative flex items-start justify-between gap-2">
+            <div>
+              <p class="text-[11px] uppercase tracking-[0.12em] text-blue-700 font-semibold">Total SMS Sent</p>
+              <p class="text-3xl font-bold mt-2 text-slate-900">{{ stats.total_sms_sent }}</p>
+              <p class="text-[11px] text-slate-500 mt-1">Within selected range</p>
+            </div>
+            <span class="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-blue-200 bg-white text-blue-700">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M21 12c0 4.418-4.03 8-9 8s-9-3.582-9-8 4.03-8 9-8 9 3.582 9 8z" />
+              </svg>
+            </span>
+          </div>
+        </article>
+        <article class="relative overflow-hidden rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-emerald-100/70 p-4 shadow-sm">
+          <div class="absolute -right-4 -top-4 h-16 w-16 rounded-full bg-emerald-200/40 blur-xl"></div>
+          <div class="relative flex items-start justify-between gap-2">
+            <div>
+              <p class="text-[11px] uppercase tracking-[0.12em] text-emerald-700 font-semibold">Present Today</p>
+              <p class="text-3xl font-bold mt-2 text-slate-900">{{ stats.present_today }}</p>
+              <p class="text-[11px] text-slate-500 mt-1">Real-time attendance state</p>
+            </div>
+            <span class="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-emerald-200 bg-white text-emerald-700">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            </span>
+          </div>
+        </article>
+        <article class="relative overflow-hidden rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 via-white to-amber-100/70 p-4 shadow-sm">
+          <div class="absolute -right-4 -top-4 h-16 w-16 rounded-full bg-amber-200/40 blur-xl"></div>
+          <div class="relative flex items-start justify-between gap-2">
+            <div>
+              <p class="text-[11px] uppercase tracking-[0.12em] text-amber-700 font-semibold">Late Today</p>
+              <p class="text-3xl font-bold mt-2 text-slate-900">{{ stats.late_today }}</p>
+              <p class="text-[11px] text-slate-500 mt-1">Late attendance count</p>
+            </div>
+            <span class="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-amber-200 bg-white text-amber-700">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </span>
+          </div>
+        </article>
+      </section>
+
+      <section id="reports-charts" class="grid grid-cols-1 xl:grid-cols-12 gap-5">
+        <article class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 xl:col-span-8">
+          <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
+            <div>
+              <h3 class="text-lg font-semibold text-slate-800">Daily Gate Entries</h3>
+              <p class="text-xs text-slate-500 mt-1">Day-by-day attendance trend for the selected range.</p>
+            </div>
+            <span class="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
+              {{ chart_labels|length }} Days
+            </span>
+          </div>
+          <div class="h-64"><canvas id="gateEntriesChart"></canvas></div>
+        </article>
+        <article class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 xl:col-span-4">
+          <h3 class="text-lg font-semibold text-slate-800">Attendance Distribution</h3>
+          <p class="text-xs text-slate-500 mt-1 mb-3">Present, absent, and late distribution snapshot.</p>
+          <div class="h-52"><canvas id="attendancePieChart"></canvas></div>
+          <div class="mt-3 grid grid-cols-3 gap-2 text-[11px]">
+            <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-center">
+              <p class="font-semibold text-emerald-700">{{ attendance_distribution.present }}</p>
+              <p class="text-emerald-700/80">Present</p>
+            </div>
+            <div class="rounded-lg border border-rose-200 bg-rose-50 px-2 py-1.5 text-center">
+              <p class="font-semibold text-rose-700">{{ attendance_distribution.absent }}</p>
+              <p class="text-rose-700/80">Absent</p>
+            </div>
+            <div class="rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-center">
+              <p class="font-semibold text-amber-700">{{ attendance_distribution.late }}</p>
+              <p class="text-amber-700/80">Late</p>
+            </div>
+          </div>
+        </article>
+        <article class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 xl:col-span-12">
+          <div class="flex items-start justify-between gap-3 mb-4">
+            <div>
+              <h3 class="text-lg font-semibold text-slate-800">SMS Logs Per Day</h3>
+              <p class="text-xs text-slate-500 mt-1">Notification delivery volume by date.</p>
+            </div>
+            <span class="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700">
+              {{ sms_series|sum }} Sent
+            </span>
+          </div>
+          <div class="h-56"><canvas id="smsBarChart"></canvas></div>
+        </article>
+      </section>
+
+      <section
+        id="aiAnalyticsModule"
+        class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 lg:p-5 space-y-5"
+        data-default-range="{{ ai_defaults.range }}"
+        data-default-change-mode="{{ ai_defaults.change_mode }}"
+        data-default-start="{{ filters.start_date }}"
+        data-default-end="{{ filters.end_date }}"
+      >
+        <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+          <div>
+            <h2 class="text-xl font-semibold text-slate-800">AI Analytics</h2>
+            <p class="text-sm text-slate-500 mt-1">Insights, risk detection, and recommendations from attendance, gate logs, and SMS logs.</p>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-4 gap-2 w-full lg:w-auto">
+            <select id="aiRangeFilter" class="rounded-xl border border-slate-300 px-3 py-2 text-sm">
+              <option value="today">Today</option>
+              <option value="7d">Last 7 Days</option>
+              <option value="30d">Last 30 Days</option>
+            </select>
+            <select id="aiGradeFilter" class="rounded-xl border border-slate-300 px-3 py-2 text-sm">
+              <option value="">All Grades</option>
+              {% for grade in grade_options %}
+              <option value="{{ grade }}">{{ grade }}</option>
+              {% endfor %}
+            </select>
+            <input id="aiSectionFilter" type="text" placeholder="Section (e.g. A)" class="rounded-xl border border-slate-300 px-3 py-2 text-sm">
+            <button id="aiRefreshBtn" type="button" class="rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-900 transition">Refresh</button>
+          </div>
+        </div>
+
+        <div id="aiGlobalError" class="hidden rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700"></div>
+
+        <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+          <article class="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 xl:col-span-2">
+            <div class="flex items-center justify-between gap-2 mb-3">
+              <h3 class="text-sm uppercase tracking-wide font-semibold text-slate-600">AI Insights</h3>
+              <span id="aiInsightsMeta" class="text-xs text-slate-500"></span>
+            </div>
+            <div id="aiInsightsList" class="space-y-2">
+              <div class="animate-pulse h-12 rounded-xl bg-slate-200"></div>
+              <div class="animate-pulse h-12 rounded-xl bg-slate-200"></div>
+              <div class="animate-pulse h-12 rounded-xl bg-slate-200"></div>
+            </div>
+          </article>
+
+          <article class="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+            <div class="flex items-center justify-between gap-2 mb-3">
+              <h3 class="text-sm uppercase tracking-wide font-semibold text-slate-600">What Changed?</h3>
+              <button id="aiCompareBtn" type="button" class="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100">Compare</button>
+            </div>
+            <div class="grid grid-cols-1 gap-2 mb-3">
+              <select id="aiChangesMode" class="rounded-xl border border-slate-300 px-3 py-2 text-sm">
+                <option value="today_vs_yesterday">Today vs Yesterday</option>
+                <option value="week_vs_last_week">This Week vs Last Week</option>
+                <option value="custom_range">Custom Range vs Previous</option>
+              </select>
+              <div class="grid grid-cols-2 gap-2">
+                <input id="aiChangesStart" type="date" class="rounded-xl border border-slate-300 px-3 py-2 text-sm">
+                <input id="aiChangesEnd" type="date" class="rounded-xl border border-slate-300 px-3 py-2 text-sm">
+              </div>
+            </div>
+            <div id="aiChangesSummary" class="grid grid-cols-1 gap-2 text-sm"></div>
+            <div id="aiChangesExplain" class="mt-3 space-y-1 text-xs text-slate-600"></div>
+          </article>
+        </div>
+
+        <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+          <article class="rounded-2xl border border-slate-200 p-4 xl:col-span-2">
+            <div class="flex items-center justify-between gap-2 mb-3">
+              <h3 class="text-sm uppercase tracking-wide font-semibold text-slate-600">Early Warning - Next School Day Risk</h3>
+              <span id="aiRiskMeta" class="text-xs text-slate-500"></span>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="min-w-full text-sm">
+                <thead class="bg-slate-900 text-white text-xs uppercase tracking-wide">
+                  <tr>
+                    <th class="px-3 py-2 text-left">Student ID</th>
+                    <th class="px-3 py-2 text-left">Name</th>
+                    <th class="px-3 py-2 text-left">Grade</th>
+                    <th class="px-3 py-2 text-left">Section</th>
+                    <th class="px-3 py-2 text-left">Risk Score</th>
+                    <th class="px-3 py-2 text-left">Reasons</th>
+                  </tr>
+                </thead>
+                <tbody id="aiRiskTableBody" class="divide-y divide-slate-200">
+                  <tr><td colspan="6" class="px-3 py-5 text-center text-slate-500">Loading risk predictions...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </article>
+
+          <article class="rounded-2xl border border-slate-200 p-4 space-y-3">
+            <h3 class="text-sm uppercase tracking-wide font-semibold text-slate-600">Quick Ask</h3>
+            <form id="aiAskForm" class="flex gap-2">
+              <input id="aiAskInput" type="text" placeholder="Ask analytics..." class="flex-1 rounded-xl border border-slate-300 px-3 py-2 text-sm">
+              <button type="submit" class="rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700">Ask</button>
+            </form>
+            <p class="text-xs text-slate-500">Try: "late trend for grade 9 this month", "sections with most absences last 2 weeks", "students with 3+ consecutive absences".</p>
+            <div id="aiAskStatus" class="text-xs text-slate-500"></div>
+            <div id="aiAskTableWrap" class="hidden overflow-x-auto rounded-xl border border-slate-200">
+              <table class="min-w-full text-xs">
+                <thead id="aiAskHead" class="bg-slate-100"></thead>
+                <tbody id="aiAskBody" class="divide-y divide-slate-100"></tbody>
+              </table>
+            </div>
+            <div id="aiAskChartWrap" class="hidden h-44">
+              <canvas id="aiAskChart"></canvas>
+            </div>
+          </article>
+        </div>
+
+        <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+          <article class="rounded-2xl border border-slate-200 p-4 xl:col-span-2">
+            <h3 class="text-sm uppercase tracking-wide font-semibold text-slate-600 mb-3">Next Best Actions</h3>
+            <div id="aiActionsList" class="space-y-2">
+              <div class="animate-pulse h-11 rounded-xl bg-slate-200"></div>
+              <div class="animate-pulse h-11 rounded-xl bg-slate-200"></div>
+            </div>
+          </article>
+          <article class="rounded-2xl border border-slate-200 p-4">
+            <div class="flex items-center justify-between gap-2 mb-3">
+              <h3 class="text-sm uppercase tracking-wide font-semibold text-slate-600">Drilldown</h3>
+              <button id="aiClearDrilldown" type="button" class="text-xs font-semibold text-emerald-700 hover:underline">Clear</button>
+            </div>
+            <p id="aiDrilldownTitle" class="text-sm font-semibold text-slate-700 mb-2">No drilldown selected</p>
+            <div id="aiDrilldownWrap" class="overflow-x-auto">
+              <div id="aiDrilldownEmpty" class="text-xs text-slate-500">Use View buttons from insights/actions to open supporting data.</div>
+              <table id="aiDrilldownTable" class="min-w-full text-xs hidden">
+                <thead id="aiDrilldownHead" class="bg-slate-100"></thead>
+                <tbody id="aiDrilldownBody" class="divide-y divide-slate-100"></tbody>
+              </table>
+            </div>
+          </article>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<script>
+const chartLabels = {{ chart_labels | tojson }};
+const gateSeries = {{ gate_series | tojson }};
+const smsSeries = {{ sms_series | tojson }};
+const attendanceDistribution = {{ attendance_distribution | tojson }};
+
+const gateCanvas = document.getElementById('gateEntriesChart');
+const smsCanvas = document.getElementById('smsBarChart');
+const attendanceCanvas = document.getElementById('attendancePieChart');
+
+const gateCtx = gateCanvas.getContext('2d');
+const smsCtx = smsCanvas.getContext('2d');
+
+const gateAreaGradient = gateCtx.createLinearGradient(0, 0, 0, 260);
+gateAreaGradient.addColorStop(0, 'rgba(5, 150, 105, 0.26)');
+gateAreaGradient.addColorStop(1, 'rgba(5, 150, 105, 0.03)');
+
+const smsBarGradient = smsCtx.createLinearGradient(0, 0, 0, 260);
+smsBarGradient.addColorStop(0, '#2563eb');
+smsBarGradient.addColorStop(1, '#60a5fa');
+
+const gateEntriesChart = new Chart(gateCanvas, {
+  type: 'line',
+  data: {
+    labels: chartLabels,
+    datasets: [{
+      label: 'Gate Entries',
+      data: gateSeries,
+      borderColor: '#059669',
+      backgroundColor: gateAreaGradient,
+      fill: true,
+      tension: 0.35,
+      borderWidth: 2.25,
+      pointRadius: 2.5,
+      pointHoverRadius: 4,
+      pointBackgroundColor: '#047857',
+      pointBorderColor: '#ffffff',
+      pointBorderWidth: 1.5
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: '#0f172a',
+        titleColor: '#f8fafc',
+        bodyColor: '#f8fafc',
+        padding: 10,
+        displayColors: false,
+      },
+    },
+    scales: {
+      x: { grid: { color: '#e2e8f0' }, ticks: { maxRotation: 0, autoSkip: true } },
+      y: { beginAtZero: true, grid: { color: '#e2e8f0' }, ticks: { precision: 0 } }
+    }
+  }
+});
+
+const smsBarChart = new Chart(smsCanvas, {
+  type: 'bar',
+  data: {
+    labels: chartLabels,
+    datasets: [{
+      label: 'SMS Sent',
+      data: smsSeries,
+      backgroundColor: smsBarGradient,
+      borderRadius: 8,
+      maxBarThickness: 28
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: '#0f172a',
+        titleColor: '#f8fafc',
+        bodyColor: '#f8fafc',
+        padding: 10,
+        displayColors: false,
+      },
+    },
+    scales: {
+      x: { grid: { color: '#e2e8f0' }, ticks: { maxRotation: 0, autoSkip: true } },
+      y: { beginAtZero: true, grid: { color: '#e2e8f0' }, ticks: { precision: 0 } }
+    }
+  }
+});
+
+const attendancePieChart = new Chart(attendanceCanvas, {
+  type: 'pie',
+  data: {
+    labels: ['Present', 'Absent', 'Late'],
+    datasets: [{
+      data: [attendanceDistribution.present, attendanceDistribution.absent, attendanceDistribution.late],
+      backgroundColor: ['#16a34a', '#ef4444', '#f59e0b'],
+      borderColor: '#ffffff',
+      borderWidth: 2
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'bottom',
+        labels: {
+          boxWidth: 12,
+          boxHeight: 12,
+          usePointStyle: true,
+          pointStyle: 'circle',
+        },
+      },
+      tooltip: {
+        backgroundColor: '#0f172a',
+        titleColor: '#f8fafc',
+        bodyColor: '#f8fafc',
+        padding: 10,
+      },
+    },
+  }
+});
+
+function applyChartTheme(theme) {
+  const isDark = theme === 'dark';
+  const textColor = isDark ? '#cbd5e1' : '#334155';
+  const gridColor = isDark ? 'rgba(71,85,105,0.45)' : '#e2e8f0';
+
+  if (window.Chart) {
+    Chart.defaults.color = textColor;
+    Chart.defaults.borderColor = gridColor;
+  }
+
+  [gateEntriesChart, smsBarChart].forEach((chart) => {
+    if (!chart || !chart.options || !chart.options.scales) return;
+    if (chart.options.scales.x && chart.options.scales.x.grid) chart.options.scales.x.grid.color = gridColor;
+    if (chart.options.scales.y && chart.options.scales.y.grid) chart.options.scales.y.grid.color = gridColor;
+    chart.update('none');
+  });
+  attendancePieChart.update('none');
+}
+
+applyChartTheme(window.AppTheme?.getTheme?.() || 'light');
+window.addEventListener('app-theme-change', (event) => {
+  applyChartTheme(event.detail?.theme || 'light');
+});
+
+const rangeSelect = document.getElementById('rangeSelect');
+const startInput = document.getElementById('startDateInput');
+const endInput = document.getElementById('endDateInput');
+function toggleCustomDates() {
+  const custom = rangeSelect.value === 'custom';
+  startInput.disabled = !custom;
+  endInput.disabled = !custom;
+  if (!custom) {
+    startInput.classList.add('opacity-60');
+    endInput.classList.add('opacity-60');
+  } else {
+    startInput.classList.remove('opacity-60');
+    endInput.classList.remove('opacity-60');
+  }
+}
+rangeSelect.addEventListener('change', toggleCustomDates);
+toggleCustomDates();
+
+let analyticsChangesStream = null;
+let analyticsChangesReconnectTimer = null;
+let analyticsReloadTimer = null;
+let analyticsRealtimeInitialized = false;
+let analyticsRealtimeSnapshot = { revision: 0, students: 0, gate_logs: 0, sms_logs: 0 };
+
+function scheduleAnalyticsReload() {
+  if (analyticsReloadTimer) return;
+  analyticsReloadTimer = setTimeout(() => {
+    analyticsReloadTimer = null;
+    window.location.reload();
+  }, 700);
+}
+
+function applyAnalyticsRealtimeSnapshot(payload) {
+  const snapshot = {
+    revision: Number.parseInt(payload?.revision || 0, 10) || 0,
+    students: Number.parseInt(payload?.students || 0, 10) || 0,
+    gate_logs: Number.parseInt(payload?.gate_logs || 0, 10) || 0,
+    sms_logs: Number.parseInt(payload?.sms_logs || 0, 10) || 0,
+  };
+
+  if (!analyticsRealtimeInitialized) {
+    analyticsRealtimeSnapshot = snapshot;
+    analyticsRealtimeInitialized = true;
+    return;
+  }
+
+  if (snapshot.revision <= analyticsRealtimeSnapshot.revision) return;
+
+  const studentsChanged = snapshot.students !== analyticsRealtimeSnapshot.students;
+  const gateLogsChanged = snapshot.gate_logs !== analyticsRealtimeSnapshot.gate_logs;
+  const smsLogsChanged = snapshot.sms_logs !== analyticsRealtimeSnapshot.sms_logs;
+  analyticsRealtimeSnapshot = snapshot;
+
+  if (studentsChanged || gateLogsChanged || smsLogsChanged) {
+    scheduleAnalyticsReload();
+  }
+}
+
+function closeAnalyticsRealtime() {
+  if (analyticsChangesStream) {
+    analyticsChangesStream.close();
+    analyticsChangesStream = null;
+  }
+  if (analyticsChangesReconnectTimer) {
+    clearTimeout(analyticsChangesReconnectTimer);
+    analyticsChangesReconnectTimer = null;
+  }
+  if (analyticsReloadTimer) {
+    clearTimeout(analyticsReloadTimer);
+    analyticsReloadTimer = null;
+  }
+}
+
+function initAnalyticsRealtime() {
+  if (!('EventSource' in window)) return;
+
+  const connect = () => {
+    closeAnalyticsRealtime();
+    analyticsChangesStream = new EventSource('/api/changes/stream');
+
+    analyticsChangesStream.addEventListener('data_change', (event) => {
+      try {
+        applyAnalyticsRealtimeSnapshot(JSON.parse(event.data || '{}'));
+      } catch (error) {
+        console.error('Failed to parse analytics data_change event:', error);
+      }
+    });
+
+    analyticsChangesStream.onerror = () => {
+      closeAnalyticsRealtime();
+      if (analyticsChangesReconnectTimer) return;
+      analyticsChangesReconnectTimer = setTimeout(() => {
+        analyticsChangesReconnectTimer = null;
+        connect();
+      }, 4000);
+    };
+  };
+
+  connect();
+}
+
+window.addEventListener('beforeunload', closeAnalyticsRealtime);
+initAnalyticsRealtime();
+</script>
+<script src="{{ url_for('static', filename='analytics_ai.js', v='20260304a') }}"></script>
+</body>
+</html>

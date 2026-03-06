@@ -1,0 +1,254 @@
+:root {
+  color-scheme: light;
+  --app-bg: #f1f5f9;
+  --app-surface-1: #ffffff;
+  --app-surface-2: #f8fafc;
+  --app-text: #0f172a;
+  --app-text-soft: #475569;
+  --app-border: #cbd5e1;
+  --app-shadow: 0 10px 35px rgba(15, 23, 42, 0.08);
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --app-bg: #0b1220;
+  --app-surface-1: #111c2f;
+  --app-surface-2: #17253b;
+  --app-text: #e2e8f0;
+  --app-text-soft: #94a3b8;
+  --app-border: #334155;
+  --app-shadow: 0 14px 42px rgba(2, 6, 23, 0.55);
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  background-color: var(--app-bg) !important;
+  color: var(--app-text) !important;
+}
+
+html[data-theme="dark"] body.bg-gradient-to-br {
+  background-image: linear-gradient(135deg, #0b1220, #111c2f, #1a2c42) !important;
+}
+
+html.theme-ready *,
+html.theme-ready *::before,
+html.theme-ready *::after {
+  transition:
+    background-color 0.22s ease,
+    color 0.22s ease,
+    border-color 0.22s ease,
+    box-shadow 0.22s ease;
+}
+
+html[data-theme="dark"] .bg-white,
+html[data-theme="dark"] .bg-slate-50,
+html[data-theme="dark"] .bg-slate-100,
+html[data-theme="dark"] .bg-gray-50,
+html[data-theme="dark"] .bg-gray-100 {
+  background-color: var(--app-surface-1) !important;
+}
+
+html[data-theme="dark"] .bg-slate-50\/70,
+html[data-theme="dark"] .bg-slate-50\/80,
+html[data-theme="dark"] .bg-amber-50\/50 {
+  background-color: var(--app-surface-2) !important;
+}
+
+html[data-theme="dark"] .text-slate-900,
+html[data-theme="dark"] .text-slate-800,
+html[data-theme="dark"] .text-slate-700,
+html[data-theme="dark"] .text-gray-800,
+html[data-theme="dark"] .text-gray-700,
+html[data-theme="dark"] .text-gray-600 {
+  color: var(--app-text) !important;
+}
+
+html[data-theme="dark"] .text-slate-600,
+html[data-theme="dark"] .text-slate-500,
+html[data-theme="dark"] .text-gray-500,
+html[data-theme="dark"] .text-gray-400 {
+  color: var(--app-text-soft) !important;
+}
+
+html[data-theme="dark"] .border,
+html[data-theme="dark"] .border-slate-100,
+html[data-theme="dark"] .border-slate-200,
+html[data-theme="dark"] .border-slate-300,
+html[data-theme="dark"] .border-gray-200,
+html[data-theme="dark"] .border-gray-300 {
+  border-color: var(--app-border) !important;
+}
+
+html[data-theme="dark"] .shadow-sm,
+html[data-theme="dark"] .shadow,
+html[data-theme="dark"] .shadow-lg,
+html[data-theme="dark"] .shadow-xl,
+html[data-theme="dark"] .shadow-2xl {
+  box-shadow: var(--app-shadow) !important;
+}
+
+html[data-theme="dark"] input,
+html[data-theme="dark"] select,
+html[data-theme="dark"] textarea {
+  background-color: #0f1a2d !important;
+  color: var(--app-text) !important;
+  border-color: var(--app-border) !important;
+}
+
+html[data-theme="dark"] input::placeholder,
+html[data-theme="dark"] textarea::placeholder {
+  color: #7c8ca3 !important;
+}
+
+html[data-theme="dark"] .hover\:bg-slate-50:hover,
+html[data-theme="dark"] .hover\:bg-slate-100:hover,
+html[data-theme="dark"] .hover\:bg-gray-100:hover,
+html[data-theme="dark"] .hover\:bg-gray-200:hover {
+  background-color: #1f2f46 !important;
+}
+
+html[data-theme="dark"] .bg-slate-900 {
+  background-color: #0f172a !important;
+}
+
+html[data-theme="dark"] .bg-black\/50,
+html[data-theme="dark"] .bg-black\/60,
+html[data-theme="dark"] .bg-black\/70 {
+  background-color: rgba(2, 6, 23, 0.72) !important;
+}
+
+html[data-theme="dark"] .ring-offset-2 {
+  --tw-ring-offset-color: #0f172a !important;
+}
+
+/* Global dropdown/select polish */
+select {
+  appearance: none;
+  background-image: none !important;
+}
+
+.ui-select-wrap {
+  position: relative;
+  display: inline-block;
+  vertical-align: middle;
+  max-width: 100%;
+}
+
+.ui-select-wrap.ui-select-wrap-full {
+  display: block;
+  width: 100%;
+}
+
+.ui-select-wrap > select {
+  padding-right: 2rem !important;
+}
+
+.ui-select-arrow {
+  position: absolute;
+  right: 0.68rem;
+  top: 50%;
+  transform: translateY(-50%) rotate(0deg);
+  transform-origin: center;
+  transition: transform 0.24s ease;
+  pointer-events: none;
+  color: #64748b;
+  line-height: 0;
+}
+
+.ui-select-arrow svg {
+  width: 0.92rem;
+  height: 0.92rem;
+  display: block;
+}
+
+.ui-select-wrap.ui-dropdown-open .ui-select-arrow {
+  transform: translateY(-50%) rotate(180deg);
+}
+
+html[data-theme="dark"] .ui-select-arrow {
+  color: #94a3b8;
+}
+
+.ui-select-wrap > select:disabled + .ui-select-arrow {
+  opacity: 0.55;
+}
+
+[data-dropdown-arrow],
+.ui-dropdown-arrow {
+  transform: rotate(0deg);
+  transform-origin: center;
+  transition: transform 0.24s ease;
+}
+
+[data-dropdown-arrow].ui-dropdown-arrow-open,
+.ui-dropdown-arrow.ui-dropdown-arrow-open {
+  transform: rotate(180deg);
+}
+
+/* Animated dropdown menus (button-triggered popovers) */
+.ui-dropdown-menu {
+  opacity: 0;
+  transform: translateY(0.35rem) scale(0.98);
+  transform-origin: top right;
+  transition: opacity 0.16s ease, transform 0.16s ease;
+  pointer-events: none;
+}
+
+.ui-dropdown-menu.ui-dropdown-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+.ui-dropdown-menu.ui-dropdown-closing {
+  opacity: 0;
+  transform: translateY(0.28rem) scale(0.98);
+  pointer-events: none;
+}
+
+/* Global scrollbar refresh (exclude sidebar panel scrollbar). */
+html {
+  scroll-behavior: smooth;
+}
+
+*:not(.sidebar-scroll):not(.sidebar-scroll *) {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(100, 116, 139, 0.5) transparent;
+}
+
+*:not(.sidebar-scroll):not(.sidebar-scroll *)::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*:not(.sidebar-scroll):not(.sidebar-scroll *)::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*:not(.sidebar-scroll):not(.sidebar-scroll *)::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+  background: rgba(100, 116, 139, 0.45);
+  transition: background 0.2s ease;
+}
+
+*:not(.sidebar-scroll):not(.sidebar-scroll *):hover::-webkit-scrollbar-thumb {
+  background: rgba(71, 85, 105, 0.62);
+}
+
+html[data-theme="dark"] *:not(.sidebar-scroll):not(.sidebar-scroll *) {
+  scrollbar-color: rgba(148, 163, 184, 0.45) transparent;
+}
+
+html[data-theme="dark"] *:not(.sidebar-scroll):not(.sidebar-scroll *)::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.4);
+}
+
+html[data-theme="dark"] *:not(.sidebar-scroll):not(.sidebar-scroll *):hover::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.58);
+}

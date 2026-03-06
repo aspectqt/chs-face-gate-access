@@ -4,9 +4,22 @@
 <h2 class="text-2xl font-bold mb-4 text-blue-600">Add New Student</h2>
 
 <form id="studentForm" class="bg-white p-6 rounded shadow-md space-y-4">
-    <input type="text" name="student_id" placeholder="Student ID" class="w-full p-2 border rounded" required>
+    <input type="text" name="lrn" placeholder="LRN" class="w-full p-2 border rounded" required>
     <input type="text" name="name" placeholder="Student Name" class="w-full p-2 border rounded" required>
-    <input type="text" name="grade" placeholder="Grade" class="w-full p-2 border rounded" required>
+    <select name="gender" class="w-full p-2 border rounded" required>
+        <option value="">Sex / Gender</option>
+        <option value="Male">Male</option>
+        <option value="Female">Female</option>
+    </select>
+    <select name="grade_level" class="w-full p-2 border rounded" required>
+        <option value="">Grade Level</option>
+        <option value="Grade 7">Grade 7</option>
+        <option value="Grade 8">Grade 8</option>
+        <option value="Grade 9">Grade 9</option>
+        <option value="Grade 10">Grade 10</option>
+        <option value="Grade 11">Grade 11</option>
+        <option value="Grade 12">Grade 12</option>
+    </select>
     <input type="text" name="section" placeholder="Section" class="w-full p-2 border rounded" required>
     <input type="text" name="parent_contact" placeholder="Parent Contact (+639...)" class="w-full p-2 border rounded" required>
     <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Add Student</button>
@@ -17,17 +30,20 @@
 <script>
 document.getElementById('studentForm').addEventListener('submit', async function(e) {
     e.preventDefault();
-    const formData = Object.fromEntries(new FormData(this).entries());
+    const formData = new FormData(this);
     
-    const response = await fetch('/students', {
+    const response = await fetch('/api/students', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        body: formData
     });
     
-    const data = await response.json();
-    document.getElementById('message').innerText = data.message;
-    this.reset();
+    const data = await response.json().catch(() => ({}));
+    if (response.ok && data.status === 'ok') {
+        document.getElementById('message').innerText = data.message || 'Student registered successfully.';
+        this.reset();
+    } else {
+        document.getElementById('message').innerText = data.message || 'Failed to register student.';
+    }
 });
 </script>
 {% endblock %}

@@ -3,9 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <title>Face Recognition</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32x32.png') }}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon-16x16.png') }}">
+    <link rel="shortcut icon" href="{{ url_for('static', filename='favicon-32x32.png') }}">
     <script src="https://cdn.tailwindcss.com"></script>
+    {% include 'partials/theme_assets.html' %}
 </head>
-<body class="bg-gray-100 p-6">
+<body class="bg-gray-100 p-6" data-authenticated="{{ '1' if session.get('admin') else '0' }}" data-user-theme="{{ current_theme|default('') }}">
+
+<div class="fixed top-4 right-4 z-40">
+    {% set theme_toggle_classes = 'inline-flex items-center justify-center h-10 w-10 rounded-full border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 transition focus:outline-none focus:ring-2 focus:ring-emerald-400' %}
+    {% include 'partials/theme_toggle_button.html' %}
+</div>
 
 <div class="container mx-auto">
 
@@ -18,7 +27,20 @@
             <div class="grid grid-cols-2 gap-4">
                 <input type="text" name="student_id" placeholder="Student ID" class="border p-2 rounded" required>
                 <input type="text" name="name" placeholder="Full Name" class="border p-2 rounded" required>
-                <input type="text" name="grade" placeholder="Grade" class="border p-2 rounded" required>
+                <select name="gender" class="border p-2 rounded" required>
+                    <option value="">Sex / Gender</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                </select>
+                <select name="grade_level" class="border p-2 rounded" required>
+                    <option value="">Grade Level</option>
+                    <option value="Grade 7">Grade 7</option>
+                    <option value="Grade 8">Grade 8</option>
+                    <option value="Grade 9">Grade 9</option>
+                    <option value="Grade 10">Grade 10</option>
+                    <option value="Grade 11">Grade 11</option>
+                    <option value="Grade 12">Grade 12</option>
+                </select>
                 <input type="text" name="section" placeholder="Section" class="border p-2 rounded" required>
                 <input type="text" name="parent_contact" placeholder="Parent Contact" class="border p-2 rounded" required>
                 <input type="file" name="photo" accept="image/*" class="border p-2 rounded" required>

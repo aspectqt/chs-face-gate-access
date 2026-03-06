@@ -2,167 +2,176 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Admin Login</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>CHS Gate Access | Login</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32x32.png') }}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon-16x16.png') }}">
+    <link rel="shortcut icon" href="{{ url_for('static', filename='favicon-32x32.png') }}">
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/feather-icons"></script>
-    <style>
-        /* Full-screen loader */
-        #fullScreenLoader {
-            position: fixed;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-            background: rgba(255,255,255,0.9);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 50;
-            opacity: 0;
-            pointer-events: none;
-            transition: opacity 0.3s ease;
-        }
-        #fullScreenLoader.active {
-            opacity: 1;
-            pointer-events: all;
-        }
-
-        /* Concentric circles loader */
-        .loader-circle {
-            position: relative;
-            width: 80px;
-            height: 80px;
-        }
-        .loader-circle div {
-            box-sizing: border-box;
-            position: absolute;
-            width: 80px; height: 80px;
-            border: 6px solid #10b981; /* emerald */
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            border-color: #10b981 transparent transparent transparent;
-        }
-        .loader-circle div:nth-child(1) { animation-delay: 0s; }
-        .loader-circle div:nth-child(2) { animation-delay: 0.2s; width: 60px; height: 60px; top:10px; left:10px; }
-        .loader-circle div:nth-child(3) { animation-delay: 0.4s; width: 40px; height: 40px; top:20px; left:20px; }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-    </style>
+    {% include 'partials/theme_assets.html' %}
 </head>
-<body class="bg-gray-100 h-screen flex items-center justify-center relative">
+<body class="min-h-screen bg-gradient-to-br from-slate-100 via-slate-50 to-emerald-50 text-slate-800" data-authenticated="0" data-user-theme="">
+    <main class="min-h-screen flex items-center justify-center px-4 py-8">
+        <section class="w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-300/35">
+            <div class="px-7 pt-7 pb-5 border-b border-slate-100 text-center">
+                <img src="{{ url_for('static', filename='logo.png') }}" alt="CHS Logo" class="mx-auto h-16 w-16 rounded-full object-cover ring-2 ring-emerald-100">
+                <h1 class="mt-4 text-xl font-semibold tracking-wide text-slate-900">FACE RECOGNITION STUDENT  GATE ACCESS SYSTEM  WITH SMS NOTIFICATION FOR CAWITAN HIGH SCHOOL</h1>
+                <p class="mt-1 text-sm text-slate-500">Secure institutional login portal</p>
+            </div>
 
-    <!-- Full-screen loader -->
-    <div id="fullScreenLoader">
-        <div class="loader-circle">
-            <div></div>
-            <div></div>
-            <div></div>
-        </div>
-    </div>
-
-    <div class="flex w-4/5 max-w-5xl bg-white shadow-xl rounded-xl overflow-hidden">
-        <!-- Left: Gradient + Logo -->
-        <div class="w-1/2 relative flex flex-col items-center justify-center p-10 bg-gradient-to-br from-emerald-600 to-emerald-400 text-white">
-            <div class="absolute inset-0 -skew-x-6 bg-gradient-to-br from-emerald-600 to-emerald-400 -z-10"></div>
-            <img src="static/logo.png" alt="Logo" class="w-32 h-32 mb-6 relative z-10">
-            <h1 class="text-3xl font-bold text-center z-10 relative">Face Recognition Student Gate Access with SMS Notification</h1>
-            <p class="mt-4 text-center text-emerald-100 z-10 relative">Securely manage your access anytime, anywhere</p>
-        </div>
-
-        <!-- Right: Login Form -->
-        <div class="w-1/2 p-10 flex flex-col justify-center">
-            <h2 class="text-2xl font-bold mb-6 text-center text-gray-700">Admin Login</h2>
-
-            <form method="POST" class="space-y-4" id="loginForm">
-                <!-- Username -->
-                <div class="relative">
-                    <label for="username" class="text-gray-700 text-sm">Username</label>
-                    <div class="relative mt-1">
-                        <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.121 17.804A9 9 0 1118.878 6.196 9 9 0 015.12 17.804z"/>
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 12a3 3 0 100-6 3 3 0 000 6z"/>
-                            </svg>
-                        </span>
-                        <input type="text" id="username" name="username" placeholder="Enter username"
-                            class="w-full pl-10 p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500" required>
-                    </div>
+            <div class="px-7 py-6">
+                {% if error %}
+                <div id="serverError" class="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                    {{ error }}
                 </div>
+                {% endif %}
 
-                <!-- Password -->
-                <div class="relative">
-                    <label for="password" class="text-gray-700 text-sm">Password</label>
-                    <div class="relative mt-1">
-                        <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 11c1.657 0 3-1.343 3-3V6a3 3 0 10-6 0v2c0 1.657 1.343 3 3 3z"/>
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 11h14a2 2 0 012 2v7a2 2 0 01-2 2H5a2 2 0 01-2-2v-7a2 2 0 012-2z"/>
-                            </svg>
-                        </span>
-                        <input type="password" id="password" name="password" placeholder="Enter password"
-                            class="w-full pl-10 p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500" required>
-                        <span id="togglePassword" class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 cursor-pointer transition-transform duration-300 ease-in-out">
-                            <svg id="eyeIcon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 transform transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.477 0 8.268 2.943 9.542 7-1.274 4.057-5.065 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
-                            </svg>
-                        </span>
+                <div id="clientError" class="mb-4 hidden rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"></div>
+
+                <form method="POST" id="loginForm" class="space-y-4" autocomplete="off" autocapitalize="none" spellcheck="false" novalidate>
+                    <div class="hidden" aria-hidden="true">
+                        <input type="text" name="auth_user_placeholder" tabindex="-1" autocomplete="username">
+                        <input type="password" name="auth_pass_placeholder" tabindex="-1" autocomplete="current-password">
                     </div>
-                </div>
-
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center">
-                        <input id="remember" name="remember" type="checkbox" class="h-4 w-4 text-emerald-600 focus:ring-emerald-500 border-gray-300 rounded">
-                        <label for="remember" class="ml-2 block text-sm text-gray-700">Remember Me</label>
+                    <div>
+                        <label for="username" class="text-sm font-medium text-slate-700">Username</label>
+                        <div class="relative mt-1">
+                            <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M5.121 17.804A9 9 0 1118.878 6.196 9 9 0 015.12 17.804z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 12a3 3 0 100-6 3 3 0 000 6z" />
+                                </svg>
+                            </span>
+                            <input
+                                type="text"
+                                id="username"
+                                name="username"
+                                required
+                                maxlength="80"
+                                value="{{ entered_username|default('') }}"
+                                placeholder="Enter your username"
+                                autocomplete="off"
+                                autocapitalize="none"
+                                autocorrect="off"
+                                spellcheck="false"
+                                data-lpignore="true"
+                                data-1p-ignore="true"
+                                data-form-type="other"
+                                class="w-full rounded-xl border border-slate-300 bg-white pl-10 pr-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+                            >
+                        </div>
                     </div>
-                    <a href="/forgot-password" class="text-sm text-emerald-600 hover:text-emerald-700">Forgot Password?</a>
-                </div>
 
-                <button type="submit" class="w-full bg-emerald-600 text-white p-3 rounded-lg hover:bg-emerald-700 transition-colors flex justify-center items-center">
-                    <span id="btnText">Login</span>
-                    <svg id="spinner" class="animate-spin h-5 w-5 ml-2 hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
-                    </svg>
-                </button>
-            </form>
+                    <div>
+                        <label for="password" class="text-sm font-medium text-slate-700">Password</label>
+                        <div class="relative mt-1">
+                            <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 11c1.657 0 3-1.343 3-3V6a3 3 0 10-6 0v2c0 1.657 1.343 3 3 3z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 11h14a2 2 0 012 2v7a2 2 0 01-2 2H5a2 2 0 01-2-2v-7a2 2 0 012-2z" />
+                                </svg>
+                            </span>
+                            <input
+                                type="password"
+                                id="password"
+                                name="password"
+                                required
+                                maxlength="160"
+                                placeholder="Enter your password"
+                                autocomplete="new-password"
+                                autocorrect="off"
+                                spellcheck="false"
+                                data-lpignore="true"
+                                data-1p-ignore="true"
+                                data-form-type="other"
+                                class="w-full rounded-xl border border-slate-300 bg-white pl-10 pr-11 py-2.5 text-sm text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+                            >
+                            <button type="button" id="togglePassword" aria-label="Show or hide password"
+                                class="absolute inset-y-0 right-0 flex items-center px-3 text-slate-400 hover:text-slate-600 transition">
+                                <svg id="toggleIcon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5s8.268 2.943 9.542 7c-1.274 4.057-5.065 7-9.542 7s-8.268-2.943-9.542-7z" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
 
-            <p class="text-gray-500 text-xs mt-6 text-center">&copy; {{ current_year }} CHS Gate Access System</p>
-        </div>
-    </div>
+                    <div class="flex items-center justify-between gap-4">
+                        <label class="inline-flex items-center gap-2 text-sm text-slate-600">
+                            <input type="checkbox" id="remember_me" name="remember_me" class="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                                {% if remember_me %}checked{% endif %}>
+                            <span>Remember Me</span>
+                        </label>
+                        <a href="mailto:support@chs-gate.local" class="text-sm font-medium text-emerald-700 hover:text-emerald-800 transition">Need help?</a>
+                    </div>
 
-<script>
-    feather.replace();
+                    <button type="submit" id="loginButton"
+                        class="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70">
+                        <span id="loginButtonText">Sign In</span>
+                        <svg id="loginSpinner" class="hidden h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-90" fill="currentColor" d="M12 2a10 10 0 00-10 10h4a6 6 0 016-6V2z"></path>
+                        </svg>
+                    </button>
+                </form>
+            </div>
 
-    // Show/Hide password
-    const password = document.getElementById('password');
-    const togglePassword = document.getElementById('togglePassword');
-    const eyeIcon = document.getElementById('eyeIcon');
-    togglePassword.addEventListener('click', ()=>{
-        password.type = password.type==='password'?'text':'password';
-        eyeIcon.classList.toggle('rotate-180');
-        eyeIcon.classList.add('scale-110');
-        setTimeout(()=>eyeIcon.classList.remove('scale-110'),150);
-    });
+            <div class="px-7 pb-6 text-center">
+                <p class="text-xs text-slate-500">&copy; {{ current_year }} CHS Gate Access System</p>
+            </div>
+        </section>
+    </main>
 
-    // Full-screen loader on login click
+    <script>
     const loginForm = document.getElementById('loginForm');
-    const btnText = document.getElementById('btnText');
-    const spinner = document.getElementById('spinner');
-    const fullLoader = document.getElementById('fullScreenLoader');
+    const usernameInput = document.getElementById('username');
+    const passwordInput = document.getElementById('password');
+    const togglePassword = document.getElementById('togglePassword');
+    const clientError = document.getElementById('clientError');
+    const loginButton = document.getElementById('loginButton');
+    const loginButtonText = document.getElementById('loginButtonText');
+    const loginSpinner = document.getElementById('loginSpinner');
 
-    loginForm.addEventListener('submit', function(){
-        // Show button spinner
-        btnText.classList.add('hidden');
-        spinner.classList.remove('hidden');
-
-        // Show full-screen loader
-        fullLoader.classList.add('active');
-
-        // Let form submit naturally to server
+    // Reduce browser autofill popups by unlocking fields only on first focus.
+    [usernameInput, passwordInput].forEach((field) => {
+        if (!field) return;
+        field.setAttribute('readonly', 'readonly');
+        field.addEventListener('focus', () => {
+            field.removeAttribute('readonly');
+        }, { once: true });
     });
-</script>
 
+    function showClientError(message) {
+        clientError.textContent = message;
+        clientError.classList.remove('hidden');
+    }
+
+    function clearClientError() {
+        clientError.textContent = '';
+        clientError.classList.add('hidden');
+    }
+
+    togglePassword.addEventListener('click', () => {
+        const isPassword = passwordInput.type === 'password';
+        passwordInput.type = isPassword ? 'text' : 'password';
+    });
+
+    loginForm.addEventListener('submit', (event) => {
+        clearClientError();
+
+        const username = usernameInput.value.trim();
+        const password = passwordInput.value;
+
+        if (!username || !password) {
+            event.preventDefault();
+            showClientError('Username and password are required.');
+            return;
+        }
+
+        loginButton.disabled = true;
+        loginButtonText.textContent = 'Signing in...';
+        loginSpinner.classList.remove('hidden');
+    });
+    </script>
 </body>
 </html>

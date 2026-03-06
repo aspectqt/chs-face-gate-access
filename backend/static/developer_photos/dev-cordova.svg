@@ -1,0 +1,14 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" role="img" aria-labelledby="title desc">
+  <title id="title">CORDOVA, APRIL BRYAN C.</title>
+  <desc id="desc">Avatar placeholder for developer profile</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#115e59"/>
+      <stop offset="100%" stop-color="#22c55e"/>
+    </linearGradient>
+  </defs>
+  <rect width="320" height="320" rx="36" fill="url(#bg)"/>
+  <circle cx="160" cy="120" r="54" fill="#ffffff" fill-opacity="0.9"/>
+  <path d="M66 270c12-47 50-77 94-77s82 30 94 77" fill="#ffffff" fill-opacity="0.9"/>
+  <text x="160" y="302" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="28" font-weight="700" fill="#ecfdf5">AC</text>
+</svg>

@@ -1,210 +1,484 @@
-<!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Students Management</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        /* Face thumbnails: fixed size, cover and center crop */
-        .face-thumb {
-            width: 48px;
-            height: 48px;
-            object-fit: cover;  /* Crop to fill */
-            object-position: center; /* Center face */
-            border-radius: 0.25rem; /* Rounded corners */
-            border: 1px solid #d1fae5; /* Emerald border */
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Students</title>
+<link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32x32.png') }}">
+<link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon-16x16.png') }}">
+<script src="https://cdn.tailwindcss.com"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+{% include 'partials/theme_assets.html' %}
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
 </head>
-<body class="bg-gray-100 h-screen overflow-hidden">
+<body class="bg-slate-100 h-screen overflow-hidden text-slate-800" data-authenticated="1" data-user-theme="{{ current_theme|default('') }}">
 <div class="flex h-full">
+  {% include 'partials/sidebar.html' %}
+  <div class="flex-1 flex flex-col">
+    <header class="h-16 bg-white shadow-sm flex items-center justify-between px-6">
+      <h1 class="text-lg font-semibold">Students</h1>
+      <div class="flex items-center gap-2">
+        {% set theme_toggle_classes = 'relative p-2 rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200 transition focus:outline-none focus:ring-2 focus:ring-emerald-400' %}
+        {% include 'partials/theme_toggle_button.html' %}
+      </div>
+    </header>
 
-    <!-- SIDEBAR -->
-    <aside class="w-64 bg-emerald-700 text-white flex flex-col shadow-xl">
-        <div class="flex items-center gap-3 px-6 py-5 border-b border-emerald-800">
-            <img src="/static/logo.png" class="h-10 w-10 rounded-full">
+    <main class="flex-1 overflow-y-auto p-4 sm:p-6">
+      <div id="toast" class="fixed top-5 right-5 z-[100] hidden rounded-xl px-4 py-3 text-sm shadow-lg border"></div>
+
+      {% if message %}
+      <div class="mb-4 rounded-xl border px-4 py-3 text-sm {% if message_type == 'error' %}border-red-200 bg-red-50 text-red-700{% else %}border-emerald-200 bg-emerald-50 text-emerald-700{% endif %}">
+        {{ message }}
+      </div>
+      {% endif %}
+
+      <section class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-5">
+        <article class="relative overflow-hidden rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-emerald-100/70 p-4 shadow-sm">
+          <div class="absolute -right-4 -top-4 h-16 w-16 rounded-full bg-emerald-200/40 blur-xl"></div>
+          <div class="relative flex items-start justify-between gap-2">
             <div>
-                <p class="text-lg font-semibold">CHS Gate Access</p>
-                <p class="text-xs text-emerald-200">Administration</p>
+              <p class="text-[11px] uppercase tracking-[0.12em] text-emerald-700 font-semibold">Total Students</p>
+              <p id="statTotalStudents" class="text-3xl font-bold mt-2 text-slate-900">{{ stats.total }}</p>
+              <p class="text-[11px] text-slate-500 mt-1">Registered profiles</p>
             </div>
+            <span class="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-emerald-200 bg-white text-emerald-700">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 14c3.866 0 7 1.79 7 4v2H5v-2c0-2.21 3.134-4 7-4zm0-2a4 4 0 100-8 4 4 0 000 8z" />
+              </svg>
+            </span>
+          </div>
+        </article>
+        <article class="relative overflow-hidden rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-emerald-100/70 p-4 shadow-sm">
+          <div class="absolute -right-4 -top-4 h-16 w-16 rounded-full bg-emerald-200/40 blur-xl"></div>
+          <div class="relative flex items-start justify-between gap-2">
+            <div>
+              <p class="text-[11px] uppercase tracking-[0.12em] text-emerald-700 font-semibold">Active Students</p>
+              <p id="statActiveStudents" class="text-3xl font-bold mt-2 text-slate-900">{{ stats.active }}</p>
+              <p class="text-[11px] text-slate-500 mt-1">Currently active records</p>
+            </div>
+            <span class="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-emerald-200 bg-white text-emerald-700">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            </span>
+          </div>
+        </article>
+        <article class="relative overflow-hidden rounded-2xl border border-rose-200 bg-gradient-to-br from-rose-50 via-white to-rose-100/70 p-4 shadow-sm">
+          <div class="absolute -right-4 -top-4 h-16 w-16 rounded-full bg-rose-200/40 blur-xl"></div>
+          <div class="relative flex items-start justify-between gap-2">
+            <div>
+              <p class="text-[11px] uppercase tracking-[0.12em] text-rose-700 font-semibold">Inactive Students</p>
+              <p id="statInactiveStudents" class="text-3xl font-bold mt-2 text-slate-900">{{ stats.inactive }}</p>
+              <p class="text-[11px] text-slate-500 mt-1">Temporarily disabled</p>
+            </div>
+            <span class="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-rose-200 bg-white text-rose-700">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </span>
+          </div>
+        </article>
+        <article class="relative overflow-hidden rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50 via-white to-blue-100/70 p-4 shadow-sm">
+          <div class="absolute -right-4 -top-4 h-16 w-16 rounded-full bg-blue-200/40 blur-xl"></div>
+          <div class="relative flex items-start justify-between gap-2">
+            <div>
+              <p class="text-[11px] uppercase tracking-[0.12em] text-blue-700 font-semibold">Added Today</p>
+              <p id="statAddedToday" class="text-3xl font-bold mt-2 text-slate-900">{{ stats.new_today }}</p>
+              <p class="text-[11px] text-slate-500 mt-1">New records this day</p>
+            </div>
+            <span class="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-blue-200 bg-white text-blue-700">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+            </span>
+          </div>
+        </article>
+      </section>
+
+      <section class="grid grid-cols-1 xl:grid-cols-12 gap-4 mb-5">
+        <article class="bg-white rounded-2xl border border-slate-200 p-4 xl:col-span-8 shadow-sm">
+          <div class="flex flex-wrap items-start justify-between gap-3 mb-3">
+            <div>
+              <h2 class="text-base font-semibold text-slate-800">Search Students</h2>
+              <p class="text-xs text-slate-500 mt-1">Find by name, LRN, section, or grade filter.</p>
+            </div>
+            <div class="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
+              Live from MongoDB
+            </div>
+          </div>
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-3 items-end">
+            <div class="lg:col-span-8">
+              <label class="text-xs font-semibold uppercase tracking-wide text-slate-500">Search</label>
+              <div class="relative mt-1">
+                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-4.35-4.35M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Z" />
+                  </svg>
+                </span>
+                <input id="searchInput" placeholder="Name, LRN, section" class="w-full rounded-xl border border-slate-300 pl-10 pr-3 py-2.5 text-sm">
+              </div>
+            </div>
+            <div class="lg:col-span-4">
+              <label class="text-xs font-semibold uppercase tracking-wide text-slate-500">Grade</label>
+              <select id="gradeFilter" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm">
+                <option value="">All Grades</option>
+                {% for grade in grade_options %}
+                <option value="{{ grade }}">{{ grade }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+        </article>
+
+        <article class="bg-white rounded-2xl border border-slate-200 p-4 xl:col-span-4 shadow-sm flex flex-col justify-between">
+          <div>
+            <h2 class="text-base font-semibold text-slate-800">Quick Actions</h2>
+            <p class="text-xs text-slate-500 mt-1">Add new student profiles and keep records updated.</p>
+          </div>
+          <div class="mt-4">
+            <button id="openAddBtn" type="button" class="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+              Add Student
+            </button>
+          </div>
+        </article>
+      </section>
+
+      <section class="bg-white rounded-2xl border border-slate-200 p-4 mb-5 shadow-sm">
+        <div class="flex flex-wrap items-start justify-between gap-3 mb-3">
+          <div>
+            <h2 class="text-base font-semibold text-slate-800">Sections Filter</h2>
+            <p class="text-xs text-slate-500 mt-1">Select a section chip to filter students instantly.</p>
+          </div>
+          <button id="clearSectionBtn" type="button" class="text-xs font-semibold text-emerald-700 underline hidden">Clear Section</button>
         </div>
-        <nav class="flex-1 px-4 py-6 space-y-1 text-sm font-medium">
-            <a href="/dashboard" class="sidebar-link block px-4 py-2 rounded-lg hover:bg-emerald-600">Dashboard</a>
-            <a href="/students" class="sidebar-link block px-4 py-2 rounded-lg bg-emerald-800">Students</a>
-            <a href="/gate-logs" class="sidebar-link block px-4 py-2 rounded-lg hover:bg-emerald-600">Gate Logs</a>
-            <a href="/sms-logs" class="sidebar-link block px-4 py-2 rounded-lg hover:bg-emerald-600">SMS Logs</a>
-        </nav>
-    </aside>
-
-    <!-- MAIN -->
-    <div class="flex-1 flex flex-col">
-
-        <header class="h-16 bg-white shadow-sm flex items-center px-6">
-            <h1 class="text-lg font-semibold text-gray-800">Students Management</h1>
-        </header>
-
-        <main class="flex-1 overflow-y-auto p-6 space-y-6">
-
-            <!-- ADD STUDENT FORM -->
-            <form id="studentForm" method="POST" class="bg-white p-6 rounded-xl shadow space-y-6" onsubmit="return validateForm()">
-
-                <div class="grid grid-cols-3 gap-4">
-                    <input name="student_id" placeholder="Student ID" class="border p-2 rounded-lg" required>
-                    <input name="name" placeholder="Name" class="border p-2 rounded-lg" required>
-                    <input name="grade" placeholder="Grade" class="border p-2 rounded-lg" required>
-                    <input name="section" placeholder="Section" class="border p-2 rounded-lg" required>
-                    <input name="parent_contact" placeholder="Parent Contact" class="border p-2 rounded-lg" required>
-                </div>
-
-                <!-- FACE REGISTRATION -->
-                <div class="border-2 border-dashed border-emerald-400 p-6 rounded-xl text-center space-y-4">
-                    <h2 class="font-semibold text-lg">AI Face Enrollment (5 Samples)</h2>
-                    <p id="instruction" class="text-emerald-600 font-medium">Step 1: Look Straight</p>
-
-                    <video id="video" autoplay class="mx-auto rounded-lg shadow w-72 h-56 bg-black"></video>
-                    <canvas id="canvas" class="hidden"></canvas>
-
-                    <div class="flex justify-center gap-3">
-                        <button type="button" onclick="startCamera()" 
-                                class="bg-blue-600 text-white px-4 py-2 rounded-lg">Open Camera</button>
-
-                        <button type="button" onclick="captureFace()" 
-                                class="bg-emerald-600 text-white px-4 py-2 rounded-lg">Capture</button>
-                    </div>
-
-                    <div id="loading" class="hidden text-emerald-600 font-medium">
-                        Processing AI Face Check...
-                    </div>
-
-                    <div class="grid grid-cols-5 gap-2 mt-4">
-                        <img id="preview0" class="face-thumb hidden">
-                        <img id="preview1" class="face-thumb hidden">
-                        <img id="preview2" class="face-thumb hidden">
-                        <img id="preview3" class="face-thumb hidden">
-                        <img id="preview4" class="face-thumb hidden">
-                    </div>
-
-                    <input type="hidden" name="faces" id="facesData">
-                </div>
-
-                <button type="submit" class="w-full bg-emerald-600 text-white p-2 rounded-lg hover:bg-emerald-700">
-                    Add Student
-                </button>
-
-            </form>
-
-            <!-- STUDENTS TABLE -->
-            <div class="bg-white rounded-xl shadow overflow-x-auto mt-6">
-                <table class="w-full text-sm table-auto">
-                    <thead class="bg-gray-100 text-gray-700 uppercase text-xs">
-                        <tr>
-                            <th class="p-3">Student ID</th>
-                            <th class="p-3">Name</th>
-                            <th class="p-3">Grade</th>
-                            <th class="p-3">Section</th>
-                            <th class="p-3">Parent Contact</th>
-                            <th class="p-3">Face Samples</th>
-                            <th class="p-3">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody class="text-gray-800">
-                        {% for s in students %}
-                        <tr class="border-t hover:bg-gray-50 transition">
-                            <td>{{ s.student_id }}</td>
-                            <td>{{ s.name }}</td>
-                            <td>{{ s.grade }}</td>
-                            <td>{{ s.section }}</td>
-                            <td>{{ s.parent_contact }}</td>
-                            <td class="flex gap-1">
-                                {% for i in range(5) %}
-                                    <img src="/faces/{{ s.student_id }}_{{ i }}.jpg" class="face-thumb" onerror="this.style.display='none'">
-                                {% endfor %}
-                            </td>
-                            <td class="flex gap-2">
-                                <form method="POST" action="/students/edit/{{ s._id }}">
-                                    <button class="bg-green-600 text-white px-3 py-1 rounded-lg hover:bg-green-700">Save</button>
-                                </form>
-                                <a href="/students/delete/{{ s._id }}" class="bg-red-600 text-white px-3 py-1 rounded-lg hover:bg-red-700">Delete</a>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+        <div class="mb-4 grid grid-cols-1 md:grid-cols-12 gap-2">
+          <div class="md:col-span-4">
+            <label class="text-xs font-semibold uppercase tracking-wide text-slate-500">Grade</label>
+            <select id="newSectionGrade" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
+              <option value="">Select Grade</option>
+              {% for grade in grade_options %}
+              <option value="{{ grade }}">{{ grade }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="md:col-span-5">
+            <label class="text-xs font-semibold uppercase tracking-wide text-slate-500">New Section</label>
+            <input id="newSectionName" type="text" maxlength="64" placeholder="e.g. Rizal" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
+          </div>
+          <div class="md:col-span-3 flex items-end">
+            <button id="addSectionBtn" type="button" class="w-full rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
+              Add Section
+            </button>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 xl:grid-cols-12 gap-3">
+          <div class="xl:col-span-8">
+            <div id="sectionsPanel" class="space-y-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3"></div>
+          </div>
+          <aside class="xl:col-span-4 rounded-xl border border-slate-200 bg-gradient-to-br from-white via-slate-50 to-emerald-50/40 p-4">
+            <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Section Analytics</p>
+            <h3 id="sectionStatsTitle" class="mt-1 text-sm font-semibold text-slate-900">No section selected</h3>
+            <p id="sectionStatsSubtitle" class="mt-1 text-xs text-slate-500">Click a section chip to view detailed gender statistics.</p>
+            <div class="mt-3 grid grid-cols-3 gap-2">
+              <article class="rounded-lg border border-slate-200 bg-white px-2 py-2 text-center">
+                <p class="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Total</p>
+                <p id="sectionStatsTotal" class="mt-1 text-lg font-bold text-slate-900">0</p>
+              </article>
+              <article class="rounded-lg border border-blue-200 bg-blue-50/80 px-2 py-2 text-center">
+                <p class="text-[10px] font-semibold uppercase tracking-wide text-blue-600">Male</p>
+                <p id="sectionStatsMale" class="mt-1 text-lg font-bold text-blue-700">0</p>
+              </article>
+              <article class="rounded-lg border border-rose-200 bg-rose-50/80 px-2 py-2 text-center">
+                <p class="text-[10px] font-semibold uppercase tracking-wide text-rose-600">Female</p>
+                <p id="sectionStatsFemale" class="mt-1 text-lg font-bold text-rose-700">0</p>
+              </article>
             </div>
+            <p id="sectionStatsNote" class="mt-3 text-xs text-slate-500">Live counts from MongoDB.</p>
+            <p id="sectionStatsUpdated" class="mt-1 text-[11px] text-slate-400">Last updated: -</p>
+          </aside>
+        </div>
+      </section>
 
-        </main>
-    </div>
+      <section class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="min-w-full divide-y divide-slate-200">
+            <thead class="bg-slate-900 text-white">
+              <tr class="text-xs uppercase tracking-wide">
+                <th class="px-4 py-3 text-left">Photo</th>
+                <th class="px-4 py-3 text-left">LRN</th>
+                <th class="px-4 py-3 text-left">Name</th>
+                <th class="px-4 py-3 text-left">Grade</th>
+                <th class="px-4 py-3 text-left">Section</th>
+                <th class="px-4 py-3 text-left">Parent Contact</th>
+                <th class="px-4 py-3 text-left">Face Status</th>
+                <th class="px-4 py-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="studentsTableBody" class="divide-y divide-slate-100 bg-white">
+              <tr><td colspan="8" class="px-4 py-8 text-center text-slate-500 text-sm">Loading students...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div id="paginationBar" class="border-t border-slate-200 bg-slate-50/70 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <p id="paginationSummary" class="text-xs text-slate-600">Showing 0-0 of 0 students</p>
+          <div id="paginationControls" class="flex items-center gap-1.5"></div>
+        </div>
+      </section>
+    </main>
+  </div>
 </div>
 
-<script>
-    const video = document.getElementById("video");
-    const canvas = document.getElementById("canvas");
-    const instruction = document.getElementById("instruction");
-    const loading = document.getElementById("loading");
-    const facesData = document.getElementById("facesData");
+<div id="addModal" class="modal hidden fixed inset-0 z-[90] bg-black/55 p-3 sm:p-4 flex items-center justify-center" data-overlay>
+  <div class="w-full max-w-5xl rounded-3xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/20 max-h-[90vh] overflow-y-auto">
+    <div class="sticky top-0 z-10 border-b border-slate-200 bg-gradient-to-r from-slate-900 via-slate-800 to-emerald-900 px-5 py-4 text-white sm:px-6">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-200">Student Enrollment</p>
+          <h3 class="mt-1 text-xl font-semibold leading-tight">Add Student Profile</h3>
+          <p class="mt-1 text-xs text-slate-200/90">Create a record manually or import multiple students from Excel.</p>
+        </div>
+        <button data-close="addModal" class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/20 bg-white/10 text-white transition hover:bg-white/20" aria-label="Close add student modal">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    </div>
 
-    const steps = ["Look Straight", "Turn Right", "Turn Left", "Tilt Left", "Tilt Right"];
-    let captures = [];
-    let step = 0;
+    <div class="p-4 sm:p-6">
+      <div class="grid grid-cols-1 xl:grid-cols-2 gap-5">
+        <section class="rounded-2xl border border-slate-200 bg-slate-50/60">
+          <div class="flex items-center gap-3 border-b border-slate-200 px-4 py-3">
+            <span class="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+            </span>
+            <div>
+              <p class="text-sm font-semibold text-slate-900">Manual Entry</p>
+              <p class="text-xs text-slate-500">Create one student profile at a time.</p>
+            </div>
+          </div>
+          <form id="addForm" class="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4">
+            <label class="text-sm font-medium text-slate-700">LRN
+              <input name="lrn" required class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100">
+            </label>
+            <label class="text-sm font-medium text-slate-700">Name
+              <input name="name" required class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100">
+            </label>
+            <label class="text-sm font-medium text-slate-700">Section Assignment
+              <select id="addSectionSelect" required class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100">
+                <option value="">Select Grade + Section</option>
+              </select>
+              <input id="addSectionValue" name="section" type="hidden">
+              <input id="addGradeLevelValue" name="grade_level" type="hidden">
+              <p class="mt-1 text-[11px] text-slate-500">Loaded dynamically from MongoDB sections.</p>
+            </label>
+            <label class="text-sm font-medium text-slate-700">Grade Level (Auto)
+              <input id="addGradeLevelDisplay" type="text" readonly placeholder="Select a section first" class="mt-1 w-full rounded-xl border border-slate-300 bg-slate-100 px-3 py-2.5 text-sm text-slate-700">
+            </label>
+            <label class="text-sm font-medium text-slate-700">Parent Contact
+              <input name="parent_contact" type="tel" value="+63" inputmode="numeric" maxlength="13" placeholder="+639XXXXXXXXX" class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100">
+            </label>
+            <label class="text-sm font-medium text-slate-700">Sex / Gender
+              <select name="gender" required class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100">
+                <option value="">Select Sex / Gender</option><option value="Male">Male</option><option value="Female">Female</option>
+              </select>
+            </label>
+            <label class="text-sm font-medium text-slate-700 sm:col-span-2">Status
+              <select name="status" class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100">
+                <option value="Active">Active</option><option value="Inactive">Inactive</option>
+              </select>
+            </label>
+            <div class="sm:col-span-2 flex flex-wrap justify-end gap-2 pt-1">
+              <button type="button" data-close="addModal" class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">Cancel</button>
+              <button type="submit" class="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+                Save Student
+              </button>
+            </div>
+          </form>
+        </section>
 
-    function startCamera() {
-        navigator.mediaDevices.getUserMedia({video:true})
-            .then(stream => video.srcObject = stream)
-            .catch(()=>alert("Camera access denied"));
-    }
+        <section class="rounded-2xl border border-slate-200 bg-white">
+          <div class="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+            <div class="flex items-center gap-3">
+              <span class="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-blue-100 text-blue-700">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M3 7h18M8 7v12m8-12v12M5 7l1-3h12l1 3M9 12h6" />
+                </svg>
+              </span>
+              <div>
+                <p class="text-sm font-semibold text-slate-900">Excel Bulk Import</p>
+                <p class="text-xs text-slate-500">Upload a spreadsheet and add many students at once.</p>
+              </div>
+            </div>
+            <a
+              href="{{ url_for('api_students_import_template') }}"
+              class="inline-flex items-center rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+            >
+              Download Template
+            </a>
+          </div>
+          <div class="p-4">
+            <p class="text-xs text-slate-500 mb-3">Template format: <span class="font-semibold">LRN, NAME, Sex / Gender, Section, Grade Level</span>. Only LRN, NAME, and Sex / Gender are required.</p>
+            <form id="addImportForm" class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+              <label class="text-sm font-medium text-slate-700 md:col-span-12">Excel File (.xlsx)
+                <input id="addImportFile" name="file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
+              </label>
+              <label class="text-sm font-medium text-slate-700 md:col-span-6">Default Grade Level
+                <select name="default_grade_level" class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
+                  <option value="">Optional (from file)</option>
+                  {% for grade in grade_options %}<option value="{{ grade }}">{{ grade }}</option>{% endfor %}
+                </select>
+              </label>
+              <label class="text-sm font-medium text-slate-700 md:col-span-6">Default Section
+                <input name="default_section" type="text" placeholder="Optional (e.g. AVILA)" class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
+              </label>
+              <div class="md:col-span-12 flex justify-end">
+                <button id="addImportSubmitBtn" type="submit" class="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 16V4m0 12l-4-4m4 4l4-4M4 20h16" />
+                  </svg>
+                  Import Students
+                </button>
+              </div>
+            </form>
+            <p id="addImportSummary" class="mt-3 hidden rounded-xl border px-3 py-2 text-xs"></p>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+</div>
 
-    async function captureFace() {
-        if(step >= 5){
-            alert("All samples captured!");
-            return;
-        }
+<div id="editModal" class="modal hidden fixed inset-0 z-[90] bg-black/50 p-4 flex items-center justify-center" data-overlay>
+  <div class="bg-white w-full max-w-2xl rounded-2xl max-h-[85vh] overflow-y-auto">
+    <div class="sticky top-0 bg-white border-b px-5 py-4 flex justify-between items-center">
+      <h3 class="text-lg font-semibold">Edit Student</h3>
+      <button data-close="editModal" class="text-slate-500 hover:text-slate-700">&times;</button>
+    </div>
+    <form id="editForm" class="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <input type="hidden" name="_id">
+      <label class="text-sm">LRN<input name="lrn" required class="mt-1 w-full rounded-xl border px-3 py-2"></label>
+      <label class="text-sm">Name<input name="name" required class="mt-1 w-full rounded-xl border px-3 py-2"></label>
+      <label class="text-sm">Grade
+        <select name="grade_level" required class="mt-1 w-full rounded-xl border px-3 py-2">
+          <option value="">Select Grade</option>
+          {% for grade in grade_options %}<option value="{{ grade }}">{{ grade }}</option>{% endfor %}
+        </select>
+      </label>
+      <label class="text-sm">Section<input name="section" required class="mt-1 w-full rounded-xl border px-3 py-2"></label>
+      <label class="text-sm">Parent Contact<input name="parent_contact" type="tel" inputmode="numeric" maxlength="13" placeholder="+639XXXXXXXXX" class="mt-1 w-full rounded-xl border px-3 py-2"></label>
+      <label class="text-sm">Sex / Gender
+        <select name="gender" required class="mt-1 w-full rounded-xl border px-3 py-2">
+          <option value="">Select Sex / Gender</option><option value="Male">Male</option><option value="Female">Female</option>
+        </select>
+      </label>
+      <label class="text-sm sm:col-span-2">Status
+        <select name="status" class="mt-1 w-full rounded-xl border px-3 py-2">
+          <option value="Active">Active</option><option value="Inactive">Inactive</option>
+        </select>
+      </label>
+      <div class="sm:col-span-2 flex justify-end gap-2 pt-2">
+        <button type="button" data-close="editModal" class="rounded-xl border px-4 py-2 text-sm">Cancel</button>
+        <button type="submit" class="rounded-xl bg-amber-500 px-4 py-2 text-sm text-white">Update</button>
+      </div>
+    </form>
+  </div>
+</div>
 
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        const ctx = canvas.getContext("2d");
-        ctx.drawImage(video,0,0);
+<div id="deleteModal" class="modal hidden fixed inset-0 z-[92] bg-black/50 p-4 flex items-center justify-center" data-overlay>
+  <div class="bg-white w-full max-w-md rounded-2xl max-h-[85vh] overflow-y-auto">
+    <div class="border-b px-5 py-4 flex justify-between items-center">
+      <h3 class="text-lg font-semibold text-rose-700">Delete Student</h3>
+      <button data-close="deleteModal" class="text-slate-500 hover:text-slate-700 text-2xl leading-none">&times;</button>
+    </div>
+    <div class="p-5 space-y-4">
+      <p class="text-sm text-slate-700">Are you sure you want to delete this student?</p>
+      <p class="text-xs text-slate-500">This action cannot be undone.</p>
+      <p id="deleteStudentLabel" class="text-sm font-semibold text-slate-700"></p>
+      <div class="flex justify-end gap-2 pt-2">
+        <button type="button" data-close="deleteModal" class="rounded-xl border px-4 py-2 text-sm">Cancel</button>
+        <button id="confirmDeleteBtn" type="button" class="rounded-xl bg-rose-600 px-4 py-2 text-sm text-white hover:bg-rose-700">Delete</button>
+      </div>
+    </div>
+  </div>
+</div>
 
-        const imageData = canvas.toDataURL("image/jpeg");
-        loading.classList.remove("hidden");
+<div id="faceModal" class="modal hidden fixed inset-0 z-[95] bg-black/60 p-4 flex items-center justify-center" data-overlay>
+  <div class="bg-white w-full max-w-4xl rounded-2xl max-h-[85vh] overflow-y-auto">
+    <div class="sticky top-0 bg-white border-b px-5 py-4 flex justify-between items-center">
+      <div>
+        <h3 id="faceTitle" class="text-lg font-semibold">Register Face</h3>
+        <p id="faceSubtitle" class="text-xs text-slate-500"></p>
+      </div>
+      <button data-close="faceModal" class="text-slate-500 hover:text-slate-700 text-2xl leading-none">&times;</button>
+    </div>
+    <div class="p-5 space-y-4">
+      <p class="text-xs text-slate-600 rounded-xl border bg-slate-50 px-3 py-2">Auto-capture sequence: <span class="font-semibold">Front</span>, <span class="font-semibold">Left</span>, <span class="font-semibold">Right</span>, <span class="font-semibold">Slight Up</span>, <span class="font-semibold">Slight Down</span>.</p>
+      <div class="grid grid-cols-1 xl:grid-cols-5 gap-4">
+        <div class="xl:col-span-3 space-y-3">
+          <div class="relative rounded-xl overflow-hidden bg-slate-900 aspect-[4/3]">
+            <video id="faceVideo" autoplay muted playsinline class="w-full h-full object-cover"></video>
+            <canvas id="faceOverlay" class="absolute inset-0 w-full h-full"></canvas>
+            <canvas id="faceCaptureCanvas" class="hidden"></canvas>
+            <div class="absolute top-3 left-3 rounded-lg bg-black/60 text-white text-xs px-3 py-2">
+              <p id="guideText">Initializing camera...</p>
+            </div>
+            <div class="absolute top-3 right-3 rounded-lg bg-black/60 text-white text-xs px-3 py-2">
+              <p id="captureProgressText">0 / 5</p>
+            </div>
+          </div>
+          <p id="faceStatus" class="text-xs text-slate-500">Camera is starting...</p>
+        </div>
+        <div class="xl:col-span-2 space-y-3">
+          <div id="stepTags" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-2"></div>
+          <div id="captureGrid" class="grid grid-cols-3 sm:grid-cols-5 xl:grid-cols-1 gap-2"></div>
+          <button id="resetCaptureBtn" type="button" class="rounded-xl border px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Restart Capture Sequence</button>
+        </div>
+      </div>
+      <div class="flex justify-end gap-2">
+        <button type="button" data-close="faceModal" class="rounded-xl border px-4 py-2 text-sm">Cancel</button>
+        <button id="submitFaceBtn" type="button" class="rounded-xl bg-emerald-600 px-4 py-2 text-sm text-white disabled:opacity-50" disabled>Save Face Registration</button>
+      </div>
+    </div>
+  </div>
+</div>
 
-        try {
-            const response = await fetch("/process-face", {
-                method: "POST",
-                headers: {"Content-Type": "application/json"},
-                body: JSON.stringify({image: imageData})
-            });
+<div id="faceUpdateSuccessOverlay" class="hidden fixed inset-0 z-[120] pointer-events-none items-center justify-center">
+  <div class="flex flex-col items-center gap-3">
+    <div id="faceUpdateSuccessBadge" class="h-24 w-24 rounded-full bg-emerald-600 text-white shadow-2xl shadow-emerald-600/35 flex items-center justify-center opacity-0 scale-75 transition-all duration-300">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="m5 13 4 4L19 7" />
+      </svg>
+    </div>
+    <p id="faceUpdateSuccessText" class="rounded-lg bg-slate-900/85 px-3 py-1.5 text-xs font-semibold text-white opacity-0 transition-opacity duration-300">
+      Face updated successfully
+    </p>
+  </div>
+</div>
 
-            const result = await response.json();
-            loading.classList.add("hidden");
+<div id="centerSuccessOverlay" class="hidden fixed inset-0 z-[130] pointer-events-none items-center justify-center bg-slate-900/10">
+  <div class="flex flex-col items-center gap-3">
+    <div class="relative">
+      <div id="centerSuccessPulse" class="absolute inset-0 rounded-full bg-emerald-400/35 opacity-0 scale-75 transition-all duration-500"></div>
+      <div id="centerSuccessBadge" class="relative h-24 w-24 rounded-full bg-emerald-600 text-white shadow-2xl shadow-emerald-600/35 flex items-center justify-center opacity-0 scale-75 translate-y-2 transition-all duration-300">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="m5 13 4 4L19 7" />
+        </svg>
+      </div>
+    </div>
+    <p id="centerSuccessText" class="rounded-lg bg-slate-900/90 px-3 py-1.5 text-xs font-semibold text-white opacity-0 translate-y-1 transition-all duration-300">
+      Success
+    </p>
+  </div>
+</div>
 
-            if(!result.success){
-                alert(result.message);
-                return;
-            }
-
-            captures.push(result.image);
-            const preview = document.getElementById("preview" + step);
-            preview.src = result.image;
-            preview.classList.remove("hidden");
-
-            step++;
-            instruction.innerText = step < 5 ? `Step ${step+1}: ${steps[step]}` : "All samples captured ✔";
-
-            facesData.value = JSON.stringify(captures);
-
-        } catch(err) {
-            loading.classList.add("hidden");
-            alert("Face processing failed: " + err);
-        }
-    }
-
-    function validateForm(){
-        if(captures.length < 5){
-            alert("Please capture all 5 face samples before adding a student.");
-            return false;
-        }
-        return true;
-    }
-</script>
+<script src="{{ url_for('static', filename='students.js', v='20260306c') }}"></script>
 </body>
 </html>

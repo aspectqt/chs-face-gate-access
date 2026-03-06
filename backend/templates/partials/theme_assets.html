@@ -1,0 +1,16 @@
+<script>
+  (function () {
+    var VALID = { light: true, dark: true };
+    var serverTheme = "{{ current_theme|default('')|lower }}";
+    var localTheme = "";
+    try {
+      localTheme = window.localStorage.getItem("chs_theme_preference") || "";
+    } catch (_err) {}
+    var systemTheme = (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) ? "dark" : "light";
+    var initialTheme = VALID[serverTheme] ? serverTheme : (VALID[localTheme] ? localTheme : systemTheme);
+    document.documentElement.setAttribute("data-theme", initialTheme);
+    window.__SERVER_THEME = VALID[serverTheme] ? serverTheme : "";
+  })();
+</script>
+<link rel="stylesheet" href="{{ url_for('static', filename='theme.css') }}">
+<script src="{{ url_for('static', filename='theme.js') }}" defer></script>

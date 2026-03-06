@@ -1,0 +1,49 @@
+{% set _theme_toggle_classes = theme_toggle_classes|default('inline-flex items-center justify-center h-10 w-10 rounded-full border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-400') %}
+{% set _fullscreen_toggle_classes = fullscreen_toggle_classes|default(_theme_toggle_classes) %}
+<div class="inline-flex items-center gap-2">
+  <button
+    type="button"
+    {% if fullscreen_toggle_id %}id="{{ fullscreen_toggle_id }}"{% endif %}
+    data-fullscreen-toggle
+    class="{{ _fullscreen_toggle_classes }}"
+    aria-label="Enter full screen"
+    aria-pressed="false"
+    title="Enter Full Screen"
+  >
+    <span data-fullscreen-icon="enter" aria-hidden="true">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M8 3H4v4M16 3h4v4M8 21H4v-4M20 17v4h-4"></path>
+      </svg>
+    </span>
+    <span data-fullscreen-icon="exit" class="hidden" aria-hidden="true">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M9 3H4v5M15 3h5v5M9 21H4v-5M20 16v5h-5"></path>
+        <path stroke-linecap="round" stroke-linejoin="round" d="M9 9 4 4M15 9l5-5M9 15l-5 5M15 15l5 5"></path>
+      </svg>
+    </span>
+  </button>
+
+  <button
+    type="button"
+    {% if theme_toggle_id %}id="{{ theme_toggle_id }}"{% endif %}
+    data-theme-toggle
+    class="{{ _theme_toggle_classes }}"
+    aria-label="Toggle color theme"
+    aria-pressed="false"
+  >
+    <span data-theme-icon="sun" aria-hidden="true">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+        <circle cx="12" cy="12" r="4"></circle>
+        <path stroke-linecap="round" d="M12 2v2.2M12 19.8V22M4.93 4.93l1.56 1.56M17.5 17.5l1.57 1.57M2 12h2.2M19.8 12H22M4.93 19.07l1.56-1.56M17.5 6.5l1.57-1.57"></path>
+      </svg>
+    </span>
+    <span data-theme-icon="moon" class="hidden" aria-hidden="true">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M21 14.5A8.5 8.5 0 119.5 3a6.5 6.5 0 1011.5 11.5z"></path>
+      </svg>
+    </span>
+    {% if theme_toggle_show_label %}
+    <span data-theme-label class="ml-2 text-xs font-semibold leading-none">Light</span>
+    {% endif %}
+  </button>
+</div>

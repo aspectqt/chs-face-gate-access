@@ -1,0 +1,175 @@
+{% set page = current_page|default('') %}
+{% set role = current_role|default('Limited Access') %}
+{% set unread = alerts_unread|default(0) %}
+
+<style>
+  .sidebar-scroll {
+    overflow-y: auto;
+    scroll-behavior: smooth;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.35) transparent;
+  }
+
+  .sidebar-scroll::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .sidebar-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .sidebar-scroll::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.25);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+    transition: background 0.2s ease;
+  }
+
+  .sidebar-scroll:hover::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.45);
+    background-clip: content-box;
+  }
+</style>
+
+<aside x-data="sidebarPanel()" :class="open ? 'w-72' : 'w-20'" class="bg-gradient-to-b from-emerald-800 via-emerald-800 to-emerald-900 text-white flex flex-col h-screen border-r border-emerald-700/70 shadow-2xl transition-all duration-300">
+  <div class="px-4 py-5 border-b border-emerald-700/80">
+    <div class="flex items-center gap-3">
+      <img src="/static/logo.png" alt="Logo" class="h-11 w-11 rounded-full ring-2 ring-white/30 object-cover shrink-0" :class="{'mx-auto': !open}">
+      <div x-show="open" x-transition.opacity class="min-w-0">
+        <p class="text-lg font-semibold tracking-wide leading-tight">CHS Gate Access</p>
+        <p class="text-[12px] text-emerald-100/90">Academic Security Console</p>
+      </div>
+    </div>
+  </div>
+
+  <nav class="sidebar-scroll flex-1 px-3 py-4 pr-2 space-y-4">
+    <section class="space-y-1.5">
+      <p x-show="open" class="px-3 text-[11px] uppercase tracking-[0.18em] text-emerald-200/90 font-semibold">Main</p>
+      <a href="/dashboard" class="group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] font-medium transition-all duration-200 {% if page == 'dashboard' %}bg-white/15 text-white shadow-sm ring-1 ring-white/20{% else %}text-emerald-50/95 hover:bg-white/10{% endif %}">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3 10.5L12 3l9 7.5V21a1 1 0 01-1 1h-5v-6H9v6H4a1 1 0 01-1-1z" />
+        </svg>
+        <span x-show="open" x-transition.opacity>Dashboard</span>
+        <span x-show="!open" x-transition.opacity class="pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 rounded-md border border-emerald-700 bg-emerald-900 px-2 py-1 text-xs whitespace-nowrap shadow-xl opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">Dashboard</span>
+      </a>
+      <a href="/students" class="group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] font-medium transition-all duration-200 {% if page == 'students' %}bg-white/15 text-white shadow-sm ring-1 ring-white/20{% else %}text-emerald-50/95 hover:bg-white/10{% endif %}">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 11a4 4 0 100-8 4 4 0 000 8z" />
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 21v-1a6 6 0 0112 0v1" />
+        </svg>
+        <span x-show="open" x-transition.opacity>Students</span>
+        <span x-show="!open" x-transition.opacity class="pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 rounded-md border border-emerald-700 bg-emerald-900 px-2 py-1 text-xs whitespace-nowrap shadow-xl opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">Students</span>
+      </a>
+    </section>
+
+    <section class="space-y-1.5">
+      <p x-show="open" class="px-3 text-[11px] uppercase tracking-[0.18em] text-emerald-200/90 font-semibold">Monitoring</p>
+      <a href="/dashboard#gate-scanning" class="group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] font-medium transition-all duration-200 text-emerald-50/95 hover:bg-white/10">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M4 12h16M4 17h16" />
+        </svg>
+        <span x-show="open" x-transition.opacity>Gate Scanning</span>
+        <span x-show="!open" x-transition.opacity class="pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 rounded-md border border-emerald-700 bg-emerald-900 px-2 py-1 text-xs whitespace-nowrap shadow-xl opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">Gate Scanning</span>
+      </a>
+      <a href="/gate-logs" class="group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] font-medium transition-all duration-200 {% if page == 'gate_logs' %}bg-white/15 text-white shadow-sm ring-1 ring-white/20{% else %}text-emerald-50/95 hover:bg-white/10{% endif %}">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h10" />
+        </svg>
+        <span x-show="open" x-transition.opacity>Gate Logs</span>
+        <span x-show="!open" x-transition.opacity class="pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 rounded-md border border-emerald-700 bg-emerald-900 px-2 py-1 text-xs whitespace-nowrap shadow-xl opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">Gate Logs</span>
+      </a>
+      <a href="/sms-logs" class="group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] font-medium transition-all duration-200 {% if page == 'sms_logs' %}bg-white/15 text-white shadow-sm ring-1 ring-white/20{% else %}text-emerald-50/95 hover:bg-white/10{% endif %}">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M21 12c0 4.418-4.03 8-9 8s-9-3.582-9-8 4.03-8 9-8 9 3.582 9 8z" />
+        </svg>
+        <span x-show="open" x-transition.opacity>SMS Logs</span>
+        <span x-show="!open" x-transition.opacity class="pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 rounded-md border border-emerald-700 bg-emerald-900 px-2 py-1 text-xs whitespace-nowrap shadow-xl opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">SMS Logs</span>
+      </a>
+      <a href="/analytics" class="group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] font-medium transition-all duration-200 {% if page == 'analytics' %}bg-white/15 text-white shadow-sm ring-1 ring-white/20{% else %}text-emerald-50/95 hover:bg-white/10{% endif %}">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M11 3v18m4-12v12m-8-6v6" />
+        </svg>
+        <span x-show="open" x-transition.opacity>Analytics</span>
+        <span x-show="!open" x-transition.opacity class="pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 rounded-md border border-emerald-700 bg-emerald-900 px-2 py-1 text-xs whitespace-nowrap shadow-xl opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">Analytics</span>
+      </a>
+      <a href="/dashboard#alertsButton" class="group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] font-medium transition-all duration-200 text-emerald-50/95 hover:bg-white/10">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.4-1.4A2 2 0 0118 14.17V11a6 6 0 10-12 0v3.17c0 .53-.21 1.04-.59 1.43L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+        </svg>
+        <span x-show="open" x-transition.opacity>Alerts</span>
+        <span id="sidebarAlertsBadge" class="ml-auto inline-flex items-center rounded-full bg-red-500 px-2 py-0.5 text-[11px] font-semibold text-white {% if unread == 0 %}hidden{% endif %}" :class="{'absolute -top-1 -right-1 ml-0': !open}">{{ unread }}</span>
+        <span x-show="!open" x-transition.opacity class="pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 rounded-md border border-emerald-700 bg-emerald-900 px-2 py-1 text-xs whitespace-nowrap shadow-xl opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">Alerts</span>
+      </a>
+    </section>
+
+    <section class="space-y-1.5">
+      <p x-show="open" class="px-3 text-[11px] uppercase tracking-[0.18em] text-emerald-200/90 font-semibold">Reports</p>
+      <a href="/analytics#reports-charts" class="group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] font-medium transition-all duration-200 text-emerald-50/95 hover:bg-white/10">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 17v-6m3 6v-10m3 10v-4m3 4V7M3 21h18" />
+        </svg>
+        <span x-show="open" x-transition.opacity>Charts</span>
+        <span x-show="!open" x-transition.opacity class="pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 rounded-md border border-emerald-700 bg-emerald-900 px-2 py-1 text-xs whitespace-nowrap shadow-xl opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">Charts</span>
+      </a>
+    </section>
+
+    {% if role == 'Full Admin' %}
+    <section class="space-y-1.5">
+      <p x-show="open" class="px-3 text-[11px] uppercase tracking-[0.18em] text-emerald-200/90 font-semibold">Management</p>
+      <a href="/dashboard#user-management" class="group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] font-medium transition-all duration-200 text-emerald-50/95 hover:bg-white/10">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2m16 0h4v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" />
+        </svg>
+        <span x-show="open" x-transition.opacity>User Management</span>
+        <span x-show="!open" x-transition.opacity class="pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 rounded-md border border-emerald-700 bg-emerald-900 px-2 py-1 text-xs whitespace-nowrap shadow-xl opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">Users</span>
+      </a>
+      <a href="/dashboard#user-management" class="group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] font-medium transition-all duration-200 text-emerald-50/95 hover:bg-white/10">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M10 9V5a2 2 0 114 0v4m-7 0h10a2 2 0 012 2v8H5v-8a2 2 0 012-2z" />
+        </svg>
+        <span x-show="open" x-transition.opacity>Roles & Permissions</span>
+        <span x-show="!open" x-transition.opacity class="pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 rounded-md border border-emerald-700 bg-emerald-900 px-2 py-1 text-xs whitespace-nowrap shadow-xl opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">Roles</span>
+      </a>
+    </section>
+    {% endif %}
+
+    <section class="space-y-1.5">
+      <p x-show="open" class="px-3 text-[11px] uppercase tracking-[0.18em] text-emerald-200/90 font-semibold">Support</p>
+      <a href="/developers" class="group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] font-medium transition-all duration-200 {% if page == 'developers' %}bg-white/15 text-white shadow-sm ring-1 ring-white/20{% else %}text-emerald-50/95 hover:bg-white/10{% endif %}">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16h6M7 3h10a2 2 0 012 2v14l-5-3H7a2 2 0 01-2-2V5a2 2 0 012-2z" />
+        </svg>
+        <span x-show="open" x-transition.opacity>Help / Guide</span>
+        <span x-show="!open" x-transition.opacity class="pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 rounded-md border border-emerald-700 bg-emerald-900 px-2 py-1 text-xs whitespace-nowrap shadow-xl opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">Help</span>
+      </a>
+    </section>
+  </nav>
+
+  <div class="px-3 py-3 border-t border-emerald-700/80">
+    <button type="button" @click="toggle()" class="w-full flex items-center justify-center gap-2 rounded-xl bg-white/12 hover:bg-white/20 transition-all py-2.5 text-sm font-semibold">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform" :class="{'rotate-180': !open}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+      </svg>
+      <span x-show="open" x-transition.opacity>Collapse</span>
+    </button>
+  </div>
+</aside>
+
+<script>
+document.addEventListener('alpine:init', () => {
+  Alpine.data('sidebarPanel', () => ({
+    open: true,
+    init() {
+      const saved = window.localStorage.getItem('chs_sidebar_open');
+      this.open = saved === null ? true : saved === '1';
+    },
+    toggle() {
+      this.open = !this.open;
+      window.localStorage.setItem('chs_sidebar_open', this.open ? '1' : '0');
+    }
+  }));
+});
+</script>
