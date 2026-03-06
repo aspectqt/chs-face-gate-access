@@ -2752,7 +2752,8 @@ def start_scan():
         payload = {"status": "failed", "message": message, "sms_auth": sms_status}
         if sms_warning:
             payload["sms_warning"] = sms_warning
-        return jsonify(payload), 500
+        status_code = 503 if message == "Webcam could not be opened" else 500
+        return jsonify(payload), status_code
 
     with scan_lock:
         model_status = scan_state.get("model_status", "idle")
