@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -10,16 +10,25 @@
     <script src="https://cdn.tailwindcss.com"></script>
     {% include 'partials/theme_assets.html' %}
 </head>
-<body class="min-h-screen bg-gradient-to-br from-slate-100 via-slate-50 to-emerald-50 text-slate-800" data-authenticated="0" data-user-theme="">
-    <main class="min-h-screen flex items-center justify-center px-4 py-8">
-        <section class="w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-300/35">
-            <div class="px-7 pt-7 pb-5 border-b border-slate-100 text-center">
-                <img src="{{ url_for('static', filename='logo.png') }}" alt="CHS Logo" class="mx-auto h-16 w-16 rounded-full object-cover ring-2 ring-emerald-100">
-                <h1 class="mt-4 text-xl font-semibold tracking-wide text-slate-900">FACE RECOGNITION STUDENT  GATE ACCESS SYSTEM  WITH SMS NOTIFICATION FOR CAWITAN HIGH SCHOOL</h1>
+<body class="min-h-screen bg-white text-slate-800" data-authenticated="0" data-user-theme="">
+    <main class="min-h-screen flex items-center justify-center px-4 py-10">
+        <section class="w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-lg shadow-slate-200/70">
+            <div class="border-b border-slate-100 px-7 py-6 text-center">
+                <div class="mx-auto flex w-fit items-center gap-4">
+                    <img src="{{ url_for('static', filename='deped-logo.png') }}" alt="DepEd Logo" class="h-16 w-16 object-contain">
+                    <img src="{{ url_for('static', filename='logo.png') }}" alt="CHS Logo" class="h-16 w-16 object-contain">
+                </div>
+                <h1 class="mt-4 text-lg font-semibold text-slate-900">FACE RECOGNITION STUDENT  GATE ACCESS SYSTEM  WITH SMS NOTIFICATION FOR CAWITAN HIGH SCHOOL</h1>
                 <p class="mt-1 text-sm text-slate-500">Secure institutional login portal</p>
             </div>
 
             <div class="px-7 py-6">
+                {% if success %}
+                <div class="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                    {{ success }}
+                </div>
+                {% endif %}
+
                 {% if error %}
                 <div id="serverError" class="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
                     {{ error }}
@@ -29,13 +38,15 @@
                 <div id="clientError" class="mb-4 hidden rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"></div>
 
                 <form method="POST" id="loginForm" class="space-y-4" autocomplete="off" autocapitalize="none" spellcheck="false" novalidate>
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <div class="hidden" aria-hidden="true">
                         <input type="text" name="auth_user_placeholder" tabindex="-1" autocomplete="username">
                         <input type="password" name="auth_pass_placeholder" tabindex="-1" autocomplete="current-password">
                     </div>
+
                     <div>
                         <label for="username" class="text-sm font-medium text-slate-700">Username</label>
-                        <div class="relative mt-1">
+                        <div class="relative mt-1.5">
                             <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M5.121 17.804A9 9 0 1118.878 6.196 9 9 0 015.12 17.804z" />
@@ -64,7 +75,7 @@
 
                     <div>
                         <label for="password" class="text-sm font-medium text-slate-700">Password</label>
-                        <div class="relative mt-1">
+                        <div class="relative mt-1.5">
                             <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M12 11c1.657 0 3-1.343 3-3V6a3 3 0 10-6 0v2c0 1.657 1.343 3 3 3z" />
@@ -86,27 +97,21 @@
                                 data-form-type="other"
                                 class="w-full rounded-xl border border-slate-300 bg-white pl-10 pr-11 py-2.5 text-sm text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
                             >
-                            <button type="button" id="togglePassword" aria-label="Show or hide password"
-                                class="absolute inset-y-0 right-0 flex items-center px-3 text-slate-400 hover:text-slate-600 transition">
+                            <button type="button" id="togglePassword" aria-label="Show or hide password" class="absolute inset-y-0 right-0 flex items-center px-3 text-slate-400 hover:text-slate-600 transition">
                                 <svg id="toggleIcon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5s8.268 2.943 9.542 7c-1.274 4.057-5.065 7-9.542 7s-8.268-2.943-9.542-7z" />
                                 </svg>
                             </button>
                         </div>
+                        <div class="mt-2 flex justify-end">
+                            <button type="button" id="forgotPasswordLink" class="text-xs font-semibold text-emerald-700 transition hover:text-emerald-800">
+                                Forgot Password?
+                            </button>
+                        </div>
                     </div>
 
-                    <div class="flex items-center justify-between gap-4">
-                        <label class="inline-flex items-center gap-2 text-sm text-slate-600">
-                            <input type="checkbox" id="remember_me" name="remember_me" class="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-                                {% if remember_me %}checked{% endif %}>
-                            <span>Remember Me</span>
-                        </label>
-                        <a href="mailto:support@chs-gate.local" class="text-sm font-medium text-emerald-700 hover:text-emerald-800 transition">Need help?</a>
-                    </div>
-
-                    <button type="submit" id="loginButton"
-                        class="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70">
+                    <button type="submit" id="loginButton" class="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70">
                         <span id="loginButtonText">Sign In</span>
                         <svg id="loginSpinner" class="hidden h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                             <circle class="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -122,6 +127,47 @@
         </section>
     </main>
 
+    <div id="forgotPasswordModal" class="fixed inset-0 z-50 hidden">
+        <div id="forgotPasswordBackdrop" class="absolute inset-0 bg-slate-900/50"></div>
+        <div class="relative mx-auto mt-20 w-[92%] max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+            <div class="flex items-start justify-between gap-3">
+                <div>
+                    <h3 class="text-lg font-semibold text-slate-900">Password Recovery</h3>
+                    <p class="mt-1 text-sm text-slate-500">Enter your registered email to request a secure password reset link.</p>
+                </div>
+                <button type="button" id="forgotCloseButton" class="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600" aria-label="Close">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="m6 6 12 12M18 6 6 18" />
+                    </svg>
+                </button>
+            </div>
+
+            <div id="forgotError" class="mt-4 hidden rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700"></div>
+            <div id="forgotSuccess" class="mt-4 hidden rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700"></div>
+
+            <form id="forgotPasswordForm" class="mt-4 space-y-4">
+                <div>
+                    <label for="recoveryEmail" class="text-sm font-medium text-slate-700">Registered Email</label>
+                    <input
+                        type="email"
+                        id="recoveryEmail"
+                        required
+                        placeholder="name@example.com"
+                        class="mt-1.5 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+                    >
+                </div>
+                <button type="submit" id="forgotSubmitButton" class="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-70">
+                    <span id="forgotSubmitText">Send Reset Link</span>
+                    <svg id="forgotSpinner" class="hidden h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-90" fill="currentColor" d="M12 2a10 10 0 00-10 10h4a6 6 0 016-6V2z"></path>
+                    </svg>
+                </button>
+            </form>
+            <div id="previewLinkBox" class="mt-4 hidden rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600"></div>
+        </div>
+    </div>
+
     <script>
     const loginForm = document.getElementById('loginForm');
     const usernameInput = document.getElementById('username');
@@ -132,7 +178,19 @@
     const loginButtonText = document.getElementById('loginButtonText');
     const loginSpinner = document.getElementById('loginSpinner');
 
-    // Reduce browser autofill popups by unlocking fields only on first focus.
+    const forgotModal = document.getElementById('forgotPasswordModal');
+    const forgotBackdrop = document.getElementById('forgotPasswordBackdrop');
+    const forgotLinkButton = document.getElementById('forgotPasswordLink');
+    const forgotCloseButton = document.getElementById('forgotCloseButton');
+    const forgotForm = document.getElementById('forgotPasswordForm');
+    const forgotEmail = document.getElementById('recoveryEmail');
+    const forgotError = document.getElementById('forgotError');
+    const forgotSuccess = document.getElementById('forgotSuccess');
+    const forgotSubmitButton = document.getElementById('forgotSubmitButton');
+    const forgotSubmitText = document.getElementById('forgotSubmitText');
+    const forgotSpinner = document.getElementById('forgotSpinner');
+    const previewLinkBox = document.getElementById('previewLinkBox');
+
     [usernameInput, passwordInput].forEach((field) => {
         if (!field) return;
         field.setAttribute('readonly', 'readonly');
@@ -149,6 +207,29 @@
     function clearClientError() {
         clientError.textContent = '';
         clientError.classList.add('hidden');
+    }
+
+    function clearForgotMessages() {
+        forgotError.textContent = '';
+        forgotError.classList.add('hidden');
+        forgotSuccess.textContent = '';
+        forgotSuccess.classList.add('hidden');
+        previewLinkBox.innerHTML = '';
+        previewLinkBox.classList.add('hidden');
+    }
+
+    function openForgotModal() {
+        clearForgotMessages();
+        forgotModal.classList.remove('hidden');
+        forgotEmail.value = '';
+        setTimeout(() => forgotEmail.focus(), 50);
+    }
+
+    function closeForgotModal() {
+        forgotModal.classList.add('hidden');
+        forgotSubmitButton.disabled = false;
+        forgotSubmitText.textContent = 'Send Reset Link';
+        forgotSpinner.classList.add('hidden');
     }
 
     togglePassword.addEventListener('click', () => {
@@ -171,6 +252,63 @@
         loginButton.disabled = true;
         loginButtonText.textContent = 'Signing in...';
         loginSpinner.classList.remove('hidden');
+    });
+
+    forgotLinkButton.addEventListener('click', openForgotModal);
+    forgotCloseButton.addEventListener('click', closeForgotModal);
+    forgotBackdrop.addEventListener('click', closeForgotModal);
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && !forgotModal.classList.contains('hidden')) {
+            closeForgotModal();
+        }
+    });
+
+    forgotForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        clearForgotMessages();
+
+        const email = forgotEmail.value.trim().toLowerCase();
+        if (!email) {
+            forgotError.textContent = 'Email is required.';
+            forgotError.classList.remove('hidden');
+            return;
+        }
+
+        forgotSubmitButton.disabled = true;
+        forgotSubmitText.textContent = 'Processing...';
+        forgotSpinner.classList.remove('hidden');
+
+        try {
+            const response = await fetch('/api/auth/forgot-password/request', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email }),
+            });
+
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok || payload.status !== 'ok') {
+                forgotError.textContent = payload.message || 'Unable to process password reset request.';
+                forgotError.classList.remove('hidden');
+                return;
+            }
+
+            forgotSuccess.textContent = payload.message || 'Password reset link has been sent to your email.';
+            forgotSuccess.classList.remove('hidden');
+
+            if (payload.previewLink) {
+                const note = payload.previewNote ? `<p class="mb-1 font-semibold">${payload.previewNote}</p>` : '';
+                previewLinkBox.innerHTML = `${note}<a href="${payload.previewLink}" class="font-semibold text-emerald-700 hover:text-emerald-800 break-all">${payload.previewLink}</a>`;
+                previewLinkBox.classList.remove('hidden');
+            }
+        } catch (error) {
+            forgotError.textContent = 'Network error. Please try again.';
+            forgotError.classList.remove('hidden');
+        } finally {
+            forgotSubmitButton.disabled = false;
+            forgotSubmitText.textContent = 'Send Reset Link';
+            forgotSpinner.classList.add('hidden');
+        }
     });
     </script>
 </body>

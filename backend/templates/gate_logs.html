@@ -172,6 +172,79 @@
         </div>
       </section>
 
+      <section class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 lg:p-5">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 class="text-base font-semibold text-slate-800">Attendance Correction Workflow</h2>
+            <p class="text-xs text-slate-500 mt-1">Submit correction requests and review pending updates with full audit trail.</p>
+          </div>
+          <div class="inline-flex items-center gap-2">
+            <span class="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700">
+              Pending: <span class="ml-1" x-text="pendingCorrectionCount"></span>
+            </span>
+            <button type="button" class="rounded-xl border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition" @click="loadCorrections(true)">
+              Refresh
+            </button>
+          </div>
+        </div>
+
+        <div class="mt-4 overflow-x-auto">
+          <table class="min-w-full divide-y divide-slate-200 text-sm">
+            <thead class="bg-slate-100 text-xs uppercase text-slate-600">
+              <tr>
+                <th class="px-3 py-2 text-left">Student</th>
+                <th class="px-3 py-2 text-left">Current</th>
+                <th class="px-3 py-2 text-left">Requested</th>
+                <th class="px-3 py-2 text-left">Requested By</th>
+                <th class="px-3 py-2 text-left">Reason</th>
+                {% if current_role == 'Full Admin' %}
+                <th class="px-3 py-2 text-right">Review</th>
+                {% endif %}
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              <template x-if="correctionsLoading">
+                <tr>
+                  <td colspan="{% if current_role == 'Full Admin' %}6{% else %}5{% endif %}" class="px-3 py-4 text-center text-slate-500">Loading correction requests...</td>
+                </tr>
+              </template>
+              <template x-if="!correctionsLoading && corrections.length === 0">
+                <tr>
+                  <td colspan="{% if current_role == 'Full Admin' %}6{% else %}5{% endif %}" class="px-3 py-4 text-center text-slate-500">No pending correction requests.</td>
+                </tr>
+              </template>
+              <template x-for="item in corrections" :key="item._id">
+                <tr class="hover:bg-slate-50">
+                  <td class="px-3 py-2">
+                    <p class="font-semibold text-slate-700" x-text="item.student_name || item.student_id"></p>
+                    <p class="text-xs text-slate-500" x-text="item.log_timestamp || '-'"></p>
+                  </td>
+                  <td class="px-3 py-2 text-slate-700" x-text="item.current_status || '-'"></td>
+                  <td class="px-3 py-2 text-slate-700" x-text="item.requested_status || '-'"></td>
+                  <td class="px-3 py-2">
+                    <p class="text-slate-700" x-text="item.requested_by || '-'"></p>
+                    <p class="text-xs text-slate-500" x-text="item.requested_at || '-'"></p>
+                  </td>
+                  <td class="px-3 py-2 text-xs text-slate-600 max-w-sm" x-text="item.reason || '-'"></td>
+                  {% if current_role == 'Full Admin' %}
+                  <td class="px-3 py-2">
+                    <div class="flex items-center justify-end gap-2">
+                      <button type="button" class="rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-emerald-700 disabled:opacity-60" :disabled="reviewSubmittingId === item._id" @click="reviewCorrection(item._id, 'approve')">
+                        Approve
+                      </button>
+                      <button type="button" class="rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1 text-[11px] font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-60" :disabled="reviewSubmittingId === item._id" @click="reviewCorrection(item._id, 'reject')">
+                        Reject
+                      </button>
+                    </div>
+                  </td>
+                  {% endif %}
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
       <section class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         <div class="overflow-x-auto">
           <table class="min-w-full divide-y divide-slate-200">
@@ -219,6 +292,18 @@
                         </svg>
                       </button>
                       <span class="pointer-events-none absolute -top-9 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-[10px] text-white opacity-0 group-hover:opacity-100 transition">View</span>
+                    </div>
+                    <div class="relative group">
+                      <button type="button"
+                              class="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                              @click='openCorrection({{ log | tojson | safe }})'
+                              aria-label="Request Correction">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M12 20h9" />
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+                        </svg>
+                      </button>
+                      <span class="pointer-events-none absolute -top-9 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-[10px] text-white opacity-0 group-hover:opacity-100 transition">Request Correction</span>
                     </div>
                     {% if current_role == 'Full Admin' %}
                     <div class="relative group">
@@ -316,6 +401,41 @@
         </div>
       </div>
     </div>
+
+    <div x-cloak x-show="correctionOpen" x-transition class="fixed inset-0 bg-black/50 p-4 flex items-center justify-center z-[97]" @click.self="closeCorrection()">
+      <div class="bg-white w-full max-w-lg rounded-2xl max-h-[90vh] overflow-y-auto">
+        <div class="border-b px-5 py-4 flex justify-between items-center">
+          <h3 class="text-lg font-semibold text-amber-700">Request Attendance Correction</h3>
+          <button type="button" class="text-slate-500 hover:text-slate-700 text-2xl leading-none" @click="closeCorrection()">&times;</button>
+        </div>
+        <div class="p-5 space-y-4">
+          <div class="rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <p class="text-sm font-semibold text-slate-700" x-text="correctionForm.student_name || 'Selected student'"></p>
+            <p class="text-xs text-slate-500 mt-1">Current Status: <span class="font-semibold" x-text="correctionForm.current_status || '-'"></span></p>
+            <p class="text-xs text-slate-500">Log Time: <span class="font-semibold" x-text="correctionForm.log_timestamp || '-'"></span></p>
+          </div>
+
+          <label class="block">
+            <span class="text-xs uppercase font-semibold text-slate-500">Requested Status</span>
+            <select x-model="correctionForm.requested_status" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
+              <option value="Present">Present</option>
+              <option value="Late">Late</option>
+              <option value="Absent">Absent</option>
+            </select>
+          </label>
+          <label class="block">
+            <span class="text-xs uppercase font-semibold text-slate-500">Reason</span>
+            <textarea x-model="correctionForm.reason" rows="4" maxlength="500" placeholder="Explain why this record should be corrected." class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"></textarea>
+          </label>
+          <div class="flex justify-end gap-2 pt-2">
+            <button type="button" class="rounded-xl border px-4 py-2 text-sm" @click="closeCorrection()" :disabled="correctionSubmitting">Cancel</button>
+            <button type="button" class="rounded-xl bg-amber-600 px-4 py-2 text-sm text-white hover:bg-amber-700 disabled:opacity-60" @click="submitCorrection()" :disabled="correctionSubmitting">
+              <span x-text="correctionSubmitting ? 'Submitting...' : 'Submit Request'"></span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -337,6 +457,137 @@ function gateLogsPage() {
     changesReconnectTimer: null,
     changesInitialized: false,
     changesSnapshot: { revision: 0, gate_logs: 0 },
+    correctionOpen: false,
+    correctionSubmitting: false,
+    correctionsLoading: false,
+    reviewSubmittingId: '',
+    pendingCorrectionCount: 0,
+    corrections: [],
+    correctionForm: {
+      log_id: '',
+      student_name: '',
+      current_status: '',
+      requested_status: 'Present',
+      reason: '',
+      log_timestamp: '',
+    },
+
+    openCorrection(log) {
+      const row = log || {};
+      this.correctionForm = {
+        log_id: row._id || '',
+        student_name: row.name || row.student_name || row.student_id || 'Selected student',
+        current_status: row.status || '',
+        requested_status: row.status || 'Present',
+        reason: '',
+        log_timestamp: row.timestamp || '',
+      };
+      this.correctionOpen = true;
+    },
+
+    closeCorrection(force = false) {
+      if (this.correctionSubmitting && !force) return;
+      this.correctionOpen = false;
+      this.correctionForm = {
+        log_id: '',
+        student_name: '',
+        current_status: '',
+        requested_status: 'Present',
+        reason: '',
+        log_timestamp: '',
+      };
+    },
+
+    async submitCorrection() {
+      if (this.correctionSubmitting) return;
+      const payload = {
+        log_id: this.correctionForm.log_id,
+        requested_status: this.correctionForm.requested_status,
+        reason: (this.correctionForm.reason || '').trim(),
+      };
+      if (!payload.log_id) {
+        this.showToast('Missing gate log reference for correction.', 'error');
+        return;
+      }
+      if (payload.reason.length < 8) {
+        this.showToast('Please provide a clear reason (at least 8 characters).', 'error');
+        return;
+      }
+
+      this.correctionSubmitting = true;
+      try {
+        const res = await fetch('/api/gate-logs/corrections', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.status !== 'ok') {
+          this.showToast(data.message || 'Failed to submit correction request.', 'error');
+          return;
+        }
+        this.closeCorrection(true);
+        this.showToast(data.message || 'Correction request submitted.');
+        await this.loadCorrections();
+      } catch (error) {
+        this.showToast('Failed to submit correction request.', 'error');
+      } finally {
+        this.correctionSubmitting = false;
+      }
+    },
+
+    async loadCorrections(forceRefresh = false) {
+      if (this.correctionsLoading && !forceRefresh) return;
+      this.correctionsLoading = true;
+      try {
+        const res = await fetch('/api/gate-logs/corrections?status=pending&limit=25');
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.status !== 'ok') {
+          this.showToast(data.message || 'Failed to load correction requests.', 'error');
+          return;
+        }
+        this.corrections = Array.isArray(data.rows) ? data.rows : [];
+        this.pendingCorrectionCount = Number.parseInt(data.pending_count || 0, 10) || 0;
+      } catch (error) {
+        this.showToast('Failed to load correction requests.', 'error');
+      } finally {
+        this.correctionsLoading = false;
+      }
+    },
+
+    async reviewCorrection(correctionId, decision) {
+      if (!correctionId || this.reviewSubmittingId) return;
+      const safeDecision = String(decision || '').toLowerCase();
+      if (!['approve', 'reject'].includes(safeDecision)) return;
+      const note = window.prompt(
+        safeDecision === 'approve'
+          ? 'Optional review note for approval:'
+          : 'Optional rejection note:',
+        ''
+      );
+      if (note === null) return;
+
+      this.reviewSubmittingId = correctionId;
+      try {
+        const res = await fetch(`/api/gate-logs/corrections/${correctionId}/review`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ decision: safeDecision, review_note: (note || '').trim() }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.status !== 'ok') {
+          this.showToast(data.message || 'Failed to review correction.', 'error');
+          return;
+        }
+        this.showToast(data.message || `Correction ${safeDecision}d.`);
+        await this.loadCorrections(true);
+        window.setTimeout(() => window.location.reload(), 350);
+      } catch (error) {
+        this.showToast('Failed to review correction.', 'error');
+      } finally {
+        this.reviewSubmittingId = '';
+      }
+    },
 
     openDetails(log) {
       this.detailLog = log || {};
@@ -406,7 +657,7 @@ function gateLogsPage() {
         this.simulateMessage = 'Please enter a Student ID.';
         return;
       }
-      const res = await fetch(`/simulate-gate/${studentId}`);
+      const res = await fetch(`/simulate-gate/${studentId}`, { method: 'POST' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data.status !== 'SUCCESS') {
         this.simulateType = 'error';
@@ -487,12 +738,14 @@ function gateLogsPage() {
     },
 
     init() {
-      if (!this.realtimeEnabled) return;
-      const usingRealtimeStream = this.connectRealtime();
-      if (!usingRealtimeStream) {
-        setInterval(() => this.pollLatest(), 5000);
+      this.loadCorrections();
+      if (this.realtimeEnabled) {
+        const usingRealtimeStream = this.connectRealtime();
+        if (!usingRealtimeStream) {
+          setInterval(() => this.pollLatest(), 5000);
+        }
+        window.addEventListener('beforeunload', () => this.closeRealtime());
       }
-      window.addEventListener('beforeunload', () => this.closeRealtime());
     }
   };
 }

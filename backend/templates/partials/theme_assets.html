@@ -1,3 +1,4 @@
+<meta name="csrf-token" content="{{ csrf_token() }}">
 <script>
   (function () {
     var VALID = { light: true, dark: true };
@@ -10,6 +11,114 @@
     var initialTheme = VALID[serverTheme] ? serverTheme : (VALID[localTheme] ? localTheme : systemTheme);
     document.documentElement.setAttribute("data-theme", initialTheme);
     window.__SERVER_THEME = VALID[serverTheme] ? serverTheme : "";
+  })();
+</script>
+<script>
+  (function () {
+    var CSRF_HEADER = "X-CSRF-Token";
+    var mutationMethods = { POST: true, PUT: true, PATCH: true, DELETE: true };
+    var meta = document.querySelector('meta[name="csrf-token"]');
+    var token = (meta && meta.content ? meta.content : "").trim();
+
+    function getToken() {
+      if (meta && meta.content && meta.content.trim()) return meta.content.trim();
+      return token;
+    }
+
+    function isSameOrigin(urlValue) {
+      try {
+        var parsed = new URL(urlValue, window.location.origin);
+        return parsed.origin === window.location.origin;
+      } catch (_err) {
+        return true;
+      }
+    }
+
+    function ensureFormToken(form) {
+      if (!(form instanceof HTMLFormElement)) return;
+      var method = String(form.getAttribute("method") || "GET").toUpperCase();
+      if (!mutationMethods[method]) return;
+
+      var field = form.querySelector('input[name="csrf_token"]');
+      if (!field) {
+        field = document.createElement("input");
+        field.type = "hidden";
+        field.name = "csrf_token";
+        form.appendChild(field);
+      }
+      field.value = getToken();
+    }
+
+    function applyFormTokens(root) {
+      if (!root) return;
+      if (root instanceof HTMLFormElement) ensureFormToken(root);
+      var scope = root.querySelectorAll ? root : document;
+      scope.querySelectorAll("form").forEach(ensureFormToken);
+    }
+
+    function patchFetch() {
+      if (typeof window.fetch !== "function" || window.__csrfFetchPatched) return;
+      var originalFetch = window.fetch.bind(window);
+
+      window.fetch = function (input, init) {
+        var requestInit = init ? { ...init } : {};
+        var method = "GET";
+        var urlValue = "";
+
+        if (input instanceof Request) {
+          method = String(requestInit.method || input.method || "GET").toUpperCase();
+          urlValue = String(input.url || "");
+          if (!requestInit.headers) {
+            requestInit.headers = new Headers(input.headers || {});
+          }
+        } else {
+          method = String(requestInit.method || "GET").toUpperCase();
+          urlValue = String(input || "");
+        }
+
+        if (mutationMethods[method] && isSameOrigin(urlValue)) {
+          var headers = new Headers(requestInit.headers || {});
+          if (!headers.has(CSRF_HEADER)) {
+            headers.set(CSRF_HEADER, getToken());
+          }
+          requestInit.headers = headers;
+        }
+
+        return originalFetch(input, requestInit);
+      };
+
+      window.__csrfFetchPatched = true;
+    }
+
+    patchFetch();
+
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", function () {
+        applyFormTokens(document);
+      });
+    } else {
+      applyFormTokens(document);
+    }
+
+    if (typeof MutationObserver !== "undefined") {
+      var observer = new MutationObserver(function (mutations) {
+        mutations.forEach(function (mutation) {
+          mutation.addedNodes.forEach(function (node) {
+            if (!(node instanceof Element)) return;
+            applyFormTokens(node);
+          });
+        });
+      });
+      if (document.documentElement) {
+        observer.observe(document.documentElement, { childList: true, subtree: true });
+      }
+    }
+
+    window.AppSecurity = {
+      getCsrfToken: getToken,
+      applyFormTokens: applyFormTokens,
+      csrfHeader: CSRF_HEADER,
+    };
   })();
 </script>
 <link rel="stylesheet" href="{{ url_for('static', filename='theme.css') }}">

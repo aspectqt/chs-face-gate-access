@@ -19,7 +19,7 @@
     <header class="h-16 bg-white shadow-sm flex items-center justify-between px-6">
       <div>
         <h1 class="text-lg font-semibold text-slate-800">Developers</h1>
-        <p class="text-xs text-slate-500">Support / Help & Guide</p>
+        <p class="text-xs text-slate-500">Project Team, Institution, and System Profile</p>
       </div>
       <div class="flex items-center gap-2">
         {% set theme_toggle_classes = 'relative p-2 rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200 transition focus:outline-none focus:ring-2 focus:ring-emerald-400' %}
@@ -27,173 +27,187 @@
       </div>
     </header>
 
-    <main class="flex-1 overflow-y-auto p-6 space-y-5">
-      <section class="relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm p-5 lg:p-6">
-        <div class="absolute -right-20 -top-20 h-48 w-48 rounded-full bg-emerald-200/40 blur-3xl"></div>
-        <div class="absolute -left-10 -bottom-16 h-40 w-40 rounded-full bg-blue-200/35 blur-3xl"></div>
-        <div class="relative grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+    <main class="flex-1 overflow-y-auto p-6 space-y-6">
+      <section class="relative overflow-hidden rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-blue-50 p-6 shadow-sm">
+        <div class="absolute -top-20 -right-20 h-56 w-56 rounded-full bg-emerald-200/35 blur-3xl"></div>
+        <div class="absolute -left-20 -bottom-24 h-56 w-56 rounded-full bg-sky-200/30 blur-3xl"></div>
+        <div class="relative grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           <div class="lg:col-span-8">
-            <p class="text-[11px] uppercase tracking-[0.15em] text-emerald-700 font-semibold">Development Team</p>
-            <h2 class="mt-1 text-2xl font-bold text-slate-900">People Behind the Gate Access System</h2>
-            <p class="mt-3 text-sm text-slate-600 leading-relaxed">
-              This page introduces the team responsible for designing, building, and maintaining the Face Recognition Student Gate Access System with SMS Notification for Cawitan High School platform.
-              The project combines face recognition workflows, secure gate transactions, attendance monitoring, and parent notification services.
+            <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700">Face Recognition Student Gate Access System with SMS Notification for Cawitan High School</p>
+            <h2 class="mt-1 text-2xl lg:text-3xl font-bold text-slate-900 leading-tight">
+              Developers and Project Information Portal
+            </h2>
+            <p class="mt-3 text-sm text-slate-600 leading-relaxed max-w-3xl">
+              This page presents the development team, institutional affiliation, and project background of the
+              Face Recognition Student Gate Access System with SMS Notification for Cawitan High School.
             </p>
-            <div class="mt-4 flex flex-wrap gap-2">
-              <a href="/dashboard" class="inline-flex items-center gap-1 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <div class="mt-5 flex flex-wrap gap-2">
+              <a href="/dashboard" class="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-700">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M3 10.5L12 3l9 7.5V21a1 1 0 01-1 1h-5v-6H9v6H4a1 1 0 01-1-1z" />
                 </svg>
-                Go to Dashboard
+                Back to Dashboard
               </a>
-              <a href="/analytics" class="inline-flex items-center gap-1 rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M11 3v18m4-12v12m-8-6v6" />
+              <a href="/analytics" class="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 hover:text-emerald-700">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M4 20h16M7 16V9m5 7V5m5 11v-4" />
                 </svg>
                 View Analytics
               </a>
             </div>
           </div>
           <div class="lg:col-span-4">
-            <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <h3 class="text-sm font-semibold text-slate-800">System Version</h3>
-              <div class="mt-3 space-y-2 text-xs">
-                <div class="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2">
-                  <span class="text-slate-500">Version</span>
-                  <span class="font-semibold text-slate-700">{{ system_info.version }}</span>
+            <article class="rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-sm">
+              <h3 class="text-sm font-semibold text-slate-800">System Information</h3>
+              <div class="mt-3 space-y-2">
+                <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs">
+                  <p class="text-slate-500">Version</p>
+                  <p class="mt-0.5 font-semibold text-slate-800">{{ system_info.version }}</p>
                 </div>
-                <div class="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2">
-                  <span class="text-slate-500">Last Update</span>
-                  <span class="font-semibold text-slate-700">{{ system_info.last_update }}</span>
+                <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs">
+                  <p class="text-slate-500">Last Update</p>
+                  <p class="mt-0.5 font-semibold text-slate-800">{{ system_info.last_update }}</p>
                 </div>
-                <div class="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2">
-                  <span class="text-slate-500">Environment</span>
-                  <span class="font-semibold text-slate-700">{{ system_info.environment|upper }}</span>
+                <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs">
+                  <p class="text-slate-500">Environment</p>
+                  <p class="mt-0.5 font-semibold text-slate-800">{{ system_info.environment|upper }}</p>
                 </div>
               </div>
-            </div>
+            </article>
           </div>
         </div>
       </section>
 
-      <section class="relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm p-5 lg:p-6">
-        <div class="absolute -right-14 -top-14 h-36 w-36 rounded-full bg-blue-200/35 blur-2xl"></div>
-        <div class="absolute -left-16 -bottom-16 h-44 w-44 rounded-full bg-emerald-200/30 blur-3xl"></div>
-        <div class="relative grid grid-cols-1 lg:grid-cols-12 gap-5 items-center">
-          <div class="lg:col-span-3 flex items-center justify-center lg:justify-start">
-            <img
-              src="{{ url_for('static', filename='norsu-logo.png') }}"
-              alt="Negros Oriental State University official logo"
-              class="w-28 sm:w-32 md:w-36 h-auto object-contain drop-shadow-md"
-              loading="lazy"
-            >
-          </div>
-          <div class="lg:col-span-9">
-            <p class="text-[11px] uppercase tracking-[0.15em] text-blue-700 font-semibold">Institution & Project</p>
-            <h3 class="mt-1 text-xl sm:text-2xl font-bold text-slate-900">Face Recognition Student Gate Access System with SMS Notification for Cawitan High School</h3>
-            <p class="mt-3 text-sm text-slate-600 leading-relaxed">
-              Developed by student researchers from <span class="font-semibold text-slate-800">Negros Oriental State University – Bayawan–Sta. Catalina Campus</span>,
-              under the <span class="font-semibold text-slate-800">College of Arts and Sciences (CAS)</span>.
-            </p>
-            <p class="mt-2 text-sm text-slate-600 leading-relaxed">
-              The project is designed to strengthen school security, automate attendance monitoring, and deliver real-time parent notifications
-              through face recognition technology and SMS alerts.
-            </p>
-            <p class="mt-2 text-sm text-slate-600 leading-relaxed">
-              It reflects innovation, research-driven development, and technical collaboration focused on practical, campus-ready digital solutions.
-            </p>
-            <div class="mt-4 flex flex-wrap gap-2">
-              <span class="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700">NORSU-BSCC</span>
-              <span class="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">CAS Department</span>
-              <span class="inline-flex items-center rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-[11px] font-semibold text-violet-700">Research & Innovation</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {% for dev in developers %}
-        <article class="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm p-5 transition duration-300 hover:-translate-y-1 hover:shadow-lg">
-          <div class="absolute -right-8 -top-8 h-20 w-20 rounded-full bg-emerald-200/30 blur-2xl"></div>
-          <div class="relative flex items-start justify-between gap-3">
-            <div class="flex items-center gap-3 min-w-0">
+      <section class="grid grid-cols-1 xl:grid-cols-2 gap-5">
+        <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div class="flex items-start gap-4">
+            <div class="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50">
               <img
-                src="{{ dev.profile_photo }}"
-                alt="{{ dev.name }}"
+                src="{{ url_for('static', filename='norsu-logo.png') }}"
+                alt="Negros Oriental State University official logo"
+                class="h-12 w-12 object-contain"
                 loading="lazy"
-                onerror="this.onerror=null;this.src='{{ dev.fallback_photo }}';"
-                class="h-16 w-16 sm:h-20 sm:w-20 rounded-full object-cover border-2 border-white ring-2 ring-slate-200 bg-slate-100 shadow-sm"
               >
-              <div class="min-w-0">
-                <h3 class="text-sm sm:text-base font-semibold text-slate-900 leading-tight">{{ dev.name }}</h3>
-                <p class="mt-1 inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">{{ dev.role }}</p>
-              </div>
             </div>
-            <span class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 shrink-0">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M12 14c3.866 0 7 1.79 7 4v2H5v-2c0-2.21 3.134-4 7-4zm0-2a4 4 0 100-8 4 4 0 000 8z" />
-              </svg>
-            </span>
-          </div>
-
-          <div class="relative mt-4 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3">
-            <p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Contribution</p>
-            <p class="mt-1 text-sm text-slate-600 leading-relaxed min-h-[70px]">{{ dev.contribution }}</p>
-          </div>
-
-          <div class="mt-4 flex flex-wrap items-center justify-between gap-2">
-            <a href="mailto:{{ dev.email }}" class="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 hover:text-emerald-700">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M3 7.5A2.5 2.5 0 015.5 5h13A2.5 2.5 0 0121 7.5v9a2.5 2.5 0 01-2.5 2.5h-13A2.5 2.5 0 013 16.5v-9Z" />
-                <path stroke-linecap="round" stroke-linejoin="round" d="m3 8 9 6 9-6" />
-              </svg>
-              Contact
-            </a>
-            <span class="text-[11px] font-medium text-slate-500 truncate">{{ dev.email }}</span>
+            <div class="min-w-0">
+              <p class="text-[11px] font-semibold uppercase tracking-[0.15em] text-blue-700">University / Institution Information</p>
+              <h3 class="mt-1 text-lg font-semibold text-slate-900">Negros Oriental State University - Bayawan-Sta. Catalina Campus (NORSU-BSCC)</h3>
+              <p class="mt-2 text-sm text-slate-600 leading-relaxed">
+                This project is developed under the College of Arts and Sciences (CAS), reflecting applied research,
+                responsible system design, and campus-level technology integration.
+              </p>
+            </div>
           </div>
         </article>
-        {% endfor %}
+
+        <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <p class="text-[11px] font-semibold uppercase tracking-[0.15em] text-emerald-700">Project Information</p>
+          <h3 class="mt-1 text-lg font-semibold text-slate-900">Face Recognition Student Gate Access System with SMS Notification for Cawitan High School</h3>
+          <p class="mt-2 text-sm text-slate-600 leading-relaxed">
+            The system enhances school security through biometric gate verification, automates attendance tracking,
+            and sends real-time SMS notifications to parents and guardians for timely status updates.
+          </p>
+          <div class="mt-3 flex flex-wrap gap-2">
+            <span class="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">School Security</span>
+            <span class="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700">Automated Attendance</span>
+            <span class="inline-flex items-center rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-[11px] font-semibold text-violet-700">Real-time SMS Alerts</span>
+          </div>
+        </article>
       </section>
 
-      <section class="grid grid-cols-1 xl:grid-cols-3 gap-4">
-        <article class="xl:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-          <h3 class="text-base font-semibold text-slate-800">Acknowledgment & Credits</h3>
+      <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p class="text-[11px] font-semibold uppercase tracking-[0.15em] text-emerald-700">Developers Team Profiles</p>
+            <h3 class="mt-1 text-lg font-semibold text-slate-900">Project Development Team</h3>
+          </div>
+          <span class="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-600">
+            {{ developers|length }} Team Members
+          </span>
+        </div>
+
+        <div class="mt-4 grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4">
+          {% for dev in developers %}
+          <article class="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition duration-300 hover:-translate-y-1 hover:border-emerald-200 hover:shadow-md">
+            <div class="absolute -top-10 -right-10 h-24 w-24 rounded-full bg-emerald-200/30 blur-2xl transition duration-300 group-hover:bg-emerald-200/45"></div>
+            <div class="relative">
+              <div class="flex items-start gap-3">
+                <img
+                  src="{{ dev.profile_photo }}"
+                  alt="{{ dev.name }}"
+                  loading="lazy"
+                  onerror="this.onerror=null;this.src='{{ dev.fallback_photo }}';"
+                  class="h-20 w-20 shrink-0 rounded-full object-cover ring-2 ring-slate-200 border-2 border-white bg-slate-100"
+                >
+                <div class="min-w-0">
+                  <h4 class="text-sm font-semibold text-slate-900 leading-tight">{{ dev.name }}</h4>
+                  <p class="mt-1 inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
+                    {{ dev.role }}
+                  </p>
+                </div>
+              </div>
+
+              <div class="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3">
+                <p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Professional Contribution</p>
+                <p class="mt-1 text-sm text-slate-600 leading-relaxed min-h-[72px]">{{ dev.contribution }}</p>
+              </div>
+
+              <div class="mt-4 flex items-center justify-between gap-2">
+                <a href="mailto:{{ dev.email }}" class="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 hover:text-emerald-700">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-emerald-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 7.5A2.5 2.5 0 015.5 5h13A2.5 2.5 0 0121 7.5v9a2.5 2.5 0 01-2.5 2.5h-13A2.5 2.5 0 013 16.5v-9Z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="m3 8 9 6 9-6" />
+                  </svg>
+                  Contact
+                </a>
+                <span class="text-[11px] font-medium text-slate-500 truncate">{{ dev.email }}</span>
+              </div>
+            </div>
+          </article>
+          {% endfor %}
+        </div>
+      </section>
+
+      <section class="grid grid-cols-1 xl:grid-cols-3 gap-5">
+        <article class="xl:col-span-2 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <p class="text-[11px] font-semibold uppercase tracking-[0.15em] text-blue-700">System Profile</p>
+          <h3 class="mt-1 text-lg font-semibold text-slate-900">Implementation and Operations Summary</h3>
           <p class="mt-2 text-sm text-slate-600 leading-relaxed">
-            We acknowledge the school administrators, staff, and stakeholders who supported testing, validation, and deployment
-            of the FACE RECOGNITION STUDENT  GATE ACCESS SYSTEM  WITH SMS NOTIFICATION FOR CAWITAN HIGH SCHOOL. Their feedback helped shape a safer and more reliable gate monitoring platform.
+            The platform integrates gate entry verification, attendance monitoring, and parent communication workflows.
+            It is designed for practical school deployment with emphasis on reliability, data accuracy, and operational transparency.
           </p>
-          <div class="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
-            <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-              <p class="font-semibold text-slate-700">Platform</p>
-              <p class="text-slate-500 mt-1">Flask + MongoDB</p>
+          <div class="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
+            <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+              <p class="font-semibold text-slate-700">Technology Stack</p>
+              <p class="mt-1 text-slate-500">Flask, MongoDB, Face Recognition, SMS API</p>
             </div>
-            <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-              <p class="font-semibold text-slate-700">Core Modules</p>
-              <p class="text-slate-500 mt-1">Face Scan, Logs, SMS</p>
+            <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+              <p class="font-semibold text-slate-700">Core Functions</p>
+              <p class="mt-1 text-slate-500">Gate Access, Student Logs, Parent Notification</p>
             </div>
-            <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-              <p class="font-semibold text-slate-700">Support</p>
-              <p class="text-slate-500 mt-1">support@chs-gate.local</p>
+            <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+              <p class="font-semibold text-slate-700">Deployment Focus</p>
+              <p class="mt-1 text-slate-500">Security, Attendance Integrity, Real-time Communication</p>
             </div>
           </div>
         </article>
 
-        <article class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-          <h3 class="text-base font-semibold text-slate-800">Quick Links</h3>
+        <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h3 class="text-base font-semibold text-slate-800">Quick Navigation</h3>
           <div class="mt-3 space-y-2 text-sm">
-            <a href="/students" class="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 hover:bg-slate-100">
-              <span class="font-medium text-slate-700">Students</span>
+            <a href="/students" class="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 transition hover:bg-slate-100">
+              <span class="font-medium text-slate-700">Students Module</span>
               <span class="text-xs text-slate-500">Open</span>
             </a>
-            <a href="/gate-logs" class="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 hover:bg-slate-100">
+            <a href="/gate-logs" class="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 transition hover:bg-slate-100">
               <span class="font-medium text-slate-700">Gate Logs</span>
               <span class="text-xs text-slate-500">Open</span>
             </a>
-            <a href="/sms-logs" class="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 hover:bg-slate-100">
+            <a href="/sms-logs" class="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 transition hover:bg-slate-100">
               <span class="font-medium text-slate-700">SMS Logs</span>
               <span class="text-xs text-slate-500">Open</span>
             </a>
-            <a href="/analytics" class="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 hover:bg-slate-100">
+            <a href="/analytics" class="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 transition hover:bg-slate-100">
               <span class="font-medium text-slate-700">Analytics</span>
               <span class="text-xs text-slate-500">Open</span>
             </a>

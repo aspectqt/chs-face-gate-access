@@ -133,7 +133,8 @@ select {
 
 .ui-select-wrap {
   position: relative;
-  display: inline-block;
+  display: block;
+  width: 100%;
   vertical-align: middle;
   max-width: 100%;
 }
@@ -144,6 +145,7 @@ select {
 }
 
 .ui-select-wrap > select {
+  width: 100%;
   padding-right: 2rem !important;
 }
 

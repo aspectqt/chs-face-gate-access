@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify, Response, stream_with_context
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, Response, stream_with_context, has_request_context
 from bson.objectid import ObjectId
 from pymongo.errors import DuplicateKeyError
 from datetime import datetime, timedelta, time as dtime
@@ -9,7 +9,26 @@ import cv2
 import face_recognition
 import numpy as np
 from dotenv import load_dotenv
-from config import DB_NAME, students, attendance_logs, sms_logs, otp_requests, users, alerts, login_history, failed_scans, sections
+from config import (
+    DB_NAME,
+    client,
+    students,
+    attendance_logs,
+    sms_logs,
+    otp_requests,
+    users,
+    alerts,
+    login_history,
+    failed_scans,
+    sections,
+    audit_logs,
+    login_attempts,
+    attendance_corrections,
+    scheduled_reports,
+    scheduled_report_runs,
+    anomaly_rules,
+    anomaly_events,
+)
 import json
 from io import BytesIO, StringIO
 from PIL import Image
@@ -25,6 +44,11 @@ import re
 import uuid
 import requests
 import traceback
+import secrets
+import hashlib
+import smtplib
+import socket
+from email.message import EmailMessage
 from services.sms_provider import SmsProvider, create_sms_provider_from_env
 from services.otp_service import generate_otp_code, hash_otp_code, verify_otp_code
 from services.ai_analytics import (
@@ -95,6 +119,16 @@ os.makedirs(AVATAR_UPLOAD_DIR, exist_ok=True)
 # CONFIGURATION
 # =====================================
 SCAN_COOLDOWN_SECONDS = env_int("SCAN_COOLDOWN_SECONDS", 8, minimum=5, maximum=30)
+SCAN_FRAME_WIDTH = env_int("SCAN_FRAME_WIDTH", 640, minimum=320, maximum=1920)
+SCAN_FRAME_HEIGHT = env_int("SCAN_FRAME_HEIGHT", 480, minimum=240, maximum=1080)
+SCAN_TARGET_FPS = env_int("SCAN_TARGET_FPS", 20, minimum=5, maximum=60)
+SCAN_PROCESS_EVERY_N_FRAMES = env_int("SCAN_PROCESS_EVERY_N_FRAMES", 2, minimum=1, maximum=8)
+SCAN_RECOGNITION_INTERVAL_MS = env_int("SCAN_RECOGNITION_INTERVAL_MS", 120, minimum=50, maximum=1000)
+SCAN_RECOGNITION_SCALE_PERCENT = env_int("SCAN_RECOGNITION_SCALE_PERCENT", 50, minimum=25, maximum=100)
+SCAN_JPEG_QUALITY = env_int("SCAN_JPEG_QUALITY", 80, minimum=40, maximum=95)
+SCAN_CAPTURE_FLUSH_GRABS = env_int("SCAN_CAPTURE_FLUSH_GRABS", 2, minimum=0, maximum=10)
+SCAN_FORCE_RESIZE = env_bool("SCAN_FORCE_RESIZE", True)
+SCAN_FACE_INDEX_ALLOW_LEGACY_IMAGE_FALLBACK = env_bool("SCAN_FACE_INDEX_ALLOW_LEGACY_IMAGE_FALLBACK", False)
 UNKNOWN_ALERT_COOLDOWN_SECONDS = 30
 UNREGISTERED_EVENT_COOLDOWN_SECONDS = 2
 RECOGNITION_TOLERANCE = 0.43
@@ -104,6 +138,15 @@ ALLOWED_AVATAR_EXTENSIONS = {"jpg", "jpeg", "png", "webp"}
 MAX_AVATAR_SIZE_BYTES = 5 * 1024 * 1024
 MIN_PASSWORD_LENGTH = 8
 MAX_PASSWORD_LENGTH = 128
+PASSWORD_RESET_TOKEN_TTL_MINUTES = env_int("PASSWORD_RESET_TOKEN_TTL_MINUTES", 30, minimum=5, maximum=120)
+PASSWORD_RESET_REQUEST_WINDOW_MINUTES = env_int("PASSWORD_RESET_REQUEST_WINDOW_MINUTES", 15, minimum=1, maximum=240)
+PASSWORD_RESET_MAX_REQUESTS_PER_WINDOW = env_int("PASSWORD_RESET_MAX_REQUESTS_PER_WINDOW", 3, minimum=1, maximum=20)
+PASSWORD_RESET_RATE_LIMIT_ENABLED = env_bool("PASSWORD_RESET_RATE_LIMIT_ENABLED", True)
+PASSWORD_RESET_DEV_LINK_FALLBACK = env_bool("PASSWORD_RESET_DEV_LINK_FALLBACK", False)
+LOGIN_ATTEMPT_WINDOW_MINUTES = env_int("LOGIN_ATTEMPT_WINDOW_MINUTES", 15, minimum=1, maximum=240)
+LOGIN_MAX_ATTEMPTS = env_int("LOGIN_MAX_ATTEMPTS", 5, minimum=3, maximum=20)
+LOGIN_LOCKOUT_MINUTES = env_int("LOGIN_LOCKOUT_MINUTES", 15, minimum=1, maximum=240)
+CORRECTION_ALLOWED_STATUSES = {"Present", "Late", "Absent"}
 MORNING_START = dtime(hour=5, minute=0)
 NOON_START = dtime(hour=12, minute=0)
 AFTERNOON_START = dtime(hour=13, minute=0)
@@ -149,6 +192,19 @@ AI_NLQ_LLM_ENABLED = os.getenv("AI_NLQ_LLM_ENABLED", "").strip().lower() in {"1"
 ENABLE_SECURITY_HEADERS = env_bool("ENABLE_SECURITY_HEADERS", True)
 CSP_ENFORCE = env_bool("CSP_ENFORCE", False)
 VALID_SCAN_SESSION_MODES = {"auto", "manual_in", "manual_out"}
+CSRF_SESSION_KEY = "_csrf_token"
+CSRF_HEADER_NAME = "X-CSRF-Token"
+CSRF_ALLOWED_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+SCHEDULED_REPORT_ALLOWED_FREQUENCIES = {"daily", "weekly", "monthly"}
+SCHEDULED_REPORT_DEFAULT_SEND_TIME = "07:00"
+SCHEDULED_REPORT_MAX_RECIPIENTS = 20
+SCHEDULED_REPORT_MAX_RESULTS = 100
+ANOMALY_ALLOWED_METRICS = {"late_count", "failed_sms_count", "unknown_scan_count", "pending_correction_count"}
+ANOMALY_ALLOWED_OPERATORS = {"gt", "gte", "lt", "lte"}
+ANOMALY_ALLOWED_SEVERITIES = {"info", "warn", "high"}
+ANOMALY_DEFAULT_COOLDOWN_MINUTES = env_int("ANOMALY_DEFAULT_COOLDOWN_MINUTES", 60, minimum=5, maximum=1440)
+BACKGROUND_JOB_INTERVAL_SECONDS = env_int("BACKGROUND_JOB_INTERVAL_SECONDS", 60, minimum=15, maximum=600)
+ENABLE_BACKGROUND_JOBS = env_bool("ENABLE_BACKGROUND_JOBS", True)
 CONTENT_SECURITY_POLICY = "; ".join([
     "default-src 'self'",
     "base-uri 'self'",
@@ -175,6 +231,10 @@ if sms_provider_startup_status.get("status") != "ok":
 # =====================================
 # GLOBAL STATE
 # =====================================
+APP_START_TS = time.time()
+background_jobs_started = False
+background_jobs_lock = threading.Lock()
+SCAN_RECOGNITION_SCALE = SCAN_RECOGNITION_SCALE_PERCENT / 100.0
 last_scanned = {}
 
 scan_lock = threading.Lock()
@@ -189,6 +249,7 @@ scan_state = {
     "model_status": "idle",
     "known_encodings": [],
     "known_students": [],
+    "face_index_loading": False,
     "session_mode": "auto",
 }
 
@@ -207,6 +268,14 @@ ROLE_PERMISSIONS = {
     "Full Admin": {"dashboard", "scan", "students_read", "students_write", "logs", "analytics", "users_manage", "alerts_manage"},
     "Limited Access": {"dashboard", "scan", "students_read", "logs", "analytics", "alerts_manage"},
 }
+password_reset_tokens = users.database["password_reset_tokens"]
+try:
+    password_reset_tokens.create_index([("token_hash", 1)], unique=True)
+    password_reset_tokens.create_index([("expiresAt", 1)], expireAfterSeconds=0)
+    password_reset_tokens.create_index([("email", 1), ("createdAt", -1)])
+    password_reset_tokens.create_index([("requestIp", 1), ("createdAt", -1)])
+except Exception as exc:
+    print(f"[WARNING] Could not initialize password_reset_tokens indexes: {exc}")
 
 
 # =====================================
@@ -233,6 +302,227 @@ def validate_email_format(value):
     if not value:
         return False
     return re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", value) is not None
+
+
+def normalize_email_value(value):
+    return str(value or "").strip().lower()
+
+
+def validate_password_reset_input(new_password, confirm_password):
+    if not new_password:
+        return "New password is required.", "newPassword"
+    if not confirm_password:
+        return "Please confirm your new password.", "confirmPassword"
+    if len(new_password) < MIN_PASSWORD_LENGTH or len(new_password) > MAX_PASSWORD_LENGTH:
+        return f"Password must be between {MIN_PASSWORD_LENGTH} and {MAX_PASSWORD_LENGTH} characters.", "newPassword"
+    if new_password != confirm_password:
+        return "Passwords do not match.", "confirmPassword"
+
+    checks = [
+        bool(re.search(r"[A-Z]", new_password)),
+        bool(re.search(r"[a-z]", new_password)),
+        bool(re.search(r"[0-9]", new_password)),
+        bool(re.search(r"[^A-Za-z0-9]", new_password)),
+    ]
+    if sum(checks) < 3:
+        return "Use at least 3 of: uppercase, lowercase, number, special character.", "newPassword"
+
+    return "", ""
+
+
+def hash_password_reset_token(token):
+    return hashlib.sha256(str(token or "").encode("utf-8")).hexdigest()
+
+
+def build_password_reset_link(token):
+    base_url = os.getenv("APP_BASE_URL", "").strip().rstrip("/")
+    path = url_for("reset_password", token=token)
+    if base_url:
+        return f"{base_url}{path}"
+    return url_for("reset_password", token=token, _external=True)
+
+
+def smtp_settings():
+    smtp_host = (
+        os.getenv("SMTP_HOST", "").strip()
+        or os.getenv("MAIL_SERVER", "").strip()
+        or os.getenv("EMAIL_HOST", "").strip()
+    )
+    smtp_port = env_int("SMTP_PORT", env_int("MAIL_PORT", 587, minimum=1, maximum=65535), minimum=1, maximum=65535)
+    smtp_username = (
+        os.getenv("SMTP_USERNAME", "").strip()
+        or os.getenv("MAIL_USERNAME", "").strip()
+        or os.getenv("EMAIL_HOST_USER", "").strip()
+        or os.getenv("EMAIL_ADDRESS", "").strip()
+        or os.getenv("GMAIL_ADDRESS", "").strip()
+    )
+    smtp_password = (
+        os.getenv("SMTP_PASSWORD", "")
+        or os.getenv("MAIL_PASSWORD", "")
+        or os.getenv("EMAIL_HOST_PASSWORD", "")
+        or os.getenv("EMAIL_APP_PASSWORD", "")
+        or os.getenv("GMAIL_APP_PASSWORD", "")
+    )
+    smtp_from = (
+        os.getenv("SMTP_FROM", "").strip()
+        or os.getenv("MAIL_DEFAULT_SENDER", "").strip()
+        or smtp_username
+    )
+    smtp_security = os.getenv("SMTP_SECURITY", "").strip().lower()
+    smtp_use_ssl = env_bool("SMTP_USE_SSL", False)
+    smtp_use_tls = env_bool("SMTP_USE_TLS", True)
+
+    if smtp_security == "ssl":
+        smtp_use_ssl = True
+        smtp_use_tls = False
+    elif smtp_security in {"starttls", "tls"}:
+        smtp_use_ssl = False
+        smtp_use_tls = True
+    elif smtp_security == "none":
+        smtp_use_ssl = False
+        smtp_use_tls = False
+    elif smtp_port == 465:
+        smtp_use_ssl = True
+        smtp_use_tls = False
+
+    if not smtp_host and smtp_username.lower().endswith("@gmail.com"):
+        smtp_host = "smtp.gmail.com"
+        if not os.getenv("SMTP_PORT", "").strip():
+            smtp_port = 587
+            smtp_use_ssl = False
+            smtp_use_tls = True
+
+    return {
+        "host": smtp_host,
+        "port": smtp_port,
+        "username": smtp_username,
+        "password": smtp_password,
+        "sender": smtp_from,
+        "use_ssl": smtp_use_ssl,
+        "use_tls": smtp_use_tls,
+    }
+
+
+def smtp_configuration_error():
+    settings = smtp_settings()
+    if not settings["host"]:
+        return "Email service is not configured. Set SMTP_HOST (or MAIL_SERVER)."
+    if not settings["sender"]:
+        return "Email sender is not configured. Set SMTP_FROM (or MAIL_DEFAULT_SENDER)."
+    if settings["username"] and not settings["password"]:
+        return "Email password is missing. Set SMTP_PASSWORD (or MAIL_PASSWORD)."
+    return ""
+
+
+def send_email_message(subject, body_text, recipients, from_name="CHS Gate Access"):
+    config_error = smtp_configuration_error()
+    if config_error:
+        return False, config_error
+
+    recipient_list = []
+    if isinstance(recipients, str):
+        recipient_list = [r.strip() for r in recipients.split(",")]
+    elif isinstance(recipients, (list, tuple, set)):
+        recipient_list = [str(r).strip() for r in recipients]
+    recipient_list = [r for r in recipient_list if r]
+    if not recipient_list:
+        return False, "No valid recipients were provided."
+
+    settings = smtp_settings()
+    smtp_host = settings["host"]
+    smtp_port = settings["port"]
+    smtp_username = settings["username"]
+    smtp_password = settings["password"]
+    smtp_from = settings["sender"]
+    smtp_use_ssl = settings["use_ssl"]
+    smtp_use_tls = settings["use_tls"]
+
+    message = EmailMessage()
+    message["Subject"] = str(subject or "").strip() or "CHS Gate Access Notification"
+    message["From"] = f"{from_name} <{smtp_from}>" if from_name and "<" not in smtp_from else smtp_from
+    message["To"] = ", ".join(recipient_list)
+    message.set_content(str(body_text or "").strip())
+
+    try:
+        if smtp_use_ssl:
+            server_ctx = smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=20)
+        else:
+            server_ctx = smtplib.SMTP(smtp_host, smtp_port, timeout=20)
+
+        with server_ctx as server:
+            server.ehlo()
+            if smtp_use_tls and not smtp_use_ssl:
+                server.starttls()
+                server.ehlo()
+            if smtp_username:
+                server.login(smtp_username, smtp_password)
+            server.send_message(message)
+    except smtplib.SMTPAuthenticationError:
+        return False, "SMTP authentication failed. Verify your Gmail address and App Password."
+    except (smtplib.SMTPConnectError, smtplib.SMTPServerDisconnected, TimeoutError, socket.timeout):
+        return False, "Unable to connect to the email server. Check SMTP host/port and network access."
+    except Exception as exc:
+        print(f"[ERROR] Failed to send email: {exc}")
+        return False, "Failed to send email."
+    return True, ""
+
+
+def send_password_reset_email(to_email, reset_link):
+    body_text = (
+        "A password reset was requested for your CHS Gate Access account.\n\n"
+        f"Open this link to reset your password (valid for {PASSWORD_RESET_TOKEN_TTL_MINUTES} minutes):\n"
+        f"{reset_link}\n\n"
+        "If you did not request this, you can safely ignore this message."
+    )
+    return send_email_message(
+        subject="CHS Gate Access Password Reset",
+        body_text=body_text,
+        recipients=[to_email],
+        from_name="CHS Gate Access",
+    )
+
+
+def find_user_by_email(email_value):
+    if not email_value:
+        return None
+    return users.find_one({"email": {"$regex": f"^{re.escape(email_value)}$", "$options": "i"}})
+
+
+def get_request_client_ip():
+    xff = request.headers.get("X-Forwarded-For", "").strip()
+    if xff:
+        return xff.split(",")[0].strip()
+    return (request.remote_addr or "").strip()
+
+
+def password_reset_request_rate_limited(email_value, client_ip):
+    window_after = datetime.utcnow() - timedelta(minutes=PASSWORD_RESET_REQUEST_WINDOW_MINUTES)
+    email_hits = password_reset_tokens.count_documents({
+        "email": email_value,
+        "createdAt": {"$gte": window_after},
+    })
+    if email_hits >= PASSWORD_RESET_MAX_REQUESTS_PER_WINDOW:
+        return True
+
+    if client_ip:
+        ip_hits = password_reset_tokens.count_documents({
+            "requestIp": client_ip,
+            "createdAt": {"$gte": window_after},
+        })
+        if ip_hits >= (PASSWORD_RESET_MAX_REQUESTS_PER_WINDOW * 3):
+            return True
+
+    return False
+
+
+def get_password_reset_record(token):
+    token_hash = hash_password_reset_token(token)
+    now_utc = datetime.utcnow()
+    return password_reset_tokens.find_one({
+        "token_hash": token_hash,
+        "used": False,
+        "expiresAt": {"$gt": now_utc},
+    })
 
 
 def validate_phone_format(value):
@@ -569,6 +859,51 @@ def current_user_profile():
     return user_doc, normalize_profile_user_doc(user_doc)
 
 
+def generate_csrf_token():
+    token = secrets.token_urlsafe(32)
+    session[CSRF_SESSION_KEY] = token
+    return token
+
+
+def get_csrf_token():
+    token = session.get(CSRF_SESSION_KEY, "").strip()
+    if not token:
+        token = generate_csrf_token()
+    return token
+
+
+def csrf_failure_response(message):
+    wants_json = (
+        request.path.startswith("/api/")
+        or request.is_json
+        or "application/json" in (request.headers.get("Accept", "") or "")
+        or request.headers.get("X-Requested-With") == "XMLHttpRequest"
+    )
+    if wants_json:
+        return jsonify({"status": "error", "message": message}), 400
+    return Response(message, status=400, mimetype="text/plain")
+
+
+def extract_csrf_token_from_request():
+    token = (request.headers.get(CSRF_HEADER_NAME, "") or "").strip()
+    if token:
+        return token
+    token = (request.form.get("csrf_token", "") or request.form.get("_csrf", "")).strip()
+    if token:
+        return token
+    if request.is_json:
+        payload = request.get_json(silent=True) or {}
+        token = str(payload.get("csrf_token") or payload.get("_csrf") or "").strip()
+        if token:
+            return token
+    return ""
+
+
+@app.context_processor
+def inject_csrf_token():
+    return {"csrf_token": get_csrf_token}
+
+
 @app.context_processor
 def inject_global_theme():
     theme = normalize_theme_value(session.get("theme"), default="")
@@ -614,12 +949,49 @@ def require_permission(permission, api=False):
                     "security",
                     {"permission": permission},
                 )
+                log_audit_event(
+                    action="auth.permission_denied",
+                    outcome="blocked",
+                    severity="warn",
+                    target_type="permission",
+                    target_id=permission,
+                )
                 if api:
                     return jsonify({"status": "error", "message": "Forbidden"}), 403
                 return redirect(url_for("dashboard"))
             return fn(*args, **kwargs)
         return wrapper
     return decorator
+
+
+def start_background_jobs_if_needed():
+    global background_jobs_started
+    if not ENABLE_BACKGROUND_JOBS:
+        return
+    with background_jobs_lock:
+        if background_jobs_started:
+            return
+        worker = threading.Thread(target=background_jobs_worker_loop, name="phase2-background-worker", daemon=True)
+        worker.start()
+        background_jobs_started = True
+
+
+@app.before_request
+def csrf_and_background_guard():
+    if request.endpoint == "static":
+        return None
+
+    get_csrf_token()
+    start_background_jobs_if_needed()
+
+    if request.method.upper() not in CSRF_ALLOWED_METHODS:
+        return None
+
+    expected = session.get(CSRF_SESSION_KEY, "").strip()
+    provided = extract_csrf_token_from_request()
+    if not expected or not provided or not secrets.compare_digest(expected, provided):
+        return csrf_failure_response("Invalid or missing CSRF token.")
+    return None
 
 
 @app.after_request
@@ -655,6 +1027,119 @@ def now_local():
 
 def now_iso():
     return now_local().isoformat(timespec="seconds")
+
+
+def _now_utc():
+    return datetime.utcnow()
+
+
+def _safe_client_ip():
+    try:
+        return get_request_client_ip()
+    except Exception:
+        if has_request_context():
+            return (request.remote_addr or "").strip()
+        return ""
+
+
+def log_audit_event(action, outcome="success", severity="info", target_type="", target_id="", details=None):
+    try:
+        actor_username = session.get("admin", "system")
+        actor_role = session.get("role", "System")
+    except Exception:
+        actor_username = "system"
+        actor_role = "System"
+
+    payload = {
+        "action": str(action or "").strip() or "unknown_action",
+        "outcome": str(outcome or "").strip().lower() or "success",
+        "severity": str(severity or "").strip().lower() or "info",
+        "target_type": str(target_type or "").strip(),
+        "target_id": str(target_id or "").strip(),
+        "details": details if isinstance(details, dict) else {},
+        "actor": {
+            "username": str(actor_username or "").strip() or "system",
+            "role": str(actor_role or "").strip() or "System",
+        },
+        "ip": _safe_client_ip(),
+        "user_agent": (request.headers.get("User-Agent", "")[:300] if has_request_context() else ""),
+        "created_at": now_iso(),
+        "createdAt": _now_utc(),
+    }
+    try:
+        audit_logs.insert_one(payload)
+    except Exception as exc:
+        print(f"[ERROR] Failed to write audit log: {exc}")
+
+
+def login_attempt_key(username, ip_address):
+    return {
+        "username_lower": str(username or "").strip().lower(),
+        "ip": str(ip_address or "").strip() or "unknown",
+    }
+
+
+def get_login_lockout_seconds(username, ip_address):
+    key = login_attempt_key(username, ip_address)
+    if not key["username_lower"]:
+        return 0
+
+    doc = login_attempts.find_one(key, {"lockout_until": 1})
+    if not doc:
+        return 0
+
+    lockout_until = doc.get("lockout_until")
+    if isinstance(lockout_until, datetime):
+        delta = int((lockout_until - _now_utc()).total_seconds())
+        if delta > 0:
+            return delta
+
+    login_attempts.update_one(
+        key,
+        {"$set": {"attempts": 0, "lockout_until": None}},
+    )
+    return 0
+
+
+def register_failed_login_attempt(username, ip_address):
+    key = login_attempt_key(username, ip_address)
+    if not key["username_lower"]:
+        return
+
+    now_utc = _now_utc()
+    window_start = now_utc - timedelta(minutes=LOGIN_ATTEMPT_WINDOW_MINUTES)
+    previous = login_attempts.find_one(key, {"attempts": 1, "last_attempt_at": 1})
+
+    attempts = 1
+    if previous:
+        last_attempt_at = previous.get("last_attempt_at")
+        if isinstance(last_attempt_at, datetime) and last_attempt_at >= window_start:
+            attempts = int(previous.get("attempts") or 0) + 1
+
+    lockout_until = None
+    if attempts >= LOGIN_MAX_ATTEMPTS:
+        lockout_until = now_utc + timedelta(minutes=LOGIN_LOCKOUT_MINUTES)
+
+    login_attempts.update_one(
+        key,
+        {
+            "$set": {
+                "attempts": attempts,
+                "last_attempt_at": now_utc,
+                "lockout_until": lockout_until,
+                "updated_at": now_iso(),
+            },
+            "$setOnInsert": {"createdAt": now_utc},
+        },
+        upsert=True,
+    )
+
+
+def clear_login_attempts(username, ip_address):
+    key = login_attempt_key(username, ip_address)
+    if not key["username_lower"]:
+        return
+    login_attempts.delete_one(key)
 
 
 def normalize_timestamp_value(value):
@@ -975,13 +1460,22 @@ def push_scan_event(event_type, payload):
 
 def create_alert(level, message, category="system", meta=None):
     global alert_revision
+    normalized_level = str(level or "info").strip().lower() or "info"
+    normalized_category = str(category or "system").strip().lower() or "system"
+    timestamp = now_iso()
     payload = {
-        "level": level,
+        "title": f"{normalized_level.title()} Alert",
+        "level": normalized_level,
         "message": message,
-        "category": category,
+        "category": normalized_category,
+        "type": normalized_category,
+        "source": "System",
         "meta": meta or {},
+        "details": meta or {},
+        "status": "unread",
         "is_read": False,
-        "created_at": now_iso(),
+        "timestamp": timestamp,
+        "created_at": timestamp,
     }
     try:
         alerts.insert_one(payload)
@@ -989,6 +1483,96 @@ def create_alert(level, message, category="system", meta=None):
             alert_revision += 1
     except Exception as exc:
         print(f"[ERROR] Failed to insert alert: {exc}")
+
+
+def unread_notifications_query():
+    return {
+        "$or": [
+            {"status": "unread"},
+            {"is_read": False},
+        ]
+    }
+
+
+def normalize_notification_details(raw_details):
+    if isinstance(raw_details, dict):
+        items = []
+        for key, value in raw_details.items():
+            if value in (None, ""):
+                continue
+            label = str(key).replace("_", " ").strip().title() or "Detail"
+            if isinstance(value, (dict, list)):
+                rendered = json.dumps(value, ensure_ascii=True)
+            else:
+                rendered = str(value)
+            items.append({"label": label, "value": rendered})
+        return items
+
+    if isinstance(raw_details, list):
+        items = []
+        for item in raw_details:
+            if isinstance(item, dict):
+                label = str(item.get("label") or item.get("key") or "Detail").strip()
+                value = item.get("value")
+                if value in (None, ""):
+                    continue
+                items.append({"label": label, "value": str(value)})
+            elif item not in (None, ""):
+                items.append({"label": "Detail", "value": str(item)})
+        return items
+
+    if raw_details not in (None, ""):
+        return [{"label": "Detail", "value": str(raw_details)}]
+    return []
+
+
+def normalize_notification_doc(doc):
+    if not doc:
+        return None
+
+    raw_status = str(doc.get("status") or "").strip().lower()
+    is_read = raw_status == "read" or bool(doc.get("is_read"))
+    category = str(doc.get("category") or doc.get("type") or "system").strip().lower() or "system"
+    level = str(doc.get("level") or "").strip().lower() or "info"
+    timestamp = (
+        doc.get("timestamp")
+        or doc.get("created_at")
+        or doc.get("updatedAt")
+        or doc.get("updated_at")
+        or ""
+    )
+    title = str(doc.get("title") or "").strip()
+    if not title:
+        if level in {"critical", "high", "warning", "info"}:
+            title = f"{level.title()} Alert"
+        else:
+            title = f"{category.replace('_', ' ').title()} Notification"
+
+    return {
+        "_id": str(doc.get("_id")),
+        "title": title,
+        "message": str(doc.get("message") or "").strip(),
+        "timestamp": timestamp,
+        "status": "read" if is_read else "unread",
+        "type": str(doc.get("type") or category).strip().lower() or "system",
+        "level": level,
+        "category": category,
+        "source": str(doc.get("source") or category.replace("_", " ").title() or "System"),
+        "details": normalize_notification_details(doc.get("details") or doc.get("meta") or {}),
+        "meta": doc.get("meta") or {},
+    }
+
+
+def notification_summary(limit=12):
+    try:
+        safe_limit = int(limit or 12)
+    except (TypeError, ValueError):
+        safe_limit = 12
+    safe_limit = max(1, min(safe_limit, 50))
+    docs = list(alerts.find().sort([("timestamp", -1), ("created_at", -1)]).limit(safe_limit))
+    notifications = [normalize_notification_doc(doc) for doc in docs]
+    unread_count = alerts.count_documents(unread_notifications_query())
+    return {"notifications": notifications, "unread": unread_count}
 
 
 def data_change_snapshot():
@@ -1025,7 +1609,7 @@ def sidebar_context(current_page):
     unread = 0
     theme = "light"
     try:
-        unread = alerts.count_documents({"is_read": False})
+        unread = alerts.count_documents(unread_notifications_query())
     except Exception:
         unread = 0
 
@@ -1053,7 +1637,7 @@ def calculate_match_confidence(distance):
     except Exception:
         return 0.0
 
-def _extract_encodings_from_student(student_doc):
+def _extract_encodings_from_student(student_doc, allow_legacy_fallback=False):
     encs = []
     stored = student_doc.get("face_encodings", student_doc.get("face_embeddings", []))
     if isinstance(stored, list):
@@ -1065,6 +1649,9 @@ def _extract_encodings_from_student(student_doc):
                     pass
 
     if encs:
+        return encs
+
+    if not allow_legacy_fallback:
         return encs
 
     # Backward compatibility for legacy docs with only image data.
@@ -1085,34 +1672,68 @@ def _extract_encodings_from_student(student_doc):
     return encs
 
 
-def load_face_index_from_db():
-    known_db_encodings = []
-    known_db_students = []
-
-    rows = list(students.find({
+def _active_students_match_clause():
+    return {
         "$or": [
             {"status": "Active"},
+            {"status": {"$regex": "^active$", "$options": "i"}},
             {"status": {"$exists": False}},
             {"status": ""},
         ]
-    }, {
+    }
+
+
+def count_legacy_face_only_students():
+    query = {
+        "$and": [
+            _active_students_match_clause(),
+            {"$or": [{"face_data.0": {"$exists": True}}, {"faces.0": {"$exists": True}}]},
+            {"face_encodings.0": {"$exists": False}},
+            {"face_embeddings.0": {"$exists": False}},
+        ]
+    }
+    try:
+        return int(students.count_documents(query))
+    except Exception:
+        return 0
+
+
+def load_face_index_from_db(allow_legacy_fallback=False):
+    known_db_encodings = []
+    known_db_students = []
+
+    face_source_match = {
+        "$or": [
+            {"face_encodings.0": {"$exists": True}},
+            {"face_embeddings.0": {"$exists": True}},
+        ]
+    }
+    if allow_legacy_fallback:
+        face_source_match["$or"].extend([
+            {"face_data.0": {"$exists": True}},
+            {"faces.0": {"$exists": True}},
+        ])
+
+    query = {"$and": [_active_students_match_clause(), face_source_match]}
+    projection = {
         "student_id": 1,
         "name": 1,
         "parent_contact": 1,
         "status": 1,
         "face_encodings": 1,
         "face_embeddings": 1,
-        "face_data": 1,
-        "faces": 1,
-    }))
+    }
+    if allow_legacy_fallback:
+        projection["face_data"] = 1
+        projection["faces"] = 1
 
-    for row in rows:
+    for row in students.find(query, projection):
         sid = (row.get("student_id") or "").strip()
         name = (row.get("name") or "").strip()
         if not sid or not name:
             continue
 
-        encs = _extract_encodings_from_student(row)
+        encs = _extract_encodings_from_student(row, allow_legacy_fallback=allow_legacy_fallback)
         for enc in encs:
             known_db_encodings.append(enc)
             known_db_students.append({
@@ -1134,6 +1755,675 @@ def record_login(username, role):
         })
     except Exception as exc:
         print(f"[ERROR] Failed to write login history: {exc}")
+
+
+def serialize_attendance_correction(doc):
+    if not doc:
+        return {}
+    payload = {
+        "_id": str(doc.get("_id")),
+        "attendance_log_id": str(doc.get("attendance_log_id") or ""),
+        "student_id": str(doc.get("student_id") or ""),
+        "student_name": str(doc.get("student_name") or ""),
+        "log_timestamp": str(doc.get("log_timestamp") or ""),
+        "current_status": str(doc.get("current_status") or ""),
+        "requested_status": str(doc.get("requested_status") or ""),
+        "reason": str(doc.get("reason") or ""),
+        "status": str(doc.get("status") or "pending"),
+        "requested_by": str(doc.get("requested_by") or ""),
+        "requested_at": str(doc.get("requested_at") or ""),
+        "reviewed_by": str(doc.get("reviewed_by") or ""),
+        "reviewed_at": str(doc.get("reviewed_at") or ""),
+        "review_note": str(doc.get("review_note") or ""),
+        "applied": bool(doc.get("applied")),
+    }
+    return payload
+
+
+def build_system_health_snapshot():
+    now_utc = _now_utc()
+    db_status = "error"
+    db_message = "Unavailable"
+    try:
+        client.admin.command("ping")
+        db_status = "ok"
+        db_message = "Connected"
+    except Exception as exc:
+        db_status = "error"
+        db_message = f"Ping failed: {exc}"
+
+    sms_health = sms_provider.health_check()
+    sms_status = "ok" if sms_health.get("status") == "ok" else "warn"
+    smtp_error = smtp_configuration_error()
+    email_status = "ok" if not smtp_error else "warn"
+
+    pending_corrections = attendance_corrections.count_documents({"status": "pending"})
+    queued_sms = sms_logs.count_documents({"status": sms_status_mongo_filter("queued")})
+    active_lockouts = login_attempts.count_documents({"lockout_until": {"$gt": now_utc}})
+    enabled_reports = scheduled_reports.count_documents({"enabled": True})
+    enabled_anomaly_rules = anomaly_rules.count_documents({"enabled": True})
+    uptime_seconds = max(0, int(time.time() - APP_START_TS))
+
+    return {
+        "generated_at": now_iso(),
+        "uptime_seconds": uptime_seconds,
+        "database": {"status": db_status, "message": db_message},
+        "sms": {
+            "status": sms_status,
+            "message": sms_health.get("message", ""),
+            "provider": sms_health.get("provider", ""),
+        },
+        "email": {
+            "status": email_status,
+            "message": "Configured" if email_status == "ok" else smtp_error,
+        },
+        "scanner": {
+            "status": "active" if scan_state.get("active") else "idle",
+            "model_status": str(scan_state.get("model_status") or "idle"),
+            "known_faces": len(scan_state.get("known_students") or []),
+        },
+        "queues": {
+            "queued_sms": int(queued_sms),
+            "pending_corrections": int(pending_corrections),
+            "active_lockouts": int(active_lockouts),
+            "enabled_reports": int(enabled_reports),
+            "enabled_anomaly_rules": int(enabled_anomaly_rules),
+        },
+    }
+
+
+def parse_bool_value(value, default=False):
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return bool(default)
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "on"}:
+        return True
+    if text in {"0", "false", "no", "off"}:
+        return False
+    return bool(default)
+
+
+def parse_hhmm(value, default=SCHEDULED_REPORT_DEFAULT_SEND_TIME):
+    raw = str(value or "").strip()
+    if not raw:
+        raw = default
+    try:
+        parsed = datetime.strptime(raw, "%H:%M")
+        return parsed.strftime("%H:%M")
+    except Exception:
+        return default
+
+
+def parse_email_list(raw_value, max_items=SCHEDULED_REPORT_MAX_RECIPIENTS):
+    candidates = []
+    if isinstance(raw_value, str):
+        candidates = [item.strip() for item in raw_value.split(",")]
+    elif isinstance(raw_value, (list, tuple, set)):
+        candidates = [str(item).strip() for item in raw_value]
+
+    seen = set()
+    valid = []
+    for email in candidates:
+        normalized = normalize_email_value(email)
+        if not normalized or normalized in seen:
+            continue
+        if not validate_email_format(normalized):
+            continue
+        seen.add(normalized)
+        valid.append(normalized)
+        if len(valid) >= max_items:
+            break
+    return valid
+
+
+def compute_next_report_run_at(frequency, send_time, now_dt=None):
+    now_dt = now_dt or now_local()
+    hhmm = parse_hhmm(send_time)
+    run_hour, run_minute = [int(part) for part in hhmm.split(":")]
+    candidate = now_dt.replace(hour=run_hour, minute=run_minute, second=0, microsecond=0)
+
+    if frequency == "daily":
+        if candidate <= now_dt:
+            candidate += timedelta(days=1)
+        return candidate
+
+    if frequency == "weekly":
+        if candidate <= now_dt:
+            candidate += timedelta(days=7)
+        return candidate
+
+    if frequency == "monthly":
+        if candidate <= now_dt:
+            candidate += timedelta(days=30)
+        return candidate
+
+    return now_dt + timedelta(days=1)
+
+
+def report_days_from_frequency(frequency):
+    if frequency == "daily":
+        return 1
+    if frequency == "weekly":
+        return 7
+    return 30
+
+
+def build_scope_student_ids(grade_value="", section_value="", cap=5000):
+    grade = normalize_grade_level(grade_value)
+    section = normalize_section_value(section_value)
+    query = {}
+    if grade:
+        query["grade_level"] = grade
+    if section:
+        query["section"] = section
+    if not query:
+        return []
+    rows = students.find(query, {"student_id": 1}).limit(cap)
+    values = []
+    for row in rows:
+        sid = str(row.get("student_id") or "").strip()
+        if sid:
+            values.append(sid)
+    return values
+
+
+def build_report_snapshot(days=7, grade_value="", section_value=""):
+    days = max(1, min(int(days or 7), 90))
+    end_date = now_local().date()
+    start_date = end_date - timedelta(days=days - 1)
+    start_str = start_date.strftime("%Y-%m-%d")
+    end_str = end_date.strftime("%Y-%m-%d")
+
+    attendance_query = {"date": {"$gte": start_str, "$lte": end_str}}
+    grade = normalize_grade_level(grade_value)
+    section = normalize_section_value(section_value)
+    if grade:
+        attendance_query["grade_level"] = grade
+    if section:
+        attendance_query["section"] = section
+
+    scoped_student_ids = build_scope_student_ids(grade, section) if (grade or section) else []
+
+    total_students_query = {}
+    if grade:
+        total_students_query["grade_level"] = grade
+    if section:
+        total_students_query["section"] = section
+
+    sms_query = {
+        "date": {"$gte": start_str, "$lte": end_str},
+        "status": sms_status_mongo_filter("failed"),
+    }
+    if scoped_student_ids:
+        sms_query["student_id"] = {"$in": scoped_student_ids}
+
+    unknown_scan_query = {
+        "date": {"$gte": start_str, "$lte": end_str},
+        "reason": {"$in": ["unknown_face", "not_registered"]},
+    }
+    if scoped_student_ids:
+        unknown_scan_query["student_id"] = {"$in": scoped_student_ids}
+
+    correction_query = {"status": "pending"}
+    if scoped_student_ids:
+        correction_query["student_id"] = {"$in": scoped_student_ids}
+
+    total_students = students.count_documents(total_students_query or {})
+    present_ids = attendance_logs.distinct("student_id", attendance_query)
+    present_count = len([sid for sid in present_ids if sid])
+    late_count = attendance_logs.count_documents({**attendance_query, "status": "Late"})
+    gate_entries = attendance_logs.count_documents(attendance_query)
+    failed_sms = sms_logs.count_documents(sms_query)
+    unknown_scans = failed_scans.count_documents(unknown_scan_query)
+    pending_corrections = attendance_corrections.count_documents(correction_query)
+
+    top_sections = list(
+        attendance_logs.aggregate([
+            {"$match": {**attendance_query, "status": "Late"}},
+            {"$group": {"_id": {"$ifNull": ["$section", "N/A"]}, "count": {"$sum": 1}}},
+            {"$sort": {"count": -1}},
+            {"$limit": 3},
+        ])
+    )
+
+    return {
+        "range_start": start_str,
+        "range_end": end_str,
+        "days": days,
+        "scope": {
+            "grade": grade or "",
+            "section": section or "",
+        },
+        "stats": {
+            "total_students": int(total_students),
+            "present_students": int(present_count),
+            "late_count": int(late_count),
+            "gate_entries": int(gate_entries),
+            "failed_sms": int(failed_sms),
+            "unknown_scans": int(unknown_scans),
+            "pending_corrections": int(pending_corrections),
+        },
+        "top_late_sections": [
+            {"section": str(item.get("_id") or "N/A"), "count": int(item.get("count") or 0)}
+            for item in top_sections
+        ],
+    }
+
+
+def render_report_email_body(report_doc, snapshot):
+    report_name = str(report_doc.get("name") or "Scheduled Report").strip()
+    frequency = str(report_doc.get("frequency") or "weekly").strip().lower()
+    scope = snapshot.get("scope") or {}
+    stats = snapshot.get("stats") or {}
+    late_sections = snapshot.get("top_late_sections") or []
+    late_lines = [f"- {row.get('section', 'N/A')}: {row.get('count', 0)} late logs" for row in late_sections]
+    if not late_lines:
+        late_lines = ["- No late section spikes detected."]
+
+    return (
+        f"{report_name}\n"
+        f"Frequency: {frequency.title()}\n"
+        f"Range: {snapshot.get('range_start', '')} to {snapshot.get('range_end', '')}\n"
+        f"Scope: Grade={scope.get('grade') or 'All'} | Section={scope.get('section') or 'All'}\n\n"
+        "Summary:\n"
+        f"- Total Students: {stats.get('total_students', 0)}\n"
+        f"- Present Students: {stats.get('present_students', 0)}\n"
+        f"- Gate Entries: {stats.get('gate_entries', 0)}\n"
+        f"- Late Count: {stats.get('late_count', 0)}\n"
+        f"- Failed SMS: {stats.get('failed_sms', 0)}\n"
+        f"- Unknown Scans: {stats.get('unknown_scans', 0)}\n"
+        f"- Pending Corrections: {stats.get('pending_corrections', 0)}\n\n"
+        "Top Late Sections:\n"
+        f"{chr(10).join(late_lines)}\n\n"
+        "This message was generated automatically by CHS Gate Access."
+    )
+
+
+def serialize_scheduled_report(doc):
+    if not doc:
+        return {}
+    next_run = doc.get("next_run_at")
+    last_run = doc.get("last_run_at")
+    return {
+        "_id": str(doc.get("_id")),
+        "name": str(doc.get("name") or ""),
+        "frequency": str(doc.get("frequency") or "weekly"),
+        "send_time": parse_hhmm(doc.get("send_time") or SCHEDULED_REPORT_DEFAULT_SEND_TIME),
+        "enabled": bool(doc.get("enabled", True)),
+        "recipients": list(doc.get("recipients") or []),
+        "filters": doc.get("filters") if isinstance(doc.get("filters"), dict) else {"grade": "", "section": ""},
+        "last_status": str(doc.get("last_status") or ""),
+        "last_error": str(doc.get("last_error") or ""),
+        "last_run_at": normalize_timestamp_value(last_run),
+        "next_run_at": normalize_timestamp_value(next_run),
+        "created_by": str(doc.get("created_by") or ""),
+        "updated_by": str(doc.get("updated_by") or ""),
+        "updated_at": normalize_timestamp_value(doc.get("updated_at")),
+    }
+
+
+def serialize_scheduled_report_run(doc):
+    if not doc:
+        return {}
+    return {
+        "_id": str(doc.get("_id")),
+        "report_id": str(doc.get("report_id") or ""),
+        "report_name": str(doc.get("report_name") or ""),
+        "status": str(doc.get("status") or ""),
+        "trigger": str(doc.get("trigger") or ""),
+        "started_at": normalize_timestamp_value(doc.get("started_at")),
+        "completed_at": normalize_timestamp_value(doc.get("completed_at")),
+        "error": str(doc.get("error") or ""),
+        "recipients_count": len(doc.get("recipients") or []),
+    }
+
+
+def run_single_scheduled_report(report_doc, trigger="manual"):
+    if not report_doc:
+        return {"status": "error", "message": "Report not found."}
+
+    frequency = str(report_doc.get("frequency") or "weekly").strip().lower()
+    if frequency not in SCHEDULED_REPORT_ALLOWED_FREQUENCIES:
+        frequency = "weekly"
+    send_time = parse_hhmm(report_doc.get("send_time") or SCHEDULED_REPORT_DEFAULT_SEND_TIME)
+    recipients = parse_email_list(report_doc.get("recipients") or [])
+    now_dt = now_local()
+
+    run_doc = {
+        "report_id": str(report_doc.get("_id")),
+        "report_name": str(report_doc.get("name") or "Scheduled Report"),
+        "status": "failed",
+        "trigger": str(trigger or "manual"),
+        "started_at": now_dt,
+        "completed_at": None,
+        "error": "",
+        "recipients": recipients,
+    }
+
+    if not recipients:
+        run_doc["error"] = "No valid recipients configured."
+        run_doc["completed_at"] = now_local()
+        scheduled_report_runs.insert_one(run_doc)
+        scheduled_reports.update_one(
+            {"_id": report_doc["_id"]},
+            {"$set": {
+                "last_status": "failed",
+                "last_error": run_doc["error"],
+                "last_run_at": now_dt,
+                "next_run_at": compute_next_report_run_at(frequency, send_time, now_dt=now_dt),
+                "updated_at": now_dt,
+            }},
+        )
+        return {"status": "error", "message": run_doc["error"]}
+
+    filters = report_doc.get("filters") if isinstance(report_doc.get("filters"), dict) else {}
+    snapshot = build_report_snapshot(
+        days=report_days_from_frequency(frequency),
+        grade_value=filters.get("grade") or "",
+        section_value=filters.get("section") or "",
+    )
+    email_subject = f"[CHS] {str(report_doc.get('name') or 'Scheduled Report').strip()} ({frequency.title()})"
+    email_body = render_report_email_body(report_doc, snapshot)
+    sent_ok, send_error = send_email_message(
+        subject=email_subject,
+        body_text=email_body,
+        recipients=recipients,
+        from_name="CHS Reports",
+    )
+
+    run_doc["completed_at"] = now_local()
+    run_doc["snapshot"] = snapshot
+
+    if sent_ok:
+        run_doc["status"] = "success"
+        create_alert(
+            "info",
+            f"Scheduled report '{report_doc.get('name', 'Report')}' sent to {len(recipients)} recipient(s).",
+            "analytics",
+            {"report_id": str(report_doc.get("_id")), "trigger": trigger},
+        )
+        log_audit_event(
+            action="analytics.scheduled_report_run",
+            outcome="success",
+            severity="info",
+            target_type="scheduled_report",
+            target_id=str(report_doc.get("_id")),
+            details={"trigger": trigger, "recipients_count": len(recipients)},
+        )
+    else:
+        run_doc["status"] = "failed"
+        run_doc["error"] = send_error
+        log_audit_event(
+            action="analytics.scheduled_report_run",
+            outcome="failed",
+            severity="warn",
+            target_type="scheduled_report",
+            target_id=str(report_doc.get("_id")),
+            details={"trigger": trigger, "error": send_error},
+        )
+
+    scheduled_report_runs.insert_one(run_doc)
+    scheduled_reports.update_one(
+        {"_id": report_doc["_id"]},
+        {"$set": {
+            "last_status": run_doc["status"],
+            "last_error": run_doc.get("error", ""),
+            "last_run_at": run_doc["completed_at"],
+            "next_run_at": compute_next_report_run_at(frequency, send_time, now_dt=run_doc["completed_at"]),
+            "updated_at": run_doc["completed_at"],
+        }},
+    )
+    return {
+        "status": "ok" if sent_ok else "error",
+        "message": "Report sent successfully." if sent_ok else (send_error or "Failed to send report."),
+        "run": serialize_scheduled_report_run(run_doc),
+    }
+
+
+def run_due_scheduled_reports(max_reports=5):
+    now_dt = now_local()
+    try:
+        limit_value = max(1, min(int(max_reports or 5), 20))
+    except Exception:
+        limit_value = 5
+    due_reports = list(
+        scheduled_reports.find({
+            "enabled": True,
+            "next_run_at": {"$lte": now_dt},
+        }).sort("next_run_at", 1).limit(limit_value)
+    )
+    results = []
+    for report_doc in due_reports:
+        results.append(run_single_scheduled_report(report_doc, trigger="scheduler"))
+    return results
+
+
+def compare_anomaly_value(metric_value, operator_value, threshold_value):
+    if operator_value == "gt":
+        return metric_value > threshold_value
+    if operator_value == "gte":
+        return metric_value >= threshold_value
+    if operator_value == "lt":
+        return metric_value < threshold_value
+    return metric_value <= threshold_value
+
+
+def compute_anomaly_metric_value(rule_doc):
+    metric = str(rule_doc.get("metric") or "").strip().lower()
+    window_days = max(1, min(int(rule_doc.get("window_days") or 1), 90))
+    filters = rule_doc.get("filters") if isinstance(rule_doc.get("filters"), dict) else {}
+    grade = normalize_grade_level(filters.get("grade") or "")
+    section = normalize_section_value(filters.get("section") or "")
+
+    end_date = now_local().date()
+    start_date = end_date - timedelta(days=window_days - 1)
+    start_str = start_date.strftime("%Y-%m-%d")
+    end_str = end_date.strftime("%Y-%m-%d")
+    attendance_query = {"date": {"$gte": start_str, "$lte": end_str}}
+    if grade:
+        attendance_query["grade_level"] = grade
+    if section:
+        attendance_query["section"] = section
+
+    scoped_student_ids = build_scope_student_ids(grade, section) if (grade or section) else []
+
+    if metric == "late_count":
+        value = attendance_logs.count_documents({**attendance_query, "status": "Late"})
+    elif metric == "failed_sms_count":
+        sms_query = {
+            "date": {"$gte": start_str, "$lte": end_str},
+            "status": sms_status_mongo_filter("failed"),
+        }
+        if scoped_student_ids:
+            sms_query["student_id"] = {"$in": scoped_student_ids}
+        value = sms_logs.count_documents(sms_query)
+    elif metric == "unknown_scan_count":
+        failed_query = {
+            "date": {"$gte": start_str, "$lte": end_str},
+            "reason": {"$in": ["unknown_face", "not_registered"]},
+        }
+        if scoped_student_ids:
+            failed_query["student_id"] = {"$in": scoped_student_ids}
+        value = failed_scans.count_documents(failed_query)
+    else:
+        correction_query = {"status": "pending"}
+        if scoped_student_ids:
+            correction_query["student_id"] = {"$in": scoped_student_ids}
+        value = attendance_corrections.count_documents(correction_query)
+
+    return {
+        "metric": metric,
+        "value": float(value),
+        "window_days": window_days,
+        "range_start": start_str,
+        "range_end": end_str,
+        "filters": {"grade": grade or "", "section": section or ""},
+    }
+
+
+def serialize_anomaly_rule(doc):
+    if not doc:
+        return {}
+    return {
+        "_id": str(doc.get("_id")),
+        "name": str(doc.get("name") or ""),
+        "metric": str(doc.get("metric") or ""),
+        "operator": str(doc.get("operator") or ""),
+        "threshold": float(doc.get("threshold") or 0),
+        "window_days": int(doc.get("window_days") or 1),
+        "severity": str(doc.get("severity") or "warn"),
+        "enabled": bool(doc.get("enabled", True)),
+        "cooldown_minutes": int(doc.get("cooldown_minutes") or ANOMALY_DEFAULT_COOLDOWN_MINUTES),
+        "filters": doc.get("filters") if isinstance(doc.get("filters"), dict) else {"grade": "", "section": ""},
+        "notify_emails": list(doc.get("notify_emails") or []),
+        "last_evaluated_at": normalize_timestamp_value(doc.get("last_evaluated_at")),
+        "last_triggered_at": normalize_timestamp_value(doc.get("last_triggered_at")),
+        "last_value": float(doc.get("last_value") or 0),
+        "last_result": str(doc.get("last_result") or ""),
+    }
+
+
+def serialize_anomaly_event(doc):
+    if not doc:
+        return {}
+    return {
+        "_id": str(doc.get("_id")),
+        "rule_id": str(doc.get("rule_id") or ""),
+        "rule_name": str(doc.get("rule_name") or ""),
+        "metric": str(doc.get("metric") or ""),
+        "value": float(doc.get("value") or 0),
+        "operator": str(doc.get("operator") or ""),
+        "threshold": float(doc.get("threshold") or 0),
+        "severity": str(doc.get("severity") or "warn"),
+        "triggered_at": normalize_timestamp_value(doc.get("triggered_at")),
+        "trigger": str(doc.get("trigger") or ""),
+    }
+
+
+def evaluate_anomaly_rule(rule_doc, trigger="manual"):
+    if not rule_doc:
+        return {"status": "error", "message": "Rule not found."}
+
+    metric = str(rule_doc.get("metric") or "").strip().lower()
+    operator_value = str(rule_doc.get("operator") or "").strip().lower()
+    threshold = float(rule_doc.get("threshold") or 0)
+    severity = str(rule_doc.get("severity") or "warn").strip().lower()
+    if metric not in ANOMALY_ALLOWED_METRICS or operator_value not in ANOMALY_ALLOWED_OPERATORS:
+        return {"status": "error", "message": "Invalid anomaly rule definition."}
+    if severity not in ANOMALY_ALLOWED_SEVERITIES:
+        severity = "warn"
+
+    eval_payload = compute_anomaly_metric_value(rule_doc)
+    metric_value = float(eval_payload.get("value") or 0)
+    matched = compare_anomaly_value(metric_value, operator_value, threshold)
+    now_dt = now_local()
+
+    update_payload = {
+        "last_evaluated_at": now_dt,
+        "last_value": metric_value,
+        "last_result": "matched" if matched else "normal",
+        "updated_at": now_dt,
+    }
+
+    event_doc = None
+    if matched:
+        cooldown_minutes = max(5, int(rule_doc.get("cooldown_minutes") or ANOMALY_DEFAULT_COOLDOWN_MINUTES))
+        last_triggered = rule_doc.get("last_triggered_at")
+        cooldown_ok = not isinstance(last_triggered, datetime) or (now_dt - last_triggered) >= timedelta(minutes=cooldown_minutes)
+
+        if cooldown_ok:
+            event_doc = {
+                "rule_id": str(rule_doc.get("_id")),
+                "rule_name": str(rule_doc.get("name") or ""),
+                "metric": metric,
+                "value": metric_value,
+                "operator": operator_value,
+                "threshold": threshold,
+                "severity": severity,
+                "triggered_at": now_dt,
+                "trigger": str(trigger or "manual"),
+                "context": eval_payload,
+            }
+            anomaly_events.insert_one(event_doc)
+            update_payload["last_triggered_at"] = now_dt
+
+            create_alert(
+                severity,
+                f"Anomaly rule '{rule_doc.get('name', 'Rule')}' triggered ({metric_value:.2f} {operator_value} {threshold:.2f}).",
+                "analytics",
+                {
+                    "rule_id": str(rule_doc.get("_id")),
+                    "metric": metric,
+                    "value": metric_value,
+                    "threshold": threshold,
+                    "operator": operator_value,
+                },
+            )
+
+            notify_emails = parse_email_list(rule_doc.get("notify_emails") or [])
+            if notify_emails:
+                subject = f"[CHS] Anomaly Triggered: {rule_doc.get('name', 'Rule')}"
+                body = (
+                    f"Rule: {rule_doc.get('name', '')}\n"
+                    f"Metric: {metric}\n"
+                    f"Observed Value: {metric_value:.2f}\n"
+                    f"Condition: {operator_value} {threshold:.2f}\n"
+                    f"Window: last {eval_payload.get('window_days', 1)} day(s)\n"
+                    f"Range: {eval_payload.get('range_start', '')} to {eval_payload.get('range_end', '')}\n"
+                    f"Severity: {severity}\n"
+                )
+                send_email_message(subject=subject, body_text=body, recipients=notify_emails, from_name="CHS Alerts")
+
+            log_audit_event(
+                action="analytics.anomaly_triggered",
+                outcome="success",
+                severity="warn" if severity == "warn" else severity,
+                target_type="anomaly_rule",
+                target_id=str(rule_doc.get("_id")),
+                details={
+                    "metric": metric,
+                    "value": metric_value,
+                    "operator": operator_value,
+                    "threshold": threshold,
+                    "trigger": trigger,
+                },
+            )
+
+    anomaly_rules.update_one({"_id": rule_doc["_id"]}, {"$set": update_payload})
+    return {
+        "status": "ok",
+        "rule": serialize_anomaly_rule({**rule_doc, **update_payload}),
+        "matched": bool(matched),
+        "event": serialize_anomaly_event(event_doc) if event_doc else None,
+    }
+
+
+def evaluate_all_anomaly_rules(trigger="manual", max_rules=50):
+    try:
+        safe_limit = max(1, min(int(max_rules or 50), 200))
+    except Exception:
+        safe_limit = 50
+    docs = list(anomaly_rules.find({"enabled": True}).sort("updated_at", -1).limit(safe_limit))
+    results = [evaluate_anomaly_rule(doc, trigger=trigger) for doc in docs]
+    triggered = len([row for row in results if row.get("matched") and row.get("event")])
+    return {
+        "status": "ok",
+        "evaluated": len(results),
+        "triggered": triggered,
+        "results": results,
+    }
+
+
+def background_jobs_worker_loop():
+    while True:
+        try:
+            run_due_scheduled_reports(max_reports=3)
+            evaluate_all_anomaly_rules(trigger="scheduler", max_rules=50)
+        except Exception as exc:
+            print(f"[WARNING] Background jobs loop error: {exc}")
+        time.sleep(BACKGROUND_JOB_INTERVAL_SECONDS)
 
 
 def sms_status_filter_values(*statuses):
@@ -1734,38 +3024,134 @@ def push_multi_face_event(face_count):
     })
 
 
-def start_scan_capture():
+def safe_capture_set(capture, prop_name, value):
+    prop = getattr(cv2, prop_name, None)
+    if prop is None:
+        return
     try:
-        db_encodings, db_students = load_face_index_from_db()
-        model_status = "ready" if db_encodings else "no_registered_students"
+        capture.set(prop, value)
+    except Exception:
+        pass
+
+
+def configure_capture_device(capture):
+    safe_capture_set(capture, "CAP_PROP_BUFFERSIZE", 1)
+    safe_capture_set(capture, "CAP_PROP_FRAME_WIDTH", SCAN_FRAME_WIDTH)
+    safe_capture_set(capture, "CAP_PROP_FRAME_HEIGHT", SCAN_FRAME_HEIGHT)
+    safe_capture_set(capture, "CAP_PROP_FPS", SCAN_TARGET_FPS)
+    if hasattr(cv2, "VideoWriter_fourcc"):
+        try:
+            mjpg = cv2.VideoWriter_fourcc(*"MJPG")
+            safe_capture_set(capture, "CAP_PROP_FOURCC", mjpg)
+        except Exception:
+            pass
+
+
+def open_capture_device():
+    if os.name == "nt" and hasattr(cv2, "CAP_DSHOW"):
+        return cv2.VideoCapture(0, cv2.CAP_DSHOW)
+    return cv2.VideoCapture(0)
+
+
+def _refresh_face_index_worker():
+    started_at = time.time()
+    encoding_matrix = np.empty((0, 128), dtype=np.float64)
+    db_students = []
+    model_status = "model_not_ready"
+    try:
+        db_encodings, db_students = load_face_index_from_db(
+            allow_legacy_fallback=SCAN_FACE_INDEX_ALLOW_LEGACY_IMAGE_FALLBACK
+        )
+        if db_encodings:
+            encoding_matrix = np.asarray(db_encodings, dtype=np.float64)
+            if encoding_matrix.ndim != 2:
+                encoding_matrix = np.empty((0, 128), dtype=np.float64)
+        else:
+            encoding_matrix = np.empty((0, 128), dtype=np.float64)
+        if len(encoding_matrix) > 0:
+            model_status = "ready"
+        else:
+            legacy_only = count_legacy_face_only_students()
+            if legacy_only > 0 and not SCAN_FACE_INDEX_ALLOW_LEGACY_IMAGE_FALLBACK:
+                model_status = "legacy_faces_only"
+            else:
+                model_status = "no_registered_students"
+        elapsed = time.time() - started_at
+        print(
+            f"[INFO] Face index loaded: status={model_status}, "
+            f"encodings={len(encoding_matrix)}, profiles={len(db_students)}, "
+            f"legacy_fallback={'on' if SCAN_FACE_INDEX_ALLOW_LEGACY_IMAGE_FALLBACK else 'off'}, "
+            f"elapsed={elapsed:.2f}s"
+        )
     except Exception as exc:
         print(f"[ERROR] Failed loading face index from MongoDB: {exc}")
-        db_encodings = []
-        db_students = []
         model_status = "model_not_ready"
+    finally:
+        with scan_lock:
+            if not scan_state.get("active"):
+                scan_state["face_index_loading"] = False
+                return
+            scan_state["known_encodings"] = encoding_matrix
+            scan_state["known_students"] = db_students
+            scan_state["model_status"] = model_status
+            scan_state["face_index_loading"] = False
 
+
+def refresh_face_index_async():
+    with scan_lock:
+        if scan_state.get("face_index_loading"):
+            return
+        scan_state["face_index_loading"] = True
+
+    worker = threading.Thread(target=_refresh_face_index_worker, name="scan-face-index-loader", daemon=True)
+    worker.start()
+
+
+def start_scan_capture():
     with scan_lock:
         if scan_state["active"]:
             return True, "Scan already running"
 
-        capture = cv2.VideoCapture(0)
-        if not capture.isOpened():
-            create_alert(
-                level="critical",
-                message="Gate system offline: webcam is unavailable.",
-                category="system",
-            )
-            return False, "Webcam could not be opened"
+    capture = open_capture_device()
+    if not capture or not capture.isOpened():
+        if capture is not None:
+            try:
+                capture.release()
+            except Exception:
+                pass
+        create_alert(
+            level="critical",
+            message="Gate system offline: webcam is unavailable.",
+            category="system",
+        )
+        return False, "Webcam could not be opened"
 
+    configure_capture_device(capture)
+    for _ in range(3):
+        try:
+            capture.read()
+        except Exception:
+            break
+
+    with scan_lock:
+        if scan_state["active"]:
+            try:
+                capture.release()
+            except Exception:
+                pass
+            return True, "Scan already running"
         last_scanned.clear()
         scan_state["capture"] = capture
         scan_state["active"] = True
-        scan_state["known_encodings"] = db_encodings
-        scan_state["known_students"] = db_students
-        scan_state["model_status"] = model_status
+        scan_state["known_encodings"] = np.empty((0, 128), dtype=np.float64)
+        scan_state["known_students"] = []
+        scan_state["model_status"] = "loading"
+        scan_state["face_index_loading"] = False
         scan_state["last_not_registered_ts"] = 0.0
         scan_state["last_multi_face_ts"] = 0.0
-        return True, "Scan started"
+
+    refresh_face_index_async()
+    return True, "Scan started"
 
 
 def stop_scan_capture():
@@ -1773,9 +3159,10 @@ def stop_scan_capture():
         scan_state["active"] = False
         capture = scan_state.get("capture")
         scan_state["capture"] = None
-        scan_state["known_encodings"] = []
+        scan_state["known_encodings"] = np.empty((0, 128), dtype=np.float64)
         scan_state["known_students"] = []
         scan_state["model_status"] = "idle"
+        scan_state["face_index_loading"] = False
 
     if capture is not None:
         try:
@@ -1787,8 +3174,20 @@ def stop_scan_capture():
 def generate_frames():
     banner = ""
     banner_until = 0.0
+    cached_overlays = []
+    frame_counter = 0
+    last_analysis_ts = 0.0
+    recognition_interval = max(SCAN_RECOGNITION_INTERVAL_MS, 50) / 1000.0
+    process_every_n = max(1, SCAN_PROCESS_EVERY_N_FRAMES)
+    target_frame_interval = 1.0 / max(1, SCAN_TARGET_FPS)
+    scale = min(max(SCAN_RECOGNITION_SCALE, 0.25), 1.0)
+    flush_grabs = max(0, int(SCAN_CAPTURE_FLUSH_GRABS))
+    target_w = max(320, int(SCAN_FRAME_WIDTH))
+    target_h = max(240, int(SCAN_FRAME_HEIGHT))
+    jpeg_quality_params = [int(cv2.IMWRITE_JPEG_QUALITY), int(SCAN_JPEG_QUALITY)]
 
     while True:
+        frame_start = time.time()
         with scan_lock:
             active = scan_state["active"]
             capture = scan_state.get("capture")
@@ -1799,7 +3198,22 @@ def generate_frames():
         if not active or capture is None:
             break
 
-        ok, frame = capture.read()
+        grabbed = False
+        if flush_grabs > 0:
+            for _ in range(flush_grabs):
+                try:
+                    if capture.grab():
+                        grabbed = True
+                except Exception:
+                    break
+
+        if grabbed:
+            try:
+                ok, frame = capture.retrieve()
+            except Exception:
+                ok, frame = capture.read()
+        else:
+            ok, frame = capture.read()
         if not ok:
             create_alert(
                 level="critical",
@@ -1808,69 +3222,129 @@ def generate_frames():
             )
             break
 
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        face_locations = face_recognition.face_locations(rgb_frame)
-        if len(face_locations) > 1:
-            for (top, right, bottom, left) in face_locations:
-                cv2.rectangle(frame, (left, top), (right, bottom), (0, 165, 255), 2)
-            push_multi_face_event(len(face_locations))
-            banner = "Multiple faces detected. One person at a time."
-            banner_until = time.time() + 2.0
-        elif len(face_locations) == 1:
-            face_encs = face_recognition.face_encodings(rgb_frame, face_locations)
-            top, right, bottom, left = face_locations[0]
-            label = "Not Registered!"
-            color = (0, 64, 255)
-            confidence_pct = 0.0
+        if SCAN_FORCE_RESIZE and frame is not None:
+            try:
+                frame_h, frame_w = frame.shape[:2]
+                if frame_w != target_w or frame_h != target_h:
+                    interpolation = cv2.INTER_AREA if (frame_w > target_w or frame_h > target_h) else cv2.INTER_LINEAR
+                    frame = cv2.resize(frame, (target_w, target_h), interpolation=interpolation)
+            except Exception:
+                pass
 
-            if not face_encs:
-                push_not_registered_event("face_not_encoded", 0.0)
-            elif model_status != "ready" or not db_encodings:
-                reason = "model_not_ready" if model_status == "model_not_ready" else "no_registered_students"
-                push_not_registered_event(reason, 0.0)
+        frame_counter += 1
+        now_ts = time.time()
+        should_process = (
+            frame_counter % process_every_n == 0
+            and (now_ts - last_analysis_ts) >= recognition_interval
+        )
+
+        if should_process:
+            if scale < 1.0:
+                small_frame = cv2.resize(frame, (0, 0), fx=scale, fy=scale, interpolation=cv2.INTER_LINEAR)
             else:
-                enc = face_encs[0]
-                distances = face_recognition.face_distance(db_encodings, enc)
-                if len(distances) > 0:
-                    best_idx = int(np.argmin(distances))
-                    best_distance = float(distances[best_idx])
-                    confidence_pct = calculate_match_confidence(best_distance)
-                    is_match = best_distance <= RECOGNITION_TOLERANCE and confidence_pct >= MIN_RECOGNITION_CONFIDENCE
+                small_frame = frame
+            rgb_small = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
+            face_locations_small = face_recognition.face_locations(
+                rgb_small,
+                number_of_times_to_upsample=0,
+                model="hog",
+            )
+            cached_overlays = []
+            h, w = frame.shape[:2]
+            inv_scale = 1.0 / scale
 
-                    if is_match and best_idx < len(db_students):
-                        candidate = db_students[best_idx]
-                        student_doc = students.find_one(_active_student_query(candidate["student_id"]), {
-                            "student_id": 1,
-                            "name": 1,
-                            "parent_contact": 1,
-                        })
-                        if student_doc:
-                            verification = handle_verified_student(student_doc, confidence_pct)
-                            if verification:
-                                label = student_doc.get("name", "Verified")
-                                color = (46, 204, 113)
-                                banner = f"{student_doc.get('name', '')}  |  {verification['display_message']}"
-                                banner_until = time.time() + 2.5
-                        else:
-                            push_not_registered_event("student_not_found", confidence_pct)
-                    else:
-                        push_not_registered_event("low_confidence", confidence_pct)
+            def scale_box(box):
+                top_s, right_s, bottom_s, left_s = box
+                top = max(0, min(h - 1, int(top_s * inv_scale)))
+                right = max(0, min(w - 1, int(right_s * inv_scale)))
+                bottom = max(0, min(h - 1, int(bottom_s * inv_scale)))
+                left = max(0, min(w - 1, int(left_s * inv_scale)))
+                return top, right, bottom, left
+
+            if len(face_locations_small) > 1:
+                for box in face_locations_small:
+                    cached_overlays.append({
+                        "box": scale_box(box),
+                        "color": (0, 165, 255),
+                        "label": "Multiple Faces",
+                    })
+                push_multi_face_event(len(face_locations_small))
+                banner = "Multiple faces detected. One person at a time."
+                banner_until = now_ts + 2.0
+            elif len(face_locations_small) == 1:
+                top, right, bottom, left = scale_box(face_locations_small[0])
+                label = "Not Registered!"
+                color = (0, 64, 255)
+                confidence_pct = 0.0
+
+                face_encs = face_recognition.face_encodings(
+                    rgb_small,
+                    face_locations_small,
+                    model="small",
+                )
+
+                db_encoding_count = int(len(db_encodings)) if db_encodings is not None else 0
+                if model_status == "loading":
+                    label = "Initializing face index..."
+                    color = (0, 165, 255)
+                elif not face_encs:
+                    push_not_registered_event("face_not_encoded", 0.0)
+                elif model_status != "ready" or db_encoding_count == 0:
+                    reason = "model_not_ready" if model_status == "model_not_ready" else "no_registered_students"
+                    push_not_registered_event(reason, 0.0)
                 else:
-                    push_not_registered_event("no_face_index", 0.0)
+                    enc = face_encs[0]
+                    distances = face_recognition.face_distance(db_encodings, enc)
+                    if len(distances) > 0:
+                        best_idx = int(np.argmin(distances))
+                        best_distance = float(distances[best_idx])
+                        confidence_pct = calculate_match_confidence(best_distance)
+                        is_match = best_distance <= RECOGNITION_TOLERANCE and confidence_pct >= MIN_RECOGNITION_CONFIDENCE
 
+                        if is_match and best_idx < len(db_students):
+                            candidate = db_students[best_idx]
+                            label = candidate.get("name", "Verified")
+                            color = (46, 204, 113)
+                            verification = handle_verified_student(candidate, confidence_pct)
+                            if verification:
+                                banner = f"{candidate.get('name', '')}  |  {verification['display_message']}"
+                                banner_until = now_ts + 2.2
+                        else:
+                            push_not_registered_event("low_confidence", confidence_pct)
+                    else:
+                        push_not_registered_event("no_face_index", 0.0)
+
+                if label == "Not Registered!" and confidence_pct > 0:
+                    label = f"{label} ({confidence_pct:.1f}%)"
+                cached_overlays.append({
+                    "box": (top, right, bottom, left),
+                    "color": color,
+                    "label": label,
+                })
+            last_analysis_ts = now_ts
+
+        for overlay in cached_overlays:
+            top, right, bottom, left = overlay.get("box", (0, 0, 0, 0))
+            color = overlay.get("color", (0, 64, 255))
+            label = str(overlay.get("label") or "").strip()
             cv2.rectangle(frame, (left, top), (right, bottom), color, 2)
-            if label == "Not Registered!" and confidence_pct > 0:
-                label_text = f"{label} ({confidence_pct:.1f}%)"
-            else:
-                label_text = label
-            cv2.putText(frame, label_text, (left, max(22, top - 10)), cv2.FONT_HERSHEY_SIMPLEX, 0.62, color, 2)
+            if label:
+                cv2.putText(
+                    frame,
+                    label,
+                    (left, max(22, top - 10)),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.6,
+                    color,
+                    2,
+                )
 
         if time.time() < banner_until and banner:
             h, w = frame.shape[:2]
             cv2.rectangle(frame, (0, h - 46), (w, h), (16, 124, 85), -1)
             cv2.putText(frame, banner, (14, h - 16), cv2.FONT_HERSHEY_SIMPLEX, 0.72, (255, 255, 255), 2)
 
-        ret, buffer = cv2.imencode(".jpg", frame)
+        ret, buffer = cv2.imencode(".jpg", frame, jpeg_quality_params)
         if not ret:
             continue
 
@@ -1878,6 +3352,11 @@ def generate_frames():
             b"--frame\r\n"
             b"Content-Type: image/jpeg\r\n\r\n" + buffer.tobytes() + b"\r\n"
         )
+
+        elapsed = time.time() - frame_start
+        sleep_for = target_frame_interval - elapsed
+        if sleep_for > 0:
+            time.sleep(sleep_for)
 
     stop_scan_capture()
 
@@ -1916,10 +3395,8 @@ def compute_dashboard_data(args):
         "late": late_today,
     }
 
-    unread_alerts = alerts.count_documents({"is_read": False})
-    alert_docs = list(alerts.find().sort("created_at", -1).limit(25))
-    for a in alert_docs:
-        a["_id"] = str(a["_id"])
+    unread_alerts = alerts.count_documents(unread_notifications_query())
+    alert_docs = [normalize_notification_doc(doc) for doc in alerts.find().sort([("timestamp", -1), ("created_at", -1)]).limit(25)]
 
     users_list = list(users.find({}, {"password": 0, "password_hash": 0}).sort("username", 1))
     for u in users_list:
@@ -2034,16 +3511,42 @@ def home():
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
+    reset_notice = ""
+    if request.method == "GET" and request.args.get("reset") == "success":
+        reset_notice = "Password updated successfully. You can now sign in with your new password."
+
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
-        remember_me = (request.form.get("remember_me") or "").strip().lower() in {"on", "true", "1", "yes"}
+        remember_me = False
+        client_ip = _safe_client_ip()
 
         if not username or not password:
             return render_template(
                 "login.html",
                 current_year=datetime.now().year,
                 error="Username and password are required.",
+                success=reset_notice,
+                entered_username=username,
+                remember_me=remember_me,
+            )
+
+        lockout_seconds = get_login_lockout_seconds(username, client_ip)
+        if lockout_seconds > 0:
+            wait_minutes = max(1, (lockout_seconds + 59) // 60)
+            log_audit_event(
+                action="auth.login_blocked",
+                outcome="blocked",
+                severity="warn",
+                target_type="user",
+                target_id=username,
+                details={"reason": "lockout", "wait_minutes": wait_minutes},
+            )
+            return render_template(
+                "login.html",
+                current_year=datetime.now().year,
+                error=f"Too many failed login attempts. Try again in about {wait_minutes} minute(s).",
+                success=reset_notice,
                 entered_username=username,
                 remember_me=remember_me,
             )
@@ -2054,17 +3557,6 @@ def login():
             stored_hash = user.get("password_hash")
             if stored_hash:
                 password_ok = check_password_hash(stored_hash, password)
-            else:
-                legacy_plain = user.get("password")
-                if legacy_plain and legacy_plain == password:
-                    password_ok = True
-                    users.update_one(
-                        {"_id": user["_id"]},
-                        {
-                            "$set": {"password_hash": hash_password(password)},
-                            "$unset": {"password": ""},
-                        },
-                    )
 
             if password_ok:
                 role = user.get("role", "Limited Access")
@@ -2074,21 +3566,217 @@ def login():
                 session["role"] = role
                 session["theme"] = normalize_theme_value(user.get("theme"))
                 record_login(username, role)
+                clear_login_attempts(username, client_ip)
+                log_audit_event(
+                    action="auth.login_success",
+                    outcome="success",
+                    severity="info",
+                    target_type="user",
+                    target_id=username,
+                    details={"role": role},
+                )
                 return redirect(post_login_redirect(role))
 
+        register_failed_login_attempt(username, client_ip)
+        log_audit_event(
+            action="auth.login_failed",
+            outcome="failed",
+            severity="warn",
+            target_type="user",
+            target_id=username,
+        )
         return render_template(
             "login.html",
             current_year=datetime.now().year,
             error="Invalid credentials.",
+            success=reset_notice,
             entered_username=username,
             remember_me=remember_me,
         )
 
-    return render_template("login.html", current_year=datetime.now().year, entered_username="", remember_me=False)
+    return render_template(
+        "login.html",
+        current_year=datetime.now().year,
+        success=reset_notice,
+        entered_username="",
+        remember_me=False,
+    )
 
 
-@app.route("/logout")
+@app.route("/api/auth/forgot-password/request", methods=["POST"])
+def forgot_password_request_api():
+    payload = request.get_json(silent=True) or request.form.to_dict(flat=True)
+    email = normalize_email_value(payload.get("email", ""))
+
+    if not validate_email_format(email):
+        return jsonify({"status": "error", "message": "Enter a valid registered email address.", "field": "email"}), 400
+
+    generic_message = "Password reset link has been sent to your email."
+    client_ip = get_request_client_ip()
+    user = find_user_by_email(email)
+
+    preview_link = ""
+    allow_preview = PASSWORD_RESET_DEV_LINK_FALLBACK and os.getenv("FLASK_ENV", "production").strip().lower() != "production"
+    config_error = smtp_configuration_error()
+    if config_error and not allow_preview:
+        return jsonify({"status": "error", "message": config_error}), 503
+
+    if user and PASSWORD_RESET_RATE_LIMIT_ENABLED and password_reset_request_rate_limited(email, client_ip):
+        return jsonify({
+            "status": "error",
+            "message": "Too many password reset requests. Please try again later.",
+        }), 429
+
+    if user:
+        password_reset_tokens.update_many(
+            {"user_id": user["_id"], "used": False},
+            {"$set": {"used": True, "invalidatedAt": datetime.utcnow()}},
+        )
+
+        raw_token = secrets.token_urlsafe(32)
+        reset_link = build_password_reset_link(raw_token)
+        expires_at = datetime.utcnow() + timedelta(minutes=PASSWORD_RESET_TOKEN_TTL_MINUTES)
+        password_reset_tokens.insert_one({
+            "user_id": user["_id"],
+            "email": email,
+            "token_hash": hash_password_reset_token(raw_token),
+            "used": False,
+            "createdAt": datetime.utcnow(),
+            "expiresAt": expires_at,
+            "requestIp": client_ip,
+            "usedAt": None,
+        })
+
+        sent, send_error = send_password_reset_email(email, reset_link)
+        if allow_preview and not sent:
+            preview_link = reset_link
+        if not sent:
+            password_reset_tokens.update_one(
+                {"email": email, "token_hash": hash_password_reset_token(raw_token)},
+                {"$set": {"used": True, "usedAt": datetime.utcnow(), "invalidReason": "email_send_failed"}},
+            )
+            if not allow_preview:
+                return jsonify({
+                    "status": "error",
+                    "message": send_error or "Unable to send reset email right now. Please try again.",
+                }), 502
+
+    body = {"status": "ok", "message": generic_message}
+    if preview_link:
+        body["previewLink"] = preview_link
+        body["previewNote"] = "Development preview link (email service not configured)."
+    return jsonify(body)
+
+
+@app.route("/reset-password", methods=["GET", "POST"])
+def reset_password():
+    if request.method == "GET":
+        token = (request.args.get("token") or "").strip()
+        if not token:
+            return render_template(
+                "reset_password.html",
+                current_year=datetime.now().year,
+                token="",
+                error="This password reset link is invalid.",
+                success="",
+            )
+
+        record = get_password_reset_record(token)
+        if not record:
+            return render_template(
+                "reset_password.html",
+                current_year=datetime.now().year,
+                token="",
+                error="This password reset link is invalid or has expired.",
+                success="",
+            )
+
+        return render_template(
+            "reset_password.html",
+            current_year=datetime.now().year,
+            token=token,
+            error="",
+            success="",
+        )
+
+    token = (request.form.get("token") or "").strip()
+    new_password = request.form.get("new_password", "")
+    confirm_password = request.form.get("confirm_password", "")
+
+    record = get_password_reset_record(token)
+    if not record:
+        return render_template(
+            "reset_password.html",
+            current_year=datetime.now().year,
+            token="",
+            error="This password reset link is invalid or has expired.",
+            success="",
+        )
+
+    validation_message, validation_field = validate_password_reset_input(new_password, confirm_password)
+    if validation_message:
+        field_label = "New password" if validation_field == "newPassword" else "Password confirmation"
+        return render_template(
+            "reset_password.html",
+            current_year=datetime.now().year,
+            token=token,
+            error=f"{field_label}: {validation_message}",
+            success="",
+        )
+
+    user_doc = users.find_one({"_id": record.get("user_id")})
+    if not user_doc:
+        password_reset_tokens.update_one(
+            {"_id": record["_id"]},
+            {"$set": {"used": True, "usedAt": datetime.utcnow(), "invalidReason": "missing_user"}},
+        )
+        return render_template(
+            "reset_password.html",
+            current_year=datetime.now().year,
+            token="",
+            error="Unable to reset password for this account.",
+            success="",
+        )
+
+    stored_hash = user_doc.get("password_hash")
+    if stored_hash and check_password_hash(stored_hash, new_password):
+        return render_template(
+            "reset_password.html",
+            current_year=datetime.now().year,
+            token=token,
+            error="New password must be different from the current password.",
+            success="",
+        )
+
+    updated = now_iso()
+    users.update_one(
+        {"_id": user_doc["_id"]},
+        {
+            "$set": {
+                "password_hash": hash_password(new_password),
+                "updatedAt": updated,
+                "updated_at": updated,
+            },
+            "$unset": {"password": ""},
+        },
+    )
+    password_reset_tokens.update_one(
+        {"_id": record["_id"]},
+        {"$set": {"used": True, "usedAt": datetime.utcnow()}},
+    )
+    create_alert("info", f"Password reset completed for user '{user_doc.get('username', 'unknown')}'.", "security")
+    return redirect(url_for("login", reset="success"))
+
+
+@app.route("/logout", methods=["POST"])
 def logout():
+    log_audit_event(
+        action="auth.logout",
+        outcome="success",
+        severity="info",
+        target_type="user",
+        target_id=session.get("admin", ""),
+    )
     session.clear()
     stop_scan_capture()
     return redirect(url_for("login"))
@@ -2111,8 +3799,8 @@ def developers_page():
             "name": "CORDOVA, APRIL BRYAN C.",
             "role": "Full Stack Developer",
             "contribution": "Worked across frontend and backend modules, integrating core system workflows and feature delivery.",
-            "email": "aprilbryan.cordova@chs-gate.local",
-            "profile_photo": url_for("static", filename="developer_photos/real/cordova-april-bryan.png"),
+            "email": "aprilbryancordova@gmail.com",
+            "profile_photo": url_for("static", filename="developer_photos/real/cordova-april-bryan.jpg"),
             "fallback_photo": url_for("static", filename="developer_photos/dev-cordova.svg"),
             "links": [{"label": "Email", "url": "mailto:aprilbryan.cordova@chs-gate.local"}],
         },
@@ -2203,6 +3891,43 @@ def dashboard_stats_api():
         "total_male_students": total_male_students,
         "total_female_students": total_female_students,
     })
+
+
+@app.route("/api/system/health", methods=["GET"])
+@require_permission("dashboard", api=True)
+def system_health_api():
+    try:
+        return jsonify({"status": "ok", "health": build_system_health_snapshot()})
+    except Exception as exc:
+        return jsonify({"status": "error", "message": f"Failed to build system health snapshot: {exc}"}), 500
+
+
+@app.route("/api/audit/recent", methods=["GET"])
+@require_permission("users_manage", api=True)
+def audit_recent_api():
+    try:
+        limit_value = int(request.args.get("limit", "30"))
+    except (TypeError, ValueError):
+        limit_value = 30
+    limit_value = max(1, min(limit_value, 100))
+
+    docs = list(audit_logs.find().sort("createdAt", -1).limit(limit_value))
+    rows = []
+    for doc in docs:
+        rows.append({
+            "_id": str(doc.get("_id")),
+            "action": str(doc.get("action") or ""),
+            "outcome": str(doc.get("outcome") or ""),
+            "severity": str(doc.get("severity") or ""),
+            "target_type": str(doc.get("target_type") or ""),
+            "target_id": str(doc.get("target_id") or ""),
+            "actor": str((doc.get("actor") or {}).get("username") or ""),
+            "role": str((doc.get("actor") or {}).get("role") or ""),
+            "ip": str(doc.get("ip") or ""),
+            "created_at": str(doc.get("created_at") or ""),
+            "details": doc.get("details") or {},
+        })
+    return jsonify({"status": "ok", "rows": rows})
 
 
 @app.route("/api/profile", methods=["GET"])
@@ -2414,21 +4139,18 @@ def profile_password_update_api():
         }), 400
 
     stored_hash = user_doc.get("password_hash")
-    legacy_plain = user_doc.get("password")
-    current_ok = False
-    if stored_hash:
-        current_ok = check_password_hash(stored_hash, current_password)
-    elif legacy_plain and legacy_plain == current_password:
-        current_ok = True
+    if not stored_hash:
+        return jsonify({
+            "status": "error",
+            "message": "Password record is invalid for this account. Contact an administrator.",
+        }), 400
+    current_ok = check_password_hash(stored_hash, current_password)
 
     if not current_ok:
         return jsonify({"status": "error", "message": "Current password is incorrect.", "field": "currentPassword"}), 400
 
     if stored_hash and check_password_hash(stored_hash, new_password):
         return jsonify({"status": "error", "message": "New password must be different from the current password.", "field": "newPassword"}), 400
-    if legacy_plain and legacy_plain == new_password:
-        return jsonify({"status": "error", "message": "New password must be different from the current password.", "field": "newPassword"}), 400
-
     updated = now_iso()
     users.update_one(
         {"_id": user_doc["_id"]},
@@ -2724,7 +4446,7 @@ def api_otp_verify():
 # =====================================
 # SCANNING ROUTES
 # =====================================
-@app.route("/start_scan", methods=["POST", "GET"])
+@app.route("/start_scan", methods=["POST"])
 @require_permission("scan", api=True)
 def start_scan():
     requested_mode = None
@@ -2759,11 +4481,13 @@ def start_scan():
         model_status = scan_state.get("model_status", "idle")
         registered_faces = len(scan_state.get("known_encodings", []))
         session_mode = normalize_scan_session_mode(scan_state.get("session_mode", "auto"), default="auto")
+        face_index_loading = bool(scan_state.get("face_index_loading"))
     effective_session = resolve_gate_session(now_local())
     payload = {
         "status": "ok",
         "message": message,
         "model_status": model_status,
+        "face_index_loading": face_index_loading,
         "registered_faces": registered_faces,
         "sms_auth": sms_status,
         "scan_session_mode": session_mode,
@@ -2782,7 +4506,7 @@ def start_scan():
     return jsonify(payload)
 
 
-@app.route("/stop_scan", methods=["POST", "GET"])
+@app.route("/stop_scan", methods=["POST"])
 @require_permission("scan", api=True)
 def stop_scan():
     stop_scan_capture()
@@ -2806,11 +4530,17 @@ def scan_events():
         events = [e for e in scan_state["events"] if e["id"] > since]
         active = scan_state["active"]
         session_mode = normalize_scan_session_mode(scan_state.get("session_mode", "auto"), default="auto")
+        model_status = str(scan_state.get("model_status") or "idle")
+        face_index_loading = bool(scan_state.get("face_index_loading"))
+        registered_faces = len(scan_state.get("known_encodings", []))
     effective_session = resolve_gate_session(now_local())
     return jsonify({
         "events": events,
         "active": active,
         "scan_session_mode": session_mode,
+        "model_status": model_status,
+        "face_index_loading": face_index_loading,
+        "registered_faces": int(registered_faces),
         "session_mode_label": scan_session_mode_label(session_mode),
         "effective_session": {
             "session": effective_session.get("session", ""),
@@ -2855,42 +4585,105 @@ def api_scan_session_mode():
 
 
 # =====================================
-# ALERT ROUTES
+# NOTIFICATION ROUTES
 # =====================================
-@app.route("/alerts/mark-read", methods=["POST"])
-@require_permission("alerts_manage", api=True)
-def mark_alerts_read():
+def mark_notifications_read_in_db(object_ids=None, mark_all=False):
     global alert_revision
-    data = request.get_json(silent=True) or {}
-    if data.get("all"):
-        alerts.update_many({"is_read": False}, {"$set": {"is_read": True}})
+
+    update_payload = {
+        "$set": {
+            "status": "read",
+            "is_read": True,
+            "read_at": now_iso(),
+        }
+    }
+    modified = 0
+    if mark_all:
+        result = alerts.update_many(unread_notifications_query(), update_payload)
+        modified = int(result.modified_count or 0)
+    elif object_ids:
+        result = alerts.update_many(
+            {
+                "_id": {"$in": object_ids},
+                "$or": [
+                    {"status": {"$ne": "read"}},
+                    {"is_read": {"$ne": True}},
+                ],
+            },
+            update_payload,
+        )
+        modified = int(result.modified_count or 0)
+
+    if modified > 0:
         with alert_lock:
             alert_revision += 1
-        return jsonify({"status": "ok"})
+    return modified
+
+
+@app.route("/api/notifications", methods=["GET"])
+@require_permission("alerts_manage", api=True)
+def notifications_list_api():
+    limit = request.args.get("limit", 12)
+    try:
+        payload = notification_summary(limit=limit)
+    except Exception as exc:
+        return jsonify({"status": "error", "message": f"Failed to load notifications: {exc}"}), 500
+    return jsonify({"status": "ok", **payload})
+
+
+@app.route("/api/notifications/<notification_id>", methods=["GET"])
+@require_permission("alerts_manage", api=True)
+def notification_detail_api(notification_id):
+    try:
+        object_id = ObjectId(notification_id)
+    except Exception:
+        return jsonify({"status": "error", "message": "Notification not found."}), 404
+
+    doc = alerts.find_one({"_id": object_id})
+    if not doc:
+        return jsonify({"status": "error", "message": "Notification not found."}), 404
+    return jsonify({"status": "ok", "notification": normalize_notification_doc(doc)})
+
+
+@app.route("/api/notifications/mark-read", methods=["POST"])
+@require_permission("alerts_manage", api=True)
+def notifications_mark_read_api():
+    data = request.get_json(silent=True) or {}
+    if data.get("all"):
+        mark_notifications_read_in_db(mark_all=True)
+        return jsonify({"status": "ok", "unread": alerts.count_documents(unread_notifications_query())})
 
     ids = data.get("ids", [])
     object_ids = []
-    for i in ids:
+    for item in ids:
         try:
-            object_ids.append(ObjectId(i))
+            object_ids.append(ObjectId(str(item)))
         except Exception:
-            pass
+            continue
 
-    if object_ids:
-        alerts.update_many({"_id": {"$in": object_ids}}, {"$set": {"is_read": True}})
-        with alert_lock:
-            alert_revision += 1
-    return jsonify({"status": "ok"})
+    if not object_ids:
+        return jsonify({"status": "error", "message": "No valid notification IDs provided."}), 400
+
+    mark_notifications_read_in_db(object_ids=object_ids)
+    return jsonify({"status": "ok", "unread": alerts.count_documents(unread_notifications_query())})
+
+
+@app.route("/alerts/mark-read", methods=["POST"])
+@require_permission("alerts_manage", api=True)
+def mark_alerts_read():
+    return notifications_mark_read_api()
 
 
 @app.route("/alerts/unread-count")
+@app.route("/api/notifications/unread-count")
 @require_permission("alerts_manage", api=True)
 def unread_alert_count():
-    unread = alerts.count_documents({"is_read": False})
+    unread = alerts.count_documents(unread_notifications_query())
     return jsonify({"unread": unread})
 
 
 @app.route("/alerts/stream")
+@app.route("/api/notifications/stream")
 @require_permission("alerts_manage", api=True)
 def alerts_stream():
     def generate():
@@ -2901,7 +4694,7 @@ def alerts_stream():
                     current_rev = alert_revision
 
                 if current_rev != last_seen:
-                    unread = alerts.count_documents({"is_read": False})
+                    unread = alerts.count_documents(unread_notifications_query())
                     payload = json.dumps({"revision": current_rev, "unread": unread})
                     yield f"event: alerts\ndata: {payload}\n\n"
                     last_seen = current_rev
@@ -2958,15 +4751,60 @@ def data_changes_stream():
 def add_user():
     username = request.form.get("username", "").strip()
     password = request.form.get("password", "")
+    email = normalize_email_value(request.form.get("email", ""))
     role = request.form.get("role", "Limited Access")
     if role not in ROLE_PERMISSIONS:
         role = "Limited Access"
 
-    if not username or not password:
+    if not username or not password or not email:
+        create_alert("warning", "User creation requires username, password, and email.", "system")
+        log_audit_event(
+            action="admin.user_create",
+            outcome="failed",
+            severity="warn",
+            target_type="user",
+            target_id=username,
+            details={"reason": "missing_fields"},
+        )
+        return redirect(url_for("dashboard"))
+
+    if not validate_email_format(email):
+        create_alert("warning", f"User creation skipped: invalid email format '{email}'.", "system")
+        log_audit_event(
+            action="admin.user_create",
+            outcome="failed",
+            severity="warn",
+            target_type="user",
+            target_id=username,
+            details={"reason": "invalid_email"},
+        )
         return redirect(url_for("dashboard"))
 
     if users.count_documents({"username": username}) > 0:
         create_alert("warning", f"User creation skipped: {username} already exists.", "system")
+        log_audit_event(
+            action="admin.user_create",
+            outcome="failed",
+            severity="warn",
+            target_type="user",
+            target_id=username,
+            details={"reason": "username_exists"},
+        )
+        return redirect(url_for("dashboard"))
+
+    duplicate_email_user = users.find_one({
+        "email": {"$regex": f"^{re.escape(email)}$", "$options": "i"},
+    })
+    if duplicate_email_user:
+        create_alert("warning", f"User creation skipped: email '{email}' is already in use.", "system")
+        log_audit_event(
+            action="admin.user_create",
+            outcome="failed",
+            severity="warn",
+            target_type="user",
+            target_id=username,
+            details={"reason": "email_exists"},
+        )
         return redirect(url_for("dashboard"))
 
     created = now_iso()
@@ -2975,7 +4813,7 @@ def add_user():
         "password_hash": hash_password(password),
         "role": role,
         "fullName": username,
-        "email": f"{username}@chs.local",
+        "email": email,
         "phone": "",
         "address": "",
         "bio": "",
@@ -2986,7 +4824,15 @@ def add_user():
         "updated_at": created,
         "updatedAt": created,
     })
-    create_alert("info", f"New user '{username}' added with role {role}.", "system")
+    create_alert("info", f"New user '{username}' added with role {role} and email {email}.", "system")
+    log_audit_event(
+        action="admin.user_create",
+        outcome="success",
+        severity="info",
+        target_type="user",
+        target_id=username,
+        details={"role": role, "email": email},
+    )
     return redirect(url_for("dashboard"))
 
 
@@ -3357,20 +5203,7 @@ def refresh_scan_face_index_if_active():
 
     if not is_active:
         return
-
-    try:
-        db_encodings, db_students = load_face_index_from_db()
-        model_status = "ready" if db_encodings else "no_registered_students"
-    except Exception as exc:
-        print(f"[WARNING] Could not refresh scan face index: {exc}")
-        db_encodings = []
-        db_students = []
-        model_status = "model_not_ready"
-
-    with scan_lock:
-        scan_state["known_encodings"] = db_encodings
-        scan_state["known_students"] = db_students
-        scan_state["model_status"] = model_status
+    refresh_face_index_async()
 
 
 def ensure_student_lrn_defaults():
@@ -3909,7 +5742,7 @@ def api_student_face_update(id):
     return save_face_registration(id, is_update=True)
 
 
-@app.route("/students/delete/<id>", methods=["POST", "GET"])
+@app.route("/students/delete/<id>", methods=["POST"])
 @require_permission("students_write")
 def delete_student(id):
     try:
@@ -4143,10 +5976,194 @@ def gate_logs_latest():
     return jsonify({"status": "ok", "logs": payload})
 
 
+@app.route("/api/gate-logs/corrections", methods=["GET", "POST"])
+@require_permission("logs", api=True)
+def gate_logs_corrections_api():
+    if request.method == "GET":
+        status_filter = (request.args.get("status", "pending") or "").strip().lower()
+        mine_only = (request.args.get("mine", "") or "").strip().lower() in {"1", "true", "yes"}
+        try:
+            limit_value = int(request.args.get("limit", "20"))
+        except (TypeError, ValueError):
+            limit_value = 20
+        limit_value = max(1, min(limit_value, 100))
+
+        query = {}
+        if status_filter and status_filter != "all":
+            query["status"] = status_filter
+
+        if current_role() != "Full Admin":
+            query["requested_by"] = session.get("admin", "")
+        elif mine_only:
+            query["requested_by"] = session.get("admin", "")
+
+        docs = list(attendance_corrections.find(query).sort("requestedAt", -1).limit(limit_value))
+        rows = [serialize_attendance_correction(doc) for doc in docs]
+        pending_count = attendance_corrections.count_documents({"status": "pending"})
+        return jsonify({"status": "ok", "rows": rows, "pending_count": pending_count})
+
+    payload = request.get_json(silent=True) or {}
+    log_id = str(payload.get("log_id") or "").strip()
+    requested_status = str(payload.get("requested_status") or "").strip().title()
+    reason = str(payload.get("reason") or "").strip()
+
+    if not log_id:
+        return jsonify({"status": "error", "message": "Gate log ID is required."}), 400
+    if requested_status not in CORRECTION_ALLOWED_STATUSES:
+        return jsonify({"status": "error", "message": "Invalid correction status requested."}), 400
+    if len(reason) < 8:
+        return jsonify({"status": "error", "message": "Please provide a clear reason (at least 8 characters)."}), 400
+
+    try:
+        log_oid = ObjectId(log_id)
+    except Exception:
+        return jsonify({"status": "error", "message": "Invalid gate log ID."}), 400
+
+    row = attendance_logs.find_one({"_id": log_oid})
+    if not row:
+        return jsonify({"status": "error", "message": "Gate log entry not found."}), 404
+
+    if str(row.get("status") or "").title() == requested_status:
+        return jsonify({"status": "error", "message": "Requested status matches current status."}), 400
+
+    existing_pending = attendance_corrections.find_one({
+        "attendance_log_id": str(log_oid),
+        "status": "pending",
+    })
+    if existing_pending:
+        return jsonify({"status": "error", "message": "A pending correction already exists for this log."}), 409
+
+    now_utc = _now_utc()
+    correction_doc = {
+        "attendance_log_id": str(log_oid),
+        "student_id": str(row.get("student_id") or ""),
+        "student_name": str(row.get("student_name") or ""),
+        "log_timestamp": str(row.get("timestamp") or ""),
+        "current_status": str(row.get("status") or ""),
+        "requested_status": requested_status,
+        "reason": reason[:500],
+        "status": "pending",
+        "requested_by": session.get("admin", ""),
+        "requested_by_role": current_role(),
+        "requested_at": now_iso(),
+        "requestedAt": now_utc,
+        "reviewed_by": "",
+        "reviewed_at": "",
+        "review_note": "",
+        "reviewedAt": None,
+        "applied": False,
+    }
+    result = attendance_corrections.insert_one(correction_doc)
+    signal_data_change("gate_logs")
+    create_alert(
+        "info",
+        f"Correction requested for {correction_doc['student_name'] or correction_doc['student_id']}.",
+        "attendance",
+        {"attendance_log_id": str(log_oid), "requested_status": requested_status},
+    )
+    log_audit_event(
+        action="gate_log.correction_requested",
+        outcome="success",
+        severity="info",
+        target_type="attendance_log",
+        target_id=str(log_oid),
+        details={"requested_status": requested_status},
+    )
+    return jsonify({
+        "status": "ok",
+        "message": "Correction request submitted.",
+        "correction": serialize_attendance_correction({**correction_doc, "_id": result.inserted_id}),
+    })
+
+
+@app.route("/api/gate-logs/corrections/<correction_id>/review", methods=["POST"])
+@require_permission("logs", api=True)
+def gate_logs_correction_review_api(correction_id):
+    if current_role() != "Full Admin":
+        return jsonify({"status": "error", "message": "Only Full Admin can review corrections."}), 403
+
+    try:
+        correction_oid = ObjectId(correction_id)
+    except Exception:
+        return jsonify({"status": "error", "message": "Invalid correction ID."}), 400
+
+    payload = request.get_json(silent=True) or {}
+    decision = str(payload.get("decision") or "").strip().lower()
+    review_note = str(payload.get("review_note") or "").strip()
+    if decision not in {"approve", "reject"}:
+        return jsonify({"status": "error", "message": "Decision must be approve or reject."}), 400
+
+    correction = attendance_corrections.find_one({"_id": correction_oid})
+    if not correction:
+        return jsonify({"status": "error", "message": "Correction request not found."}), 404
+    if str(correction.get("status") or "").lower() != "pending":
+        return jsonify({"status": "error", "message": "Correction request is already reviewed."}), 409
+
+    now_utc = _now_utc()
+    update_doc = {
+        "status": "approved" if decision == "approve" else "rejected",
+        "reviewed_by": session.get("admin", ""),
+        "reviewed_at": now_iso(),
+        "review_note": review_note[:500],
+        "reviewedAt": now_utc,
+    }
+
+    applied = False
+    attendance_log_id = str(correction.get("attendance_log_id") or "")
+    if decision == "approve":
+        try:
+            log_oid = ObjectId(attendance_log_id)
+        except Exception:
+            return jsonify({"status": "error", "message": "Original gate log ID is invalid."}), 400
+
+        update_result = attendance_logs.update_one(
+            {"_id": log_oid},
+            {
+                "$set": {
+                    "status": correction.get("requested_status"),
+                    "corrected": True,
+                    "corrected_at": now_iso(),
+                    "corrected_by": session.get("admin", ""),
+                    "correction_note": review_note[:500],
+                }
+            },
+        )
+        if update_result.matched_count == 0:
+            return jsonify({"status": "error", "message": "Original gate log record was not found."}), 404
+        applied = True
+        signal_data_change("gate_logs")
+
+    update_doc["applied"] = applied
+    attendance_corrections.update_one({"_id": correction_oid}, {"$set": update_doc})
+    create_alert(
+        "info",
+        f"Correction {decision}d for {correction.get('student_name') or correction.get('student_id')}.",
+        "attendance",
+        {"attendance_log_id": attendance_log_id, "decision": decision},
+    )
+    log_audit_event(
+        action="gate_log.correction_reviewed",
+        outcome="success",
+        severity="info",
+        target_type="attendance_correction",
+        target_id=str(correction_oid),
+        details={"decision": decision, "attendance_log_id": attendance_log_id},
+    )
+    return jsonify({"status": "ok", "message": f"Correction {decision}d successfully.", "applied": applied})
+
+
 @app.route("/gate-logs/delete/<id>", methods=["POST", "DELETE"])
 @require_permission("logs", api=True)
 def gate_logs_delete(id):
     if current_role() != "Full Admin":
+        log_audit_event(
+            action="gate_log.delete",
+            outcome="blocked",
+            severity="warn",
+            target_type="attendance_log",
+            target_id=id,
+            details={"reason": "insufficient_role"},
+        )
         return jsonify({"status": "error", "message": "Only Full Admin can delete gate logs."}), 403
 
     try:
@@ -4154,12 +6171,27 @@ def gate_logs_delete(id):
         if result.deleted_count == 0:
             return jsonify({"status": "error", "message": "Gate log not found."}), 404
         signal_data_change("gate_logs")
+        log_audit_event(
+            action="gate_log.delete",
+            outcome="success",
+            severity="info",
+            target_type="attendance_log",
+            target_id=id,
+        )
         return jsonify({"status": "ok", "message": "Gate log deleted."})
-    except Exception:
+    except Exception as exc:
+        log_audit_event(
+            action="gate_log.delete",
+            outcome="failed",
+            severity="warn",
+            target_type="attendance_log",
+            target_id=id,
+            details={"error": str(exc)},
+        )
         return jsonify({"status": "error", "message": "Failed to delete gate log."}), 400
 
 
-@app.route("/simulate-gate/<student_id>")
+@app.route("/simulate-gate/<student_id>", methods=["POST"])
 @require_permission("scan", api=True)
 def simulate_gate(student_id):
     student = students.find_one({"student_id": student_id})
@@ -4331,6 +6363,23 @@ def sms_logs_resend(id):
             category="sms",
             meta={"student_id": original.get("student_id", ""), "error": sms_error},
         )
+        log_audit_event(
+            action="sms.resend",
+            outcome="failed",
+            severity="warn",
+            target_type="sms_log",
+            target_id=id,
+            details={"error": sms_error},
+        )
+    else:
+        log_audit_event(
+            action="sms.resend",
+            outcome="success",
+            severity="info",
+            target_type="sms_log",
+            target_id=id,
+            details={"provider_message_id": sms_sid},
+        )
 
     return jsonify({
         "status": "ok",
@@ -4442,6 +6491,395 @@ def analytics_collections():
     }
 
 
+@app.route("/api/analytics/scheduled-reports", methods=["GET", "POST"])
+@require_permission("analytics", api=True)
+def analytics_scheduled_reports_api():
+    if request.method == "GET":
+        try:
+            limit = max(1, min(int(request.args.get("limit", "12")), SCHEDULED_REPORT_MAX_RESULTS))
+        except Exception:
+            limit = 12
+        rows = list(scheduled_reports.find().sort("updated_at", -1).limit(limit))
+        run_rows = list(scheduled_report_runs.find().sort("started_at", -1).limit(15))
+        return api_success({
+            "reports": [serialize_scheduled_report(row) for row in rows],
+            "runs": [serialize_scheduled_report_run(row) for row in run_rows],
+        })
+
+    if current_role() != "Full Admin":
+        return api_error("Only Full Admin can manage scheduled reports.", 403)
+
+    payload = parse_json_payload()
+    name = normalize_text_value(payload.get("name"))[:80]
+    frequency = str(payload.get("frequency") or "weekly").strip().lower()
+    send_time = parse_hhmm(payload.get("send_time") or SCHEDULED_REPORT_DEFAULT_SEND_TIME)
+    recipients = parse_email_list(payload.get("recipients") or [])
+    enabled = parse_bool_value(payload.get("enabled"), default=True)
+    filters = payload.get("filters") if isinstance(payload.get("filters"), dict) else {}
+    filters_grade = normalize_grade_level(filters.get("grade") or "")
+    filters_section = normalize_section_value(filters.get("section") or "")
+
+    if not name:
+        return api_error("Report name is required.", 400, "name")
+    if frequency not in SCHEDULED_REPORT_ALLOWED_FREQUENCIES:
+        return api_error("Invalid frequency. Allowed values: daily, weekly, monthly.", 400, "frequency")
+    if not recipients:
+        return api_error("At least one valid recipient email is required.", 400, "recipients")
+
+    now_dt = now_local()
+    doc = {
+        "name": name,
+        "frequency": frequency,
+        "send_time": send_time,
+        "recipients": recipients,
+        "enabled": enabled,
+        "filters": {"grade": filters_grade or "", "section": filters_section or ""},
+        "next_run_at": compute_next_report_run_at(frequency, send_time, now_dt=now_dt),
+        "last_run_at": None,
+        "last_status": "",
+        "last_error": "",
+        "created_by": session.get("admin", "system"),
+        "updated_by": session.get("admin", "system"),
+        "created_at": now_dt,
+        "updated_at": now_dt,
+    }
+
+    try:
+        inserted = scheduled_reports.insert_one(doc)
+    except DuplicateKeyError:
+        return api_error("A scheduled report with this name already exists.", 409, "name")
+    except Exception as exc:
+        return api_error(f"Failed to create scheduled report: {exc}", 500)
+
+    created = scheduled_reports.find_one({"_id": inserted.inserted_id})
+    log_audit_event(
+        action="analytics.scheduled_report_create",
+        outcome="success",
+        severity="info",
+        target_type="scheduled_report",
+        target_id=str(inserted.inserted_id),
+        details={"name": name, "frequency": frequency, "enabled": enabled},
+    )
+    return api_success({"report": serialize_scheduled_report(created)}, status_code=201)
+
+
+@app.route("/api/analytics/scheduled-reports/<report_id>", methods=["PUT", "DELETE"])
+@require_permission("analytics", api=True)
+def analytics_scheduled_report_detail_api(report_id):
+    if current_role() != "Full Admin":
+        return api_error("Only Full Admin can manage scheduled reports.", 403)
+    try:
+        report_oid = ObjectId(report_id)
+    except Exception:
+        return api_error("Invalid scheduled report ID.", 400)
+
+    existing = scheduled_reports.find_one({"_id": report_oid})
+    if not existing:
+        return api_error("Scheduled report not found.", 404)
+
+    if request.method == "DELETE":
+        scheduled_reports.delete_one({"_id": report_oid})
+        scheduled_report_runs.delete_many({"report_id": report_id})
+        log_audit_event(
+            action="analytics.scheduled_report_delete",
+            outcome="success",
+            severity="warn",
+            target_type="scheduled_report",
+            target_id=report_id,
+            details={"name": existing.get("name", "")},
+        )
+        return api_success({"message": "Scheduled report deleted."})
+
+    payload = parse_json_payload()
+    update_doc = {}
+
+    if "name" in payload:
+        name = normalize_text_value(payload.get("name"))[:80]
+        if not name:
+            return api_error("Report name is required.", 400, "name")
+        update_doc["name"] = name
+
+    if "frequency" in payload:
+        frequency = str(payload.get("frequency") or "").strip().lower()
+        if frequency not in SCHEDULED_REPORT_ALLOWED_FREQUENCIES:
+            return api_error("Invalid frequency. Allowed values: daily, weekly, monthly.", 400, "frequency")
+        update_doc["frequency"] = frequency
+
+    if "send_time" in payload:
+        update_doc["send_time"] = parse_hhmm(payload.get("send_time") or SCHEDULED_REPORT_DEFAULT_SEND_TIME)
+
+    if "recipients" in payload:
+        recipients = parse_email_list(payload.get("recipients") or [])
+        if not recipients:
+            return api_error("At least one valid recipient email is required.", 400, "recipients")
+        update_doc["recipients"] = recipients
+
+    if "enabled" in payload:
+        update_doc["enabled"] = parse_bool_value(payload.get("enabled"), default=True)
+
+    if "filters" in payload and isinstance(payload.get("filters"), dict):
+        filters = payload.get("filters") or {}
+        update_doc["filters"] = {
+            "grade": normalize_grade_level(filters.get("grade") or "") or "",
+            "section": normalize_section_value(filters.get("section") or "") or "",
+        }
+
+    merged_frequency = update_doc.get("frequency", existing.get("frequency") or "weekly")
+    merged_send_time = update_doc.get("send_time", existing.get("send_time") or SCHEDULED_REPORT_DEFAULT_SEND_TIME)
+    update_doc["next_run_at"] = compute_next_report_run_at(merged_frequency, merged_send_time, now_dt=now_local())
+    update_doc["updated_at"] = now_local()
+    update_doc["updated_by"] = session.get("admin", "system")
+
+    try:
+        scheduled_reports.update_one({"_id": report_oid}, {"$set": update_doc})
+    except DuplicateKeyError:
+        return api_error("A scheduled report with this name already exists.", 409, "name")
+    except Exception as exc:
+        return api_error(f"Failed to update scheduled report: {exc}", 500)
+
+    updated = scheduled_reports.find_one({"_id": report_oid})
+    log_audit_event(
+        action="analytics.scheduled_report_update",
+        outcome="success",
+        severity="info",
+        target_type="scheduled_report",
+        target_id=report_id,
+        details={"fields": sorted(list(update_doc.keys()))},
+    )
+    return api_success({"report": serialize_scheduled_report(updated)})
+
+
+@app.route("/api/analytics/scheduled-reports/<report_id>/run-now", methods=["POST"])
+@require_permission("analytics", api=True)
+def analytics_scheduled_report_run_now_api(report_id):
+    if current_role() != "Full Admin":
+        return api_error("Only Full Admin can run scheduled reports.", 403)
+    try:
+        report_oid = ObjectId(report_id)
+    except Exception:
+        return api_error("Invalid scheduled report ID.", 400)
+
+    report_doc = scheduled_reports.find_one({"_id": report_oid})
+    if not report_doc:
+        return api_error("Scheduled report not found.", 404)
+    result = run_single_scheduled_report(report_doc, trigger="manual")
+    if result.get("status") != "ok":
+        return api_error(result.get("message") or "Failed to run report.", 500)
+    return api_success(result)
+
+
+@app.route("/api/analytics/anomaly-rules", methods=["GET", "POST"])
+@require_permission("analytics", api=True)
+def analytics_anomaly_rules_api():
+    if request.method == "GET":
+        try:
+            limit = max(1, min(int(request.args.get("limit", "20")), SCHEDULED_REPORT_MAX_RESULTS))
+        except Exception:
+            limit = 20
+        rows = list(anomaly_rules.find().sort("updated_at", -1).limit(limit))
+        events = list(anomaly_events.find().sort("triggered_at", -1).limit(20))
+        return api_success({
+            "rules": [serialize_anomaly_rule(row) for row in rows],
+            "events": [serialize_anomaly_event(row) for row in events],
+        })
+
+    if current_role() != "Full Admin":
+        return api_error("Only Full Admin can manage anomaly rules.", 403)
+
+    payload = parse_json_payload()
+    name = normalize_text_value(payload.get("name"))[:80]
+    metric = str(payload.get("metric") or "").strip().lower()
+    operator_value = str(payload.get("operator") or "").strip().lower()
+    try:
+        threshold = float(payload.get("threshold", 0))
+    except Exception:
+        return api_error("Threshold must be a numeric value.", 400, "threshold")
+    try:
+        window_days = int(payload.get("window_days", 1))
+    except Exception:
+        window_days = 1
+    window_days = max(1, min(window_days, 90))
+    severity = str(payload.get("severity") or "warn").strip().lower()
+    cooldown_minutes = max(5, min(int(payload.get("cooldown_minutes") or ANOMALY_DEFAULT_COOLDOWN_MINUTES), 1440))
+    enabled = parse_bool_value(payload.get("enabled"), default=True)
+    notify_emails = parse_email_list(payload.get("notify_emails") or [])
+    filters = payload.get("filters") if isinstance(payload.get("filters"), dict) else {}
+    filters_grade = normalize_grade_level(filters.get("grade") or "")
+    filters_section = normalize_section_value(filters.get("section") or "")
+
+    if not name:
+        return api_error("Rule name is required.", 400, "name")
+    if metric not in ANOMALY_ALLOWED_METRICS:
+        return api_error("Invalid metric.", 400, "metric")
+    if operator_value not in ANOMALY_ALLOWED_OPERATORS:
+        return api_error("Invalid operator.", 400, "operator")
+    if severity not in ANOMALY_ALLOWED_SEVERITIES:
+        return api_error("Invalid severity. Allowed values: info, warn, high.", 400, "severity")
+
+    now_dt = now_local()
+    doc = {
+        "name": name,
+        "metric": metric,
+        "operator": operator_value,
+        "threshold": threshold,
+        "window_days": window_days,
+        "severity": severity,
+        "cooldown_minutes": cooldown_minutes,
+        "enabled": enabled,
+        "notify_emails": notify_emails,
+        "filters": {"grade": filters_grade or "", "section": filters_section or ""},
+        "last_evaluated_at": None,
+        "last_triggered_at": None,
+        "last_value": 0,
+        "last_result": "",
+        "created_by": session.get("admin", "system"),
+        "updated_by": session.get("admin", "system"),
+        "created_at": now_dt,
+        "updated_at": now_dt,
+    }
+    try:
+        inserted = anomaly_rules.insert_one(doc)
+    except DuplicateKeyError:
+        return api_error("An anomaly rule with this name already exists.", 409, "name")
+    except Exception as exc:
+        return api_error(f"Failed to create anomaly rule: {exc}", 500)
+
+    created = anomaly_rules.find_one({"_id": inserted.inserted_id})
+    log_audit_event(
+        action="analytics.anomaly_rule_create",
+        outcome="success",
+        severity="info",
+        target_type="anomaly_rule",
+        target_id=str(inserted.inserted_id),
+        details={"metric": metric, "operator": operator_value, "threshold": threshold},
+    )
+    return api_success({"rule": serialize_anomaly_rule(created)}, status_code=201)
+
+
+@app.route("/api/analytics/anomaly-rules/<rule_id>", methods=["PUT", "DELETE"])
+@require_permission("analytics", api=True)
+def analytics_anomaly_rule_detail_api(rule_id):
+    if current_role() != "Full Admin":
+        return api_error("Only Full Admin can manage anomaly rules.", 403)
+    try:
+        rule_oid = ObjectId(rule_id)
+    except Exception:
+        return api_error("Invalid anomaly rule ID.", 400)
+
+    existing = anomaly_rules.find_one({"_id": rule_oid})
+    if not existing:
+        return api_error("Anomaly rule not found.", 404)
+
+    if request.method == "DELETE":
+        anomaly_rules.delete_one({"_id": rule_oid})
+        anomaly_events.delete_many({"rule_id": rule_id})
+        log_audit_event(
+            action="analytics.anomaly_rule_delete",
+            outcome="success",
+            severity="warn",
+            target_type="anomaly_rule",
+            target_id=rule_id,
+            details={"name": existing.get("name", "")},
+        )
+        return api_success({"message": "Anomaly rule deleted."})
+
+    payload = parse_json_payload()
+    update_doc = {}
+
+    if "name" in payload:
+        name = normalize_text_value(payload.get("name"))[:80]
+        if not name:
+            return api_error("Rule name is required.", 400, "name")
+        update_doc["name"] = name
+    if "metric" in payload:
+        metric = str(payload.get("metric") or "").strip().lower()
+        if metric not in ANOMALY_ALLOWED_METRICS:
+            return api_error("Invalid metric.", 400, "metric")
+        update_doc["metric"] = metric
+    if "operator" in payload:
+        operator_value = str(payload.get("operator") or "").strip().lower()
+        if operator_value not in ANOMALY_ALLOWED_OPERATORS:
+            return api_error("Invalid operator.", 400, "operator")
+        update_doc["operator"] = operator_value
+    if "threshold" in payload:
+        try:
+            update_doc["threshold"] = float(payload.get("threshold"))
+        except Exception:
+            return api_error("Threshold must be a numeric value.", 400, "threshold")
+    if "window_days" in payload:
+        try:
+            update_doc["window_days"] = max(1, min(int(payload.get("window_days")), 90))
+        except Exception:
+            return api_error("Window days must be an integer value.", 400, "window_days")
+    if "severity" in payload:
+        severity = str(payload.get("severity") or "").strip().lower()
+        if severity not in ANOMALY_ALLOWED_SEVERITIES:
+            return api_error("Invalid severity. Allowed values: info, warn, high.", 400, "severity")
+        update_doc["severity"] = severity
+    if "cooldown_minutes" in payload:
+        try:
+            update_doc["cooldown_minutes"] = max(5, min(int(payload.get("cooldown_minutes")), 1440))
+        except Exception:
+            return api_error("Cooldown minutes must be an integer value.", 400, "cooldown_minutes")
+    if "enabled" in payload:
+        update_doc["enabled"] = parse_bool_value(payload.get("enabled"), default=True)
+    if "notify_emails" in payload:
+        update_doc["notify_emails"] = parse_email_list(payload.get("notify_emails") or [])
+    if "filters" in payload and isinstance(payload.get("filters"), dict):
+        filters = payload.get("filters") or {}
+        update_doc["filters"] = {
+            "grade": normalize_grade_level(filters.get("grade") or "") or "",
+            "section": normalize_section_value(filters.get("section") or "") or "",
+        }
+
+    update_doc["updated_at"] = now_local()
+    update_doc["updated_by"] = session.get("admin", "system")
+    try:
+        anomaly_rules.update_one({"_id": rule_oid}, {"$set": update_doc})
+    except DuplicateKeyError:
+        return api_error("An anomaly rule with this name already exists.", 409, "name")
+    except Exception as exc:
+        return api_error(f"Failed to update anomaly rule: {exc}", 500)
+
+    updated = anomaly_rules.find_one({"_id": rule_oid})
+    log_audit_event(
+        action="analytics.anomaly_rule_update",
+        outcome="success",
+        severity="info",
+        target_type="anomaly_rule",
+        target_id=rule_id,
+        details={"fields": sorted(list(update_doc.keys()))},
+    )
+    return api_success({"rule": serialize_anomaly_rule(updated)})
+
+
+@app.route("/api/analytics/anomaly-rules/evaluate", methods=["POST"])
+@require_permission("analytics", api=True)
+def analytics_anomaly_rules_evaluate_api():
+    if current_role() != "Full Admin":
+        return api_error("Only Full Admin can evaluate anomaly rules.", 403)
+    result = evaluate_all_anomaly_rules(trigger="manual", max_rules=100)
+    return api_success(result)
+
+
+@app.route("/api/analytics/anomaly-rules/<rule_id>/evaluate", methods=["POST"])
+@require_permission("analytics", api=True)
+def analytics_anomaly_rule_evaluate_api(rule_id):
+    if current_role() != "Full Admin":
+        return api_error("Only Full Admin can evaluate anomaly rules.", 403)
+    try:
+        rule_oid = ObjectId(rule_id)
+    except Exception:
+        return api_error("Invalid anomaly rule ID.", 400)
+    rule_doc = anomaly_rules.find_one({"_id": rule_oid})
+    if not rule_doc:
+        return api_error("Anomaly rule not found.", 404)
+    result = evaluate_anomaly_rule(rule_doc, trigger="manual")
+    if result.get("status") != "ok":
+        return api_error(result.get("message") or "Failed to evaluate rule.", 500)
+    return api_success(result)
+
+
 @app.route("/api/analytics/ai/insights", methods=["GET"])
 @require_permission("analytics", api=True)
 def api_analytics_ai_insights():
@@ -4477,6 +6915,14 @@ def api_analytics_ai_risk():
         limit_value = int(request.args.get("limit", "20"))
     except (TypeError, ValueError):
         limit_value = 20
+    try:
+        page_value = int(request.args.get("page", "1"))
+    except (TypeError, ValueError):
+        page_value = 1
+    try:
+        per_page_value = int(request.args.get("per_page", str(limit_value)))
+    except (TypeError, ValueError):
+        per_page_value = limit_value
 
     if target_value not in SUPPORTED_RISK_TARGETS:
         return api_error("Invalid target. Allowed values: next_school_day.", 400, "target")
@@ -4486,6 +6932,8 @@ def api_analytics_ai_risk():
             analytics_collections(),
             target=target_value,
             limit=limit_value,
+            page=page_value,
+            per_page=per_page_value,
             grade=grade_value,
             section=section_value,
         )
@@ -4585,7 +7033,7 @@ def api_analytics_ai_actions():
 # =====================================
 # TEST SMS
 # =====================================
-@app.route("/test_sms")
+@app.route("/test_sms", methods=["POST"])
 @require_permission("users_manage", api=True)
 def test_sms():
     verified_recipient = os.getenv("TEST_SMS_RECIPIENT") or os.getenv("VERIFIED_RECIPIENT")

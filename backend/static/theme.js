@@ -367,7 +367,7 @@
     confirmBtn?.addEventListener("click", () => {
       const href = logoutPendingHref || "/logout";
       closeLogoutModal();
-      window.location.assign(href);
+      submitLogout(href);
     });
 
     modal.addEventListener("click", (event) => {
@@ -404,6 +404,26 @@
     modal.classList.remove("flex");
     modal.classList.add("hidden");
     logoutPendingHref = "/logout";
+  }
+
+  function submitLogout(href) {
+    const targetHref = isLogoutHref(href) ? "/logout" : "/logout";
+    const form = document.createElement("form");
+    form.method = "POST";
+    form.action = targetHref;
+
+    const csrfToken = window.AppSecurity?.getCsrfToken?.() || "";
+    if (csrfToken) {
+      const csrfInput = document.createElement("input");
+      csrfInput.type = "hidden";
+      csrfInput.name = "csrf_token";
+      csrfInput.value = csrfToken;
+      form.appendChild(csrfInput);
+    }
+
+    form.style.display = "none";
+    document.body.appendChild(form);
+    form.submit();
   }
 
   function bindLogoutLinks(root = document) {

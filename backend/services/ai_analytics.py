@@ -300,7 +300,15 @@ def _resolve_meta_from_row(row, students_by_id):
     }
 
 
-def _collect_attendance(attendance_col, start_date, end_date, students_by_id, grade_filter="", section_filter=""):
+def _collect_attendance(
+    attendance_col,
+    start_date,
+    end_date,
+    students_by_id,
+    grade_filter="",
+    section_filter="",
+    student_ids=None,
+):
     start_str = start_date.isoformat()
     end_str = end_date.isoformat()
     ts_start = f"{start_str}T00:00:00"
@@ -312,6 +320,10 @@ def _collect_attendance(attendance_col, start_date, end_date, students_by_id, gr
             {"timestamp": {"$gte": ts_start, "$lte": ts_end}},
         ]
     }
+    if student_ids:
+        safe_ids = [_safe_strip(value) for value in student_ids if _safe_strip(value)]
+        if safe_ids:
+            query["student_id"] = {"$in": safe_ids}
     projection = {
         "student_id": 1,
         "student_name": 1,
@@ -782,21 +794,80 @@ def get_ai_insights(collections, range_key="7d", grade="", section="", cache_ttl
     return _cached_call("ai_insights", cache_params, _build, ttl)
 
 
-def get_risk_predictions(collections, target="next_school_day", limit=20, grade="", section="", cache_ttl_seconds=None):
+def _build_risk_students_query(grade_filter="", section_filter=""):
+    clauses = [{
+        "$or": [
+            {"status": {"$exists": False}},
+            {"status": {"$not": re.compile(r"^inactive$", re.IGNORECASE)}},
+        ]
+    }]
+
+    normalized_grade = _normalize_grade_label(grade_filter)
+    grade_key = _grade_key(normalized_grade)
+    if normalized_grade:
+        grade_patterns = []
+        if grade_key and grade_key.isdigit():
+            grade_patterns.extend([
+                re.compile(rf"^grade\s*{re.escape(grade_key)}$", re.IGNORECASE),
+                re.compile(rf"^g\s*{re.escape(grade_key)}$", re.IGNORECASE),
+                re.compile(rf"^{re.escape(grade_key)}$", re.IGNORECASE),
+            ])
+        grade_patterns.append(re.compile(rf"^{re.escape(normalized_grade)}$", re.IGNORECASE))
+
+        grade_conditions = []
+        for pattern in grade_patterns:
+            grade_conditions.append({"grade_level": pattern})
+            grade_conditions.append({"grade": pattern})
+        clauses.append({"$or": grade_conditions})
+
+    normalized_section = _normalize_section(section_filter)
+    if normalized_section:
+        clauses.append({"section": re.compile(rf"^{re.escape(normalized_section)}$", re.IGNORECASE)})
+
+    if len(clauses) == 1:
+        return clauses[0]
+    return {"$and": clauses}
+
+
+def get_risk_predictions(
+    collections,
+    target="next_school_day",
+    limit=20,
+    page=1,
+    per_page=None,
+    grade="",
+    section="",
+    cache_ttl_seconds=None,
+):
     ttl = _bounded_cache_ttl(cache_ttl_seconds or 120)
     normalized_target = _safe_strip(target) or "next_school_day"
     if normalized_target not in SUPPORTED_RISK_TARGETS:
         raise ValueError("Invalid target. Allowed values: next_school_day.")
 
     try:
-        safe_limit = int(limit)
+        fallback_limit = int(limit)
     except (TypeError, ValueError):
-        safe_limit = 20
-    safe_limit = min(max(safe_limit, 5), 50)
+        fallback_limit = 20
+
+    try:
+        safe_page = int(page)
+    except (TypeError, ValueError):
+        safe_page = 1
+    safe_page = max(safe_page, 1)
+
+    if per_page in (None, "", 0):
+        safe_per_page = fallback_limit
+    else:
+        try:
+            safe_per_page = int(per_page)
+        except (TypeError, ValueError):
+            safe_per_page = fallback_limit
+    safe_per_page = min(max(safe_per_page, 5), 50)
 
     cache_params = {
         "target": normalized_target,
-        "limit": safe_limit,
+        "page": safe_page,
+        "per_page": safe_per_page,
         "grade": _safe_strip(grade),
         "section": _safe_strip(section),
     }
@@ -805,29 +876,83 @@ def get_risk_predictions(collections, target="next_school_day", limit=20, grade=
         students_col = collections["students"]
         attendance_col = collections["attendance_logs"]
 
-        students_by_id = _load_students(students_col)
+        students_query = _build_risk_students_query(grade_filter=grade, section_filter=section)
+        total_records = int(students_col.count_documents(students_query))
+        total_pages = max(1, ((total_records + safe_per_page - 1) // safe_per_page)) if total_records else 1
+        current_page = min(safe_page, total_pages)
+        skip_count = (current_page - 1) * safe_per_page
+
+        student_projection = {
+            "student_id": 1,
+            "name": 1,
+            "grade_level": 1,
+            "grade": 1,
+            "section": 1,
+            "status": 1,
+            "face_registered": 1,
+        }
+        page_students = list(
+            students_col.find(students_query, student_projection)
+            .sort([("student_id", 1), ("_id", 1)])
+            .skip(skip_count)
+            .limit(safe_per_page)
+        )
+
+        students_by_id = {}
+        candidates = []
+        for doc in page_students:
+            sid = _safe_strip(doc.get("student_id"))
+            if not sid:
+                continue
+            meta = {
+                "student_id": sid,
+                "name": _safe_strip(doc.get("name")) or sid,
+                "grade": _normalize_grade_label(doc.get("grade_level") or doc.get("grade")),
+                "section": _normalize_section(doc.get("section")),
+                "status": _safe_strip(doc.get("status")) or "Active",
+                "face_registered": bool(doc.get("face_registered")),
+            }
+            students_by_id[sid] = meta
+            candidates.append((sid, meta))
+
         today = date.today()
         next_school_day = _next_school_day(today)
 
         history_school_days = _last_school_days(today, 40)
         history_start = history_school_days[0]
 
+        candidate_ids = [sid for sid, _meta in candidates]
+        if not candidate_ids:
+            return {
+                "target": normalized_target,
+                "target_day": next_school_day.isoformat(),
+                "formula": {
+                    "late_last_5_weight": 12,
+                    "absent_last_10_weight": 8,
+                    "streak_weight": 10,
+                    "weekday_pattern_weight": 20,
+                    "face_not_registered_penalty": 8,
+                    "max_score": 100,
+                },
+                "rows": [],
+                "pagination": {
+                    "page": current_page,
+                    "per_page": safe_per_page,
+                    "total_records": total_records,
+                    "total_pages": total_pages,
+                    "has_prev": current_page > 1,
+                    "has_next": current_page < total_pages,
+                },
+                "generated_at": datetime.now().isoformat(timespec="seconds"),
+            }
+
         attendance_snapshot = _collect_attendance(
             attendance_col,
             history_start,
             today,
             students_by_id,
-            grade_filter=grade,
-            section_filter=section,
+            student_ids=candidate_ids,
         )
-
-        candidates = []
-        for sid, meta in students_by_id.items():
-            if _safe_strip(meta.get("status")).lower() == "inactive":
-                continue
-            if not _matches_grade_section(meta, grade_filter=grade, section_filter=section):
-                continue
-            candidates.append((sid, meta))
 
         school_days_last5 = history_school_days[-5:]
         school_days_last10 = history_school_days[-10:]
@@ -860,8 +985,6 @@ def get_risk_predictions(collections, target="next_school_day", limit=20, grade=
             score_face = 8 if not bool(meta.get("face_registered")) else 0
 
             risk_score = min(100, score_late + score_absent + score_streak + score_weekday + score_face)
-            if risk_score <= 0:
-                continue
 
             reasons = []
             if score_absent > 0:
@@ -877,6 +1000,8 @@ def get_risk_predictions(collections, target="next_school_day", limit=20, grade=
 
             reasons.sort(key=lambda item: item[0], reverse=True)
             top_reasons = [text for _weight, text in reasons[:2]]
+            if not top_reasons:
+                top_reasons = ["No significant risk signals in recent school days"]
 
             risk_rows.append({
                 "student_id": sid,
@@ -914,7 +1039,15 @@ def get_risk_predictions(collections, target="next_school_day", limit=20, grade=
                 "face_not_registered_penalty": 8,
                 "max_score": 100,
             },
-            "rows": risk_rows[:safe_limit],
+            "rows": risk_rows,
+            "pagination": {
+                "page": current_page,
+                "per_page": safe_per_page,
+                "total_records": total_records,
+                "total_pages": total_pages,
+                "has_prev": current_page > 1,
+                "has_next": current_page < total_pages,
+            },
             "generated_at": datetime.now().isoformat(timespec="seconds"),
         }
 

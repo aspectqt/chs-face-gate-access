@@ -30,6 +30,13 @@ alerts = db["alerts"]
 login_history = db["login_history"]
 failed_scans = db["failed_scans"]
 sections = db["sections"]
+audit_logs = db["audit_logs"]
+login_attempts = db["login_attempts"]
+attendance_corrections = db["attendance_corrections"]
+scheduled_reports = db["scheduled_reports"]
+scheduled_report_runs = db["scheduled_report_runs"]
+anomaly_rules = db["anomaly_rules"]
+anomaly_events = db["anomaly_events"]
 
 
 def _safe_create_index(collection, keys, **kwargs):
@@ -93,8 +100,30 @@ def ensure_indexes():
 
     _safe_create_index(alerts, [("is_read", ASCENDING), ("created_at", DESCENDING)])
     _safe_create_index(alerts, [("category", ASCENDING), ("created_at", DESCENDING)])
+    _safe_create_index(alerts, [("status", ASCENDING), ("timestamp", DESCENDING)])
+    _safe_create_index(alerts, [("type", ASCENDING), ("timestamp", DESCENDING)])
 
     _safe_create_index(login_history, [("username", ASCENDING), ("timestamp", DESCENDING)])
+    _safe_create_index(login_attempts, [("username_lower", ASCENDING), ("ip", ASCENDING)], unique=True)
+    _safe_create_index(login_attempts, [("lockout_until", ASCENDING)])
+    _safe_create_index(login_attempts, [("last_attempt_at", DESCENDING)])
+    _safe_create_index(audit_logs, [("createdAt", DESCENDING)])
+    _safe_create_index(audit_logs, [("action", ASCENDING), ("createdAt", DESCENDING)])
+    _safe_create_index(audit_logs, [("actor.username", ASCENDING), ("createdAt", DESCENDING)])
+    _safe_create_index(audit_logs, [("target_type", ASCENDING), ("target_id", ASCENDING), ("createdAt", DESCENDING)])
+    _safe_create_index(attendance_corrections, [("status", ASCENDING), ("requestedAt", DESCENDING)])
+    _safe_create_index(attendance_corrections, [("attendance_log_id", ASCENDING), ("status", ASCENDING)])
+    _safe_create_index(attendance_corrections, [("requested_by", ASCENDING), ("requestedAt", DESCENDING)])
+    _safe_create_index(attendance_corrections, [("reviewed_by", ASCENDING), ("reviewedAt", DESCENDING)])
+    _safe_create_index(scheduled_reports, [("enabled", ASCENDING), ("next_run_at", ASCENDING)])
+    _safe_create_index(scheduled_reports, [("updated_at", DESCENDING)])
+    _safe_create_index(scheduled_reports, [("name", ASCENDING)], unique=True)
+    _safe_create_index(scheduled_report_runs, [("report_id", ASCENDING), ("started_at", DESCENDING)])
+    _safe_create_index(scheduled_report_runs, [("status", ASCENDING), ("started_at", DESCENDING)])
+    _safe_create_index(anomaly_rules, [("enabled", ASCENDING), ("updated_at", DESCENDING)])
+    _safe_create_index(anomaly_rules, [("name", ASCENDING)], unique=True)
+    _safe_create_index(anomaly_events, [("rule_id", ASCENDING), ("triggered_at", DESCENDING)])
+    _safe_create_index(anomaly_events, [("triggered_at", DESCENDING)])
     _safe_create_index(failed_scans, [("timestamp", DESCENDING)])
     _safe_create_index(failed_scans, [("date", ASCENDING), ("reason", ASCENDING)])
     _safe_create_index(failed_scans, [("student_id", ASCENDING), ("reason", ASCENDING), ("date", DESCENDING)])

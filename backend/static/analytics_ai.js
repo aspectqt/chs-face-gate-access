@@ -14,6 +14,9 @@
 
     riskMeta: document.getElementById('aiRiskMeta'),
     riskBody: document.getElementById('aiRiskTableBody'),
+    riskPrevBtn: document.getElementById('aiRiskPrevBtn'),
+    riskNextBtn: document.getElementById('aiRiskNextBtn'),
+    riskPageIndicator: document.getElementById('aiRiskPageIndicator'),
 
     changesMode: document.getElementById('aiChangesMode'),
     changesStart: document.getElementById('aiChangesStart'),
@@ -54,12 +57,24 @@
     changeStart: defaultStart,
     changeEnd: defaultEnd,
     askChart: null,
+    riskPage: 1,
+    riskPerPage: 8,
+    riskPagination: {
+      page: 1,
+      per_page: 8,
+      total_records: 0,
+      total_pages: 1,
+      has_prev: false,
+      has_next: false,
+    },
   };
 
   ui.range.value = state.range;
   ui.changesMode.value = state.changeMode;
   ui.changesStart.value = state.changeStart;
   ui.changesEnd.value = state.changeEnd;
+  if (ui.riskPrevBtn) ui.riskPrevBtn.disabled = true;
+  if (ui.riskNextBtn) ui.riskNextBtn.disabled = true;
 
   function debounce(fn, waitMs) {
     let timeout;
@@ -88,6 +103,15 @@
     return data;
   }
 
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
   function createSeverityBadge(level) {
     const safe = String(level || 'info').toLowerCase();
     const classes = {
@@ -103,6 +127,19 @@
     if (value >= 70) return '<span class="inline-flex rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-semibold text-rose-700">High</span>';
     if (value >= 45) return '<span class="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">Medium</span>';
     return '<span class="inline-flex rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-semibold text-sky-700">Low</span>';
+  }
+
+  function setRiskLoading(isLoading) {
+    if (isLoading) {
+      ui.riskBody.innerHTML = '<tr><td colspan="6" class="px-3 py-5 text-center text-slate-500">Loading risk predictions...</td></tr>';
+    }
+    if (ui.riskPrevBtn) ui.riskPrevBtn.disabled = isLoading || !state.riskPagination.has_prev;
+    if (ui.riskNextBtn) ui.riskNextBtn.disabled = isLoading || !state.riskPagination.has_next;
+    if (ui.riskPageIndicator) {
+      if (isLoading) {
+        ui.riskPageIndicator.textContent = `Page ${state.riskPage} of ${Math.max(state.riskPagination.total_pages || 1, 1)}`;
+      }
+    }
   }
 
   function renderSimpleTable(headEl, bodyEl, columns, rows) {
@@ -197,26 +234,53 @@
 
   function renderRisk(payload) {
     const rows = Array.isArray(payload.rows) ? payload.rows : [];
-    ui.riskMeta.textContent = rows.length ? `Top ${rows.length} students` : 'No at-risk students';
+    const pagination = payload.pagination || {};
+    const page = Math.max(1, Number.parseInt(String(pagination.page ?? state.riskPage), 10) || 1);
+    const totalPages = Math.max(1, Number.parseInt(String(pagination.total_pages ?? 1), 10) || 1);
+    const totalRecords = Math.max(0, Number.parseInt(String(pagination.total_records ?? rows.length), 10) || 0);
+    const hasPrev = Boolean(pagination.has_prev);
+    const hasNext = Boolean(pagination.has_next);
+
+    state.riskPage = page;
+    state.riskPagination = {
+      page,
+      per_page: Number.parseInt(String(pagination.per_page ?? state.riskPerPage), 10) || state.riskPerPage,
+      total_records: totalRecords,
+      total_pages: totalPages,
+      has_prev: hasPrev,
+      has_next: hasNext,
+    };
+
+    const startItem = totalRecords > 0 ? ((page - 1) * state.riskPagination.per_page) + 1 : 0;
+    const endItem = totalRecords > 0 ? Math.min(startItem + rows.length - 1, totalRecords) : 0;
+    ui.riskMeta.textContent = totalRecords > 0
+      ? `Showing ${startItem}-${endItem} of ${totalRecords} students`
+      : 'No students found for the selected filters';
+
+    if (ui.riskPageIndicator) {
+      ui.riskPageIndicator.textContent = `Page ${page} of ${totalPages}`;
+    }
+    if (ui.riskPrevBtn) ui.riskPrevBtn.disabled = !hasPrev;
+    if (ui.riskNextBtn) ui.riskNextBtn.disabled = !hasNext;
 
     if (!rows.length) {
-      ui.riskBody.innerHTML = '<tr><td colspan="6" class="px-3 py-5 text-center text-slate-500">No risk predictions for the selected filters.</td></tr>';
+      ui.riskBody.innerHTML = '<tr><td colspan="6" class="px-3 py-5 text-center text-slate-500">No risk predictions for the selected filters and page.</td></tr>';
       return;
     }
 
     ui.riskBody.innerHTML = rows.map((row) => `
       <tr class="hover:bg-slate-50">
-        <td class="px-3 py-2 font-medium text-slate-700">${row.student_id || ''}</td>
-        <td class="px-3 py-2 text-slate-700">${row.name || ''}</td>
-        <td class="px-3 py-2 text-slate-700">${row.grade || ''}</td>
-        <td class="px-3 py-2 text-slate-700">${row.section || ''}</td>
+        <td class="px-3 py-2 font-medium text-slate-700">${escapeHtml(row.student_id || '')}</td>
+        <td class="px-3 py-2 text-slate-700">${escapeHtml(row.name || '')}</td>
+        <td class="px-3 py-2 text-slate-700">${escapeHtml(row.grade || '')}</td>
+        <td class="px-3 py-2 text-slate-700">${escapeHtml(row.section || '')}</td>
         <td class="px-3 py-2">
           <div class="flex items-center gap-2">
             <span class="font-semibold text-slate-800">${row.risk_score || 0}</span>
             ${createRiskBadge(row.risk_score)}
           </div>
         </td>
-        <td class="px-3 py-2 text-xs text-slate-600">${Array.isArray(row.reasons) ? row.reasons.join(' | ') : ''}</td>
+        <td class="px-3 py-2 text-xs text-slate-600">${escapeHtml(Array.isArray(row.reasons) ? row.reasons.join(' | ') : '')}</td>
       </tr>
     `).join('');
   }
@@ -353,6 +417,21 @@
     return query.toString();
   }
 
+  function resetRiskPagination() {
+    state.riskPage = 1;
+    state.riskPagination = {
+      page: 1,
+      per_page: state.riskPerPage,
+      total_records: 0,
+      total_pages: 1,
+      has_prev: false,
+      has_next: false,
+    };
+    if (ui.riskPageIndicator) ui.riskPageIndicator.textContent = 'Page 1 of 1';
+    if (ui.riskPrevBtn) ui.riskPrevBtn.disabled = true;
+    if (ui.riskNextBtn) ui.riskNextBtn.disabled = true;
+  }
+
   async function loadInsights() {
     const qs = buildQueryString({ range: state.range, grade: state.grade, section: state.section });
     const payload = await fetchJson(`/api/analytics/ai/insights?${qs}`);
@@ -360,9 +439,20 @@
   }
 
   async function loadRisk() {
-    const qs = buildQueryString({ target: 'next_school_day', limit: 20, grade: state.grade, section: state.section });
-    const payload = await fetchJson(`/api/analytics/ai/risk?${qs}`);
-    renderRisk(payload);
+    setRiskLoading(true);
+    try {
+      const qs = buildQueryString({
+        target: 'next_school_day',
+        page: state.riskPage,
+        per_page: state.riskPerPage,
+        grade: state.grade,
+        section: state.section,
+      });
+      const payload = await fetchJson(`/api/analytics/ai/risk?${qs}`);
+      renderRisk(payload);
+    } finally {
+      setRiskLoading(false);
+    }
   }
 
   async function loadChanges() {
@@ -394,16 +484,19 @@
 
   const syncSectionDebounced = debounce(() => {
     state.section = ui.section.value.trim();
+    resetRiskPagination();
     loadAll();
   }, 300);
 
   ui.range.addEventListener('change', () => {
     state.range = ui.range.value;
+    resetRiskPagination();
     loadAll();
   });
 
   ui.grade.addEventListener('change', () => {
     state.grade = ui.grade.value;
+    resetRiskPagination();
     loadAll();
   });
 
@@ -413,6 +506,7 @@
     state.section = ui.section.value.trim();
     state.grade = ui.grade.value;
     state.range = ui.range.value;
+    resetRiskPagination();
     loadAll();
   });
 
@@ -422,6 +516,22 @@
     state.changeEnd = ui.changesEnd.value;
     loadChanges().catch((error) => showError(error.message || 'Failed to compare changes'));
   });
+
+  if (ui.riskPrevBtn) {
+    ui.riskPrevBtn.addEventListener('click', () => {
+      if (!state.riskPagination.has_prev) return;
+      state.riskPage = Math.max(1, state.riskPage - 1);
+      loadRisk().catch((error) => showError(error.message || 'Failed to load risk predictions'));
+    });
+  }
+
+  if (ui.riskNextBtn) {
+    ui.riskNextBtn.addEventListener('click', () => {
+      if (!state.riskPagination.has_next) return;
+      state.riskPage += 1;
+      loadRisk().catch((error) => showError(error.message || 'Failed to load risk predictions'));
+    });
+  }
 
   function syncChangeDateInputs() {
     const isCustom = ui.changesMode.value === 'custom_range';

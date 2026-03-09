@@ -183,12 +183,12 @@
             <p class="text-sm text-slate-500 mt-1">Insights, risk detection, and recommendations from attendance, gate logs, and SMS logs.</p>
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-4 gap-2 w-full lg:w-auto">
-            <select id="aiRangeFilter" class="rounded-xl border border-slate-300 px-3 py-2 text-sm">
+            <select id="aiRangeFilter" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
               <option value="today">Today</option>
               <option value="7d">Last 7 Days</option>
               <option value="30d">Last 30 Days</option>
             </select>
-            <select id="aiGradeFilter" class="rounded-xl border border-slate-300 px-3 py-2 text-sm">
+            <select id="aiGradeFilter" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
               <option value="">All Grades</option>
               {% for grade in grade_options %}
               <option value="{{ grade }}">{{ grade }}</option>
@@ -220,7 +220,7 @@
               <button id="aiCompareBtn" type="button" class="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100">Compare</button>
             </div>
             <div class="grid grid-cols-1 gap-2 mb-3">
-              <select id="aiChangesMode" class="rounded-xl border border-slate-300 px-3 py-2 text-sm">
+              <select id="aiChangesMode" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
                 <option value="today_vs_yesterday">Today vs Yesterday</option>
                 <option value="week_vs_last_week">This Week vs Last Week</option>
                 <option value="custom_range">Custom Range vs Previous</option>
@@ -257,6 +257,15 @@
                   <tr><td colspan="6" class="px-3 py-5 text-center text-slate-500">Loading risk predictions...</td></tr>
                 </tbody>
               </table>
+            </div>
+            <div class="mt-3 flex items-center justify-between gap-2 border-t border-slate-200 pt-3">
+              <button id="aiRiskPrevBtn" type="button" class="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50">
+                Previous
+              </button>
+              <span id="aiRiskPageIndicator" class="text-xs font-medium text-slate-600">Page 1 of 1</span>
+              <button id="aiRiskNextBtn" type="button" class="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50">
+                Next
+              </button>
             </div>
           </article>
 
@@ -300,6 +309,109 @@
                 <thead id="aiDrilldownHead" class="bg-slate-100"></thead>
                 <tbody id="aiDrilldownBody" class="divide-y divide-slate-100"></tbody>
               </table>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section id="phase2OpsModule" class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 lg:p-5 space-y-4">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 class="text-lg font-semibold text-slate-800">Phase 2 Operations</h2>
+            <p class="text-xs text-slate-500 mt-1">Manage scheduled reports and anomaly detection rules connected to MongoDB.</p>
+          </div>
+          <button id="phase2ReloadBtn" type="button" class="rounded-xl border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100">
+            Refresh
+          </button>
+        </div>
+
+        <div id="phase2OpsError" class="hidden rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700"></div>
+
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          <article class="rounded-2xl border border-slate-200 p-4">
+            <div class="flex items-center justify-between gap-2 mb-3">
+              <h3 class="text-sm uppercase tracking-wide font-semibold text-slate-600">Scheduled Reports</h3>
+            </div>
+            <form id="scheduledReportForm" class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <input id="reportNameInput" type="text" placeholder="Report Name" class="rounded-xl border border-slate-300 px-3 py-2 text-sm sm:col-span-2" required>
+              <select id="reportFrequencyInput" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
+                <option value="daily">Daily</option>
+                <option value="weekly" selected>Weekly</option>
+                <option value="monthly">Monthly</option>
+              </select>
+              <input id="reportSendTimeInput" type="time" value="07:00" class="rounded-xl border border-slate-300 px-3 py-2 text-sm">
+              <input id="reportRecipientsInput" type="text" placeholder="Recipients (comma-separated emails)" class="rounded-xl border border-slate-300 px-3 py-2 text-sm sm:col-span-2" required>
+              <select id="reportGradeInput" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
+                <option value="">All Grades</option>
+                {% for grade in grade_options %}
+                <option value="{{ grade }}">{{ grade }}</option>
+                {% endfor %}
+              </select>
+              <input id="reportSectionInput" type="text" placeholder="Section (optional)" class="rounded-xl border border-slate-300 px-3 py-2 text-sm">
+              <label class="sm:col-span-2 inline-flex items-center gap-2 text-xs font-medium text-slate-600">
+                <input id="reportEnabledInput" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-emerald-600" checked>
+                Enabled
+              </label>
+              <button type="submit" class="sm:col-span-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700 transition">Create Scheduled Report</button>
+            </form>
+
+            <div class="mt-3 max-h-64 overflow-y-auto space-y-2 pr-1" id="scheduledReportsList">
+              <p class="text-sm text-slate-500">Loading scheduled reports...</p>
+            </div>
+          </article>
+
+          <article class="rounded-2xl border border-slate-200 p-4">
+            <div class="flex items-center justify-between gap-2 mb-3">
+              <h3 class="text-sm uppercase tracking-wide font-semibold text-slate-600">Anomaly Rules</h3>
+              <button id="anomalyEvaluateAllBtn" type="button" class="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100">Evaluate Now</button>
+            </div>
+            <form id="anomalyRuleForm" class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <input id="ruleNameInput" type="text" placeholder="Rule Name" class="rounded-xl border border-slate-300 px-3 py-2 text-sm sm:col-span-2" required>
+              <select id="ruleMetricInput" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
+                <option value="late_count">Late Count</option>
+                <option value="failed_sms_count">Failed SMS Count</option>
+                <option value="unknown_scan_count">Unknown Scan Count</option>
+                <option value="pending_correction_count">Pending Correction Count</option>
+              </select>
+              <select id="ruleOperatorInput" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
+                <option value="gt">&gt;</option>
+                <option value="gte">&gt;=</option>
+                <option value="lt">&lt;</option>
+                <option value="lte">&lt;=</option>
+              </select>
+              <input id="ruleThresholdInput" type="number" step="0.01" min="0" value="5" placeholder="Threshold" class="rounded-xl border border-slate-300 px-3 py-2 text-sm">
+              <input id="ruleWindowInput" type="number" min="1" max="90" value="1" placeholder="Window (days)" class="rounded-xl border border-slate-300 px-3 py-2 text-sm">
+              <select id="ruleSeverityInput" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
+                <option value="warn" selected>Warn</option>
+                <option value="info">Info</option>
+                <option value="high">High</option>
+              </select>
+              <input id="ruleCooldownInput" type="number" min="5" max="1440" value="60" placeholder="Cooldown (minutes)" class="rounded-xl border border-slate-300 px-3 py-2 text-sm">
+              <input id="ruleNotifyEmailsInput" type="text" placeholder="Notify emails (optional)" class="rounded-xl border border-slate-300 px-3 py-2 text-sm sm:col-span-2">
+              <label class="sm:col-span-2 inline-flex items-center gap-2 text-xs font-medium text-slate-600">
+                <input id="ruleEnabledInput" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-emerald-600" checked>
+                Enabled
+              </label>
+              <button type="submit" class="sm:col-span-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 transition">Create Anomaly Rule</button>
+            </form>
+
+            <div class="mt-3 max-h-64 overflow-y-auto space-y-2 pr-1" id="anomalyRulesList">
+              <p class="text-sm text-slate-500">Loading anomaly rules...</p>
+            </div>
+          </article>
+        </div>
+
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          <article class="rounded-2xl border border-slate-200 p-4">
+            <h3 class="text-sm uppercase tracking-wide font-semibold text-slate-600 mb-2">Recent Report Runs</h3>
+            <div id="reportRunsList" class="max-h-44 overflow-y-auto space-y-2 pr-1">
+              <p class="text-sm text-slate-500">No report runs yet.</p>
+            </div>
+          </article>
+          <article class="rounded-2xl border border-slate-200 p-4">
+            <h3 class="text-sm uppercase tracking-wide font-semibold text-slate-600 mb-2">Recent Anomaly Events</h3>
+            <div id="anomalyEventsList" class="max-h-44 overflow-y-auto space-y-2 pr-1">
+              <p class="text-sm text-slate-500">No anomaly events yet.</p>
             </div>
           </article>
         </div>
@@ -562,6 +674,7 @@ function initAnalyticsRealtime() {
 window.addEventListener('beforeunload', closeAnalyticsRealtime);
 initAnalyticsRealtime();
 </script>
-<script src="{{ url_for('static', filename='analytics_ai.js', v='20260304a') }}"></script>
+<script src="{{ url_for('static', filename='analytics_ai.js', v='20260309b') }}"></script>
+<script src="{{ url_for('static', filename='analytics_phase2.js', v='20260309b') }}"></script>
 </body>
 </html>
