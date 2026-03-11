@@ -146,6 +146,8 @@ PASSWORD_RESET_DEV_LINK_FALLBACK = env_bool("PASSWORD_RESET_DEV_LINK_FALLBACK", 
 LOGIN_ATTEMPT_WINDOW_MINUTES = env_int("LOGIN_ATTEMPT_WINDOW_MINUTES", 15, minimum=1, maximum=240)
 LOGIN_MAX_ATTEMPTS = env_int("LOGIN_MAX_ATTEMPTS", 5, minimum=3, maximum=20)
 LOGIN_LOCKOUT_MINUTES = env_int("LOGIN_LOCKOUT_MINUTES", 15, minimum=1, maximum=240)
+SMS_BALANCE_CACHE_TTL_SECONDS = env_int("SMS_BALANCE_CACHE_TTL_SECONDS", 60, minimum=10, maximum=600)
+SMS_BALANCE_LOW_THRESHOLD = env_int("SMS_BALANCE_LOW_THRESHOLD", 50, minimum=0, maximum=1000000)
 CORRECTION_ALLOWED_STATUSES = {"Present", "Late", "Absent"}
 MORNING_START = dtime(hour=5, minute=0)
 NOON_START = dtime(hour=12, minute=0)
@@ -262,6 +264,18 @@ data_change_domains = {
     "sections": 0,
     "gate_logs": 0,
     "sms_logs": 0,
+}
+
+sms_balance_lock = threading.Lock()
+sms_balance_cache = {
+    "status": "idle",
+    "units": None,
+    "message": "",
+    "provider": "PHILSMS",
+    "http_status": None,
+    "probe_path": "",
+    "checked_at": "",
+    "checked_ts": 0.0,
 }
 
 ROLE_PERMISSIONS = {
@@ -2448,6 +2462,98 @@ def sms_status_mongo_filter(*statuses):
     return {"$in": values}
 
 
+def _coerce_balance_units(value):
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float, Decimal)):
+        try:
+            return float(value)
+        except (TypeError, ValueError, InvalidOperation):
+            return None
+    if isinstance(value, str):
+        text = value.strip().replace(",", "")
+        if not text:
+            return None
+        match = re.search(r"-?\d+(?:\.\d+)?", text)
+        if not match:
+            return None
+        try:
+            return float(match.group(0))
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
+def invalidate_sms_balance_cache(reason=""):
+    with sms_balance_lock:
+        sms_balance_cache["checked_ts"] = 0.0
+        sms_balance_cache["checked_at"] = ""
+        sms_balance_cache["status"] = "stale"
+        if reason:
+            sms_balance_cache["message"] = reason
+
+
+def get_sms_balance_snapshot(force=False):
+    now_ts = time.time()
+    with sms_balance_lock:
+        cached_ts = float(sms_balance_cache.get("checked_ts") or 0.0)
+        if not force and cached_ts and (now_ts - cached_ts) < SMS_BALANCE_CACHE_TTL_SECONDS:
+            cached_units = sms_balance_cache.get("units")
+            is_low = cached_units is not None and cached_units < SMS_BALANCE_LOW_THRESHOLD
+            return {
+                **sms_balance_cache,
+                "cached": True,
+                "low_threshold": SMS_BALANCE_LOW_THRESHOLD,
+                "is_low": is_low,
+            }
+
+    provider_result = {}
+    try:
+        balance_method = getattr(sms_provider, "get_balance", None)
+        if callable(balance_method):
+            provider_result = balance_method() or {}
+        else:
+            provider_result = sms_provider.health_check() or {}
+    except Exception as exc:
+        provider_result = {
+            "status": "failed",
+            "message": f"Failed to fetch balance: {exc}",
+        }
+
+    raw_units = provider_result.get("units")
+    units = _coerce_balance_units(raw_units)
+    status = str(provider_result.get("status") or "failed").lower()
+    message = str(provider_result.get("message") or "").strip()
+    if status == "ok" and units is None:
+        status = "warn"
+        if not message:
+            message = "Balance is not available from provider."
+
+    checked_at = now_iso()
+    with sms_balance_lock:
+        sms_balance_cache.update({
+            "status": status,
+            "units": units,
+            "message": message,
+            "provider": str(provider_result.get("provider") or "PHILSMS"),
+            "http_status": provider_result.get("http_status"),
+            "probe_path": str(provider_result.get("probe_path") or ""),
+            "checked_at": checked_at,
+            "checked_ts": now_ts,
+        })
+        cached = dict(sms_balance_cache)
+
+    is_low = units is not None and units < SMS_BALANCE_LOW_THRESHOLD
+    return {
+        **cached,
+        "cached": False,
+        "low_threshold": SMS_BALANCE_LOW_THRESHOLD,
+        "is_low": is_low,
+    }
+
+
 def log_skipped_sms(student_id="", student_name="", parent_contact="", message="", reason="skipped", sms_type="transactional", metadata=None):
     now = now_local()
     timestamp = now_iso()
@@ -2663,6 +2769,9 @@ def send_sms(to_number, message, sms_type="transactional", metadata=None, studen
             signal_data_change("sms_logs")
         except Exception as exc:
             print(f"[ERROR] Failed to update SMS log status: {exc}")
+
+    if delivery_status == "sent":
+        invalidate_sms_balance_cache("Balance refresh pending after SMS send.")
 
     return {
         "status": delivery_status,
@@ -4291,6 +4400,24 @@ def api_sms_auth_check():
         "status": "error",
         "message": result.get("message", "SMS auth check failed."),
         "data": result,
+    }), 503
+
+
+@app.route("/api/sms/balance", methods=["GET"])
+@require_permission("dashboard", api=True)
+def api_sms_balance():
+    try:
+        force = str(request.args.get("force", "") or "").strip().lower() in {"1", "true", "yes", "on"}
+        snapshot = get_sms_balance_snapshot(force=force)
+    except Exception as exc:
+        return jsonify({"status": "error", "message": f"Failed to fetch SMS balance: {exc}"}), 500
+
+    if snapshot.get("status") == "ok":
+        return jsonify({"status": "ok", "data": snapshot})
+    return jsonify({
+        "status": "error",
+        "message": snapshot.get("message", "SMS balance is unavailable."),
+        "data": snapshot,
     }), 503
 
 

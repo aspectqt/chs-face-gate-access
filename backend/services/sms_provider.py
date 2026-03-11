@@ -22,6 +22,10 @@ class SmsProvider(ABC):
     def health_check(self):
         pass
 
+    @abstractmethod
+    def get_balance(self):
+        pass
+
     @staticmethod
     def normalize_phone_number(raw_phone):
         phone = str(raw_phone or "").strip()
@@ -94,6 +98,7 @@ class PhilSmsProvider(SmsProvider):
         refresh_token="",
         send_path="/sms/send",
         health_path="/me",
+        balance_path="/balance",
         sender_id="",
         default_message_type="plain",
         timeout_seconds=10,
@@ -114,6 +119,7 @@ class PhilSmsProvider(SmsProvider):
         self.refresh_token = (refresh_token or "").strip()
         self.send_path = send_path or "/sms/send"
         self.health_path = health_path or "/health"
+        self.balance_path = balance_path or "/balance"
         self.sender_id = (sender_id or "").strip()
         self.default_message_type = (default_message_type or "plain").strip().lower() or "plain"
         self.timeout_seconds = int(timeout_seconds)
@@ -177,6 +183,94 @@ class PhilSmsProvider(SmsProvider):
                 "mode": self.auth_mode(),
             }
         return token_status
+
+    def get_balance(self):
+        cfg = self.validate_configuration(raise_on_error=False)
+        if cfg.get("status") != "ok":
+            return {**cfg, "provider": "PHILSMS"}
+
+        token_status = self.validate_auth_token()
+        if token_status.get("status") != "ok":
+            return {
+                "status": "failed",
+                "provider": "PHILSMS",
+                "message": token_status.get("message", "PHILSMS authentication failed."),
+                "error_code": token_status.get("error_code", "AUTH_REQUIRED"),
+                "mode": token_status.get("mode", self.auth_mode()),
+            }
+
+        probe_paths = []
+        for path in (self.balance_path, self.health_path, "/balance", "/me"):
+            if path and path not in probe_paths:
+                probe_paths.append(path)
+
+        last_failure = None
+        last_success = None
+        for probe_path in probe_paths:
+            try:
+                status_code, data, _raw = self._request_json(
+                    method="GET",
+                    endpoint_or_url=probe_path,
+                    payload=None,
+                    include_auth=True,
+                )
+            except Exception as exc:
+                last_failure = {
+                    "status": "failed",
+                    "provider": "PHILSMS",
+                    "message": f"Balance request failed: {exc}",
+                    "probe_path": probe_path,
+                }
+                continue
+
+            error_code = self._extract_error_code(data)
+            error_message = self._extract_error_message(data)
+            if self._is_auth_failure(status_code, data, error_code, error_message):
+                return {
+                    "status": "failed",
+                    "provider": "PHILSMS",
+                    "message": error_message or "Authentication rejected by PHILSMS.",
+                    "http_status": status_code,
+                    "error_code": error_code or "AUTH_REQUIRED",
+                    "probe_path": probe_path,
+                }
+
+            if not (200 <= int(status_code or 0) < 300):
+                last_failure = {
+                    "status": "failed",
+                    "provider": "PHILSMS",
+                    "message": error_message or f"Unexpected response (HTTP {status_code}).",
+                    "http_status": status_code,
+                    "error_code": error_code or "",
+                    "probe_path": probe_path,
+                }
+                continue
+
+            units = self._extract_balance_units(data)
+            if units is not None:
+                return {
+                    "status": "ok",
+                    "provider": "PHILSMS",
+                    "units": units,
+                    "http_status": status_code,
+                    "probe_path": probe_path,
+                }
+
+            last_success = {
+                "status": "warn",
+                "provider": "PHILSMS",
+                "message": "Balance is not available in provider response.",
+                "http_status": status_code,
+                "probe_path": probe_path,
+            }
+
+        if last_success:
+            return last_success
+        return last_failure or {
+            "status": "failed",
+            "provider": "PHILSMS",
+            "message": "Unable to fetch balance from PHILSMS.",
+        }
 
     def validate_auth_token(self):
         cfg = self.validate_configuration(raise_on_error=False)
@@ -242,7 +336,7 @@ class PhilSmsProvider(SmsProvider):
                     strategy_candidates.append(strategy)
 
         probe_paths = []
-        for path in (self.health_path, "/me", "/balance"):
+        for path in (self.health_path, self.balance_path, "/me", "/balance"):
             if path and path not in probe_paths:
                 probe_paths.append(path)
 
@@ -569,6 +663,74 @@ class PhilSmsProvider(SmsProvider):
             return int(exc.code or 500), parsed, raw
 
     @staticmethod
+    def _coerce_numeric(value):
+        if value is None:
+            return None
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, (int, float)):
+            return float(value)
+        if isinstance(value, str):
+            text = value.strip()
+            if not text:
+                return None
+            text = text.replace(",", "")
+            match = re.search(r"-?\d+(?:\.\d+)?", text)
+            if not match:
+                return None
+            text = match.group(0)
+            try:
+                return float(text)
+            except Exception:
+                return None
+        return None
+
+    @classmethod
+    def _extract_balance_units(cls, response_body):
+        if not isinstance(response_body, dict):
+            return None
+
+        candidates = []
+        direct_keys = [
+            "balance",
+            "credits",
+            "credit",
+            "units",
+            "sms_units",
+            "sms_balance",
+            "remaining",
+            "remaining_balance",
+            "remaining_credits",
+            "remaining_units",
+        ]
+        for key in direct_keys:
+            if key in response_body:
+                candidates.append(response_body.get(key))
+
+        data = response_body.get("data")
+        if isinstance(data, dict):
+            for key in direct_keys:
+                if key in data:
+                    candidates.append(data.get(key))
+            wallet = data.get("wallet") if isinstance(data.get("wallet"), dict) else None
+            if wallet:
+                for key in direct_keys:
+                    if key in wallet:
+                        candidates.append(wallet.get(key))
+        elif isinstance(data, list) and data:
+            for item in data[:3]:
+                if isinstance(item, dict):
+                    for key in direct_keys:
+                        if key in item:
+                            candidates.append(item.get(key))
+
+        for candidate in candidates:
+            numeric = cls._coerce_numeric(candidate)
+            if numeric is not None:
+                return numeric
+        return None
+
+    @staticmethod
     def _extract_message_id(response_body):
         if not isinstance(response_body, dict):
             return ""
@@ -763,6 +925,7 @@ def create_sms_provider_from_env():
         refresh_token=os.getenv("PHILSMS_REFRESH_TOKEN", ""),
         send_path=os.getenv("PHILSMS_SEND_PATH", "/sms/send"),
         health_path=os.getenv("PHILSMS_HEALTH_PATH", "/me"),
+        balance_path=os.getenv("PHILSMS_BALANCE_PATH", "/balance"),
         sender_id=os.getenv("PHILSMS_SENDER_ID", "PhilSMS"),
         default_message_type=os.getenv("PHILSMS_MESSAGE_TYPE", "plain"),
         timeout_seconds=env_int("PHILSMS_TIMEOUT_SECONDS", 10, minimum=1, maximum=120),

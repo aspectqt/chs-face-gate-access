@@ -8,8 +8,46 @@
     <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon-16x16.png') }}">
     <link rel="shortcut icon" href="{{ url_for('static', filename='favicon-32x32.png') }}">
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     {% include 'partials/theme_assets.html' %}
     <style>
+      :root {
+        --dash-card-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+        --dash-card-shadow-hover: 0 18px 42px rgba(15, 23, 42, 0.14);
+      }
+
+      html[data-theme="dark"] {
+        --dash-card-shadow: 0 18px 44px rgba(2, 6, 23, 0.65);
+        --dash-card-shadow-hover: 0 22px 54px rgba(2, 6, 23, 0.75);
+      }
+
+      body.dashboard-page {
+        font-family: "Manrope", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+        letter-spacing: -0.01em;
+      }
+
+      .dashboard-main h1,
+      .dashboard-main h2,
+      .dashboard-main h3 {
+        letter-spacing: -0.02em;
+      }
+
+      .dashboard-card {
+        box-shadow: var(--dash-card-shadow);
+        transition: transform 180ms ease, box-shadow 180ms ease;
+      }
+
+      .dashboard-card:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--dash-card-shadow-hover);
+      }
+
+      .dashboard-card:focus-within {
+        box-shadow: var(--dash-card-shadow-hover);
+      }
+
       #scanFrame:fullscreen,
       #scanFrame:-webkit-full-screen {
         background: #020617;
@@ -43,7 +81,7 @@
     </style>
 </head>
 
-<body class="bg-slate-100 h-screen overflow-hidden text-slate-800" data-authenticated="1" data-user-theme="{{ current_theme|default('') }}">
+<body class="bg-slate-100 h-screen overflow-hidden text-slate-800 dashboard-page" data-authenticated="1" data-user-theme="{{ current_theme|default('') }}">
 <div class="flex h-full">
 
     {% include 'partials/sidebar.html' %}
@@ -126,11 +164,11 @@
         </header>
 
         <!-- CONTENT -->
-        <main class="flex-1 overflow-y-auto p-6 space-y-6">
+        <main class="flex-1 overflow-y-auto p-6 space-y-5 dashboard-main">
 
             <!-- STATS -->
-            <section class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
-                <article class="group relative overflow-hidden rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-emerald-100/70 p-4 shadow-sm transition hover:shadow-md">
+            <section class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-5">
+                <article class="dashboard-card group relative overflow-hidden rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-emerald-100/70 p-4 shadow-sm transition hover:shadow-md">
                     <div class="absolute -right-4 -top-4 h-20 w-20 rounded-full bg-emerald-200/40 blur-xl"></div>
                     <div class="relative flex items-start justify-between gap-3">
                         <div>
@@ -144,7 +182,7 @@
                     </div>
                 </article>
 
-                <article class="group relative overflow-hidden rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50 via-white to-blue-100/70 p-4 shadow-sm transition hover:shadow-md">
+                <article class="dashboard-card group relative overflow-hidden rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50 via-white to-blue-100/70 p-4 shadow-sm transition hover:shadow-md">
                     <div class="absolute -right-4 -top-4 h-20 w-20 rounded-full bg-blue-200/40 blur-xl"></div>
                     <div class="relative flex items-start justify-between gap-3">
                         <div>
@@ -158,7 +196,7 @@
                     </div>
                 </article>
 
-                <article class="group relative overflow-hidden rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-50 via-white to-violet-100/70 p-4 shadow-sm transition hover:shadow-md">
+                <article class="dashboard-card group relative overflow-hidden rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-50 via-white to-violet-100/70 p-4 shadow-sm transition hover:shadow-md">
                     <div class="absolute -right-4 -top-4 h-20 w-20 rounded-full bg-violet-200/40 blur-xl"></div>
                     <div class="relative flex items-start justify-between gap-3">
                         <div>
@@ -172,7 +210,7 @@
                     </div>
                 </article>
 
-                <article class="group relative overflow-hidden rounded-2xl border border-sky-200 bg-gradient-to-br from-sky-50 via-white to-sky-100/70 p-4 shadow-sm transition hover:shadow-md">
+                <article class="dashboard-card group relative overflow-hidden rounded-2xl border border-sky-200 bg-gradient-to-br from-sky-50 via-white to-sky-100/70 p-4 shadow-sm transition hover:shadow-md">
                     <div class="absolute -right-4 -top-4 h-20 w-20 rounded-full bg-sky-200/40 blur-xl"></div>
                     <div class="relative flex items-start justify-between gap-3">
                         <div>
@@ -186,7 +224,7 @@
                     </div>
                 </article>
 
-                <article class="group relative overflow-hidden rounded-2xl border border-pink-200 bg-gradient-to-br from-pink-50 via-white to-pink-100/70 p-4 shadow-sm transition hover:shadow-md">
+                <article class="dashboard-card group relative overflow-hidden rounded-2xl border border-pink-200 bg-gradient-to-br from-pink-50 via-white to-pink-100/70 p-4 shadow-sm transition hover:shadow-md">
                     <div class="absolute -right-4 -top-4 h-20 w-20 rounded-full bg-pink-200/40 blur-xl"></div>
                     <div class="relative flex items-start justify-between gap-3">
                         <div>
@@ -201,7 +239,7 @@
                 </article>
             </section>
 
-            <section class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <section class="dashboard-card rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <div class="flex flex-wrap items-start justify-between gap-3">
                     <div>
                         <h3 class="text-base font-semibold text-slate-800">Operations Health</h3>
@@ -244,162 +282,191 @@
             </section>
 
             <!-- GATE + SEARCH -->
-            <section id="gate-scanning" class="grid grid-cols-1 xl:grid-cols-3 gap-5 items-start">
-                <div class="xl:col-span-2 rounded-3xl border border-slate-200 bg-gradient-to-b from-white via-slate-50 to-slate-100/70 p-5 shadow-sm">
-                    <div class="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                            <div class="flex items-center gap-2">
-                                <span class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4.5 w-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M4 12h16M4 17h16" />
-                                    </svg>
-                                </span>
-                                <h2 class="text-lg font-semibold text-slate-800">Gate Scanning Console</h2>
+            <section id="gate-scanning" class="grid grid-cols-1 xl:grid-cols-12 gap-5 items-stretch">
+                <div class="xl:col-span-7">
+                    <div id="gateConsoleCard" class="dashboard-card rounded-3xl border border-slate-200 bg-gradient-to-b from-white via-slate-50 to-slate-100/70 p-4 shadow-sm">
+                        <div class="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                                <div class="flex items-center gap-2">
+                                    <span class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4.5 w-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14V10z" />
+                                            <rect x="3" y="6" width="12" height="12" rx="2" ry="2" />
+                                        </svg>
+                                    </span>
+                                    <h2 class="text-lg font-semibold text-slate-800">Gate Scanning Console</h2>
+                                </div>
+                                <p class="mt-1 text-xs text-slate-500">Real-time face verification, attendance, and SMS workflow.</p>
                             </div>
-                            <p class="mt-1 text-xs text-slate-500">Real-time face verification, attendance, and SMS workflow.</p>
+                            <span id="currentSessionBadge" class="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">Current Session: Morning In</span>
                         </div>
-                        <span id="currentSessionBadge" class="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">Current Session: Morning In</span>
-                    </div>
 
-                    <div class="mt-4 grid grid-cols-1 gap-3 md:grid-cols-12">
-                        <div class="md:col-span-4 rounded-xl border border-slate-200 bg-white px-3 py-2.5">
-                            <label for="sessionModeSelect" class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Session Mode</label>
-                            <select id="sessionModeSelect" class="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-300">
-                                <option value="auto">Automatic (Time-Based)</option>
-                                <option value="manual_in">Manual IN</option>
-                                <option value="manual_out">Manual OUT</option>
-                            </select>
-                        </div>
-                        <div class="md:col-span-8 flex flex-wrap items-end justify-end gap-2">
-                            <button id="startBtn" class="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="m14.75 12-5.5 3.25V8.75L14.75 12Z" />
-                                </svg>
-                                <span>Start Scan</span>
-                            </button>
-                            <button id="stopBtn" class="inline-flex items-center gap-1.5 rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                    <rect x="7" y="7" width="10" height="10" rx="1"></rect>
-                                </svg>
-                                <span>Stop Scan</span>
-                            </button>
-                            <button id="scanFullscreenBtn" type="button" class="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">
-                                <span id="scanFullscreenIconEnter" aria-hidden="true">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4.5 w-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M8 3H4v4M16 3h4v4M8 21H4v-4M20 17v4h-4" />
-                                    </svg>
-                                </span>
-                                <span id="scanFullscreenIconExit" class="hidden" aria-hidden="true">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4.5 w-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 3H4v5M15 3h5v5M9 21H4v-5M20 16v5h-5" />
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 9 4 4M15 9l5-5M9 15l-5 5M15 15l5 5" />
-                                    </svg>
-                                </span>
-                                <span id="scanFullscreenLabel">Full Screen Camera</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <div class="mt-4 rounded-2xl border border-slate-200 bg-slate-900/95 p-2">
-                        <div id="scanFrame" class="relative mx-auto overflow-hidden rounded-xl border border-slate-700 bg-slate-900">
-                            <div id="scanPlaceholder" class="h-[320px] md:h-[360px] flex items-center justify-center text-center px-6">
-                                <div>
-                                    <p class="text-sm font-semibold text-slate-100">Webcam is idle</p>
-                                    <p class="mt-2 text-xs text-slate-400">Click <span class="font-semibold text-emerald-300">Start Scan</span> to open the camera.</p>
+                        <div class="mt-4 grid grid-cols-1 lg:grid-cols-12 gap-3 items-stretch">
+                            <div class="lg:col-span-7 lg:row-span-2 flex min-h-0">
+                                <div class="rounded-2xl border border-slate-200 bg-slate-900/95 p-2 flex flex-col w-full h-full">
+                                    <div class="mb-3 flex items-center justify-between px-2 text-xs text-slate-200">
+                                        <div class="flex items-center gap-2">
+                                            <span class="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-white/10 text-emerald-200">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14V10z" />
+                                                    <rect x="3" y="6" width="12" height="12" rx="2" ry="2" />
+                                                </svg>
+                                            </span>
+                                            <span class="font-semibold uppercase tracking-wide text-slate-200">Camera / Face Recognition</span>
+                                        </div>
+                                        <span class="text-[11px] text-slate-300">Live feed and verification overlay</span>
+                                    </div>
+                                    <div id="scanFrame" class="relative w-full overflow-hidden rounded-xl border border-slate-700 bg-slate-900 aspect-[16/9] min-h-[220px] sm:min-h-[260px] lg:aspect-auto lg:flex-1 lg:h-full">
+                                        <div id="scanPlaceholder" class="flex h-full items-center justify-center text-center px-6">
+                                            <div>
+                                                <p class="text-sm font-semibold text-slate-100">Webcam is idle</p>
+                                                <p class="mt-2 text-xs text-slate-400">Click <span class="font-semibold text-emerald-300">Start Scan</span> to open the camera.</p>
+                                            </div>
+                                        </div>
+                                        <img id="videoFeed" class="hidden h-full w-full object-cover" src="" alt="Gate video stream">
+                                        <div id="scanOverlay" class="hidden absolute bottom-0 left-0 right-0 border-t border-white/10 bg-black/70 px-4 py-2.5 text-sm text-white text-center backdrop-blur-sm">
+                                            No active verification event.
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
-                            <img id="videoFeed" class="hidden h-[320px] md:h-[360px] w-full object-cover" src="" alt="Gate video stream">
-                            <div id="scanOverlay" class="hidden absolute bottom-0 left-0 right-0 border-t border-white/10 bg-black/70 px-4 py-2.5 text-sm text-white text-center backdrop-blur-sm">
-                                No active verification event.
-                            </div>
-                        </div>
-                    </div>
+                            <div class="lg:col-span-5">
+                                <div class="rounded-2xl border border-slate-200 bg-white p-3">
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
+                                        <div class="space-y-2">
+                                            <div>
+                                                <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Session Controls</p>
+                                                <p class="mt-1 text-xs text-slate-500">Set the scan session mode and camera controls.</p>
+                                            </div>
+                                            <div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                                                <label for="sessionModeSelect" class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Session Mode</label>
+                                                <select id="sessionModeSelect" class="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-300">
+                                                    <option value="auto">Automatic (Time-Based)</option>
+                                                    <option value="manual_in">Manual IN</option>
+                                                    <option value="manual_out">Manual OUT</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="flex flex-wrap items-center gap-2 md:justify-end">
+                                            <button id="startBtn" class="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" d="m14.75 12-5.5 3.25V8.75L14.75 12Z" />
+                                                </svg>
+                                                <span>Start Scan</span>
+                                            </button>
+                                            <button id="stopBtn" class="inline-flex items-center gap-1.5 rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                                    <rect x="7" y="7" width="10" height="10" rx="1"></rect>
+                                                </svg>
+                                                <span>Stop Scan</span>
+                                            </button>
+                                            <button id="scanFullscreenBtn" type="button" class="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">
+                                                <span id="scanFullscreenIconEnter" aria-hidden="true">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4.5 w-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" d="M8 3H4v4M16 3h4v4M8 21H4v-4M20 17v4h-4" />
+                                                    </svg>
+                                                </span>
+                                                <span id="scanFullscreenIconExit" class="hidden" aria-hidden="true">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4.5 w-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 3H4v5M15 3h5v5M9 21H4v-5M20 16v5h-5" />
+                                                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 9 4 4M15 9l5-5M9 15l-5 5M15 15l5 5" />
+                                                    </svg>
+                                                </span>
+                                                <span id="scanFullscreenLabel">Full Screen Camera</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
 
-                    <div class="mt-3 grid grid-cols-1 gap-2 lg:grid-cols-12 lg:items-center">
-                        <div class="lg:col-span-6 flex flex-wrap items-center gap-2">
-                            <span id="scanStateBadge" class="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
-                                <span class="h-2 w-2 rounded-full bg-slate-400"></span>
-                                Idle
-                            </span>
-                            <span id="scanEventBadge" class="hidden inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold"></span>
-                            <p id="status" class="text-sm font-semibold text-slate-600">Status: Idle</p>
-                        </div>
-                        <div class="lg:col-span-6 text-right">
-                            <p id="sessionModeHint" class="text-[11px] font-semibold text-slate-600">Session Mode: Automatic (Time-Based)</p>
-                            <p id="sessionActionHint" class="text-[11px] font-semibold inline-flex items-center justify-end gap-1 text-emerald-700">
-                                <span id="sessionActionIcon" class="inline-flex" aria-hidden="true">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M19 12H5m7-7-7 7 7 7" />
-                                    </svg>
-                                </span>
-                                <span id="sessionActionText">Effective Action: IN</span>
-                            </p>
-                            <p class="text-[11px] text-slate-500">Camera feed remains active in fullscreen until you exit.</p>
+                            </div>
+                            <div class="lg:col-span-5">
+                                <div class="rounded-2xl border border-slate-200 bg-white p-3">
+                                    <div class="flex flex-wrap items-center justify-between gap-3">
+                                        <div>
+                                            <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Gate Status & Scan Result</p>
+                                            <p class="mt-1 text-xs text-slate-500">Live verification outcomes and system status.</p>
+                                        </div>
+                                        <div class="flex flex-wrap items-center gap-2 text-[11px]">
+                                            <span id="scanStateBadge" class="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+                                                <span class="h-2 w-2 rounded-full bg-slate-400"></span>
+                                                Idle
+                                            </span>
+                                            <span id="scanEventBadge" class="hidden inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold"></span>
+                                        </div>
+                                    </div>
+                                    <p id="status" class="mt-2 text-sm font-semibold text-slate-600">Status: Idle</p>
+                                    <div class="mt-3 grid grid-cols-2 gap-2 text-[11px] sm:grid-cols-4">
+                                        <div id="cameraStatusChip" class="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-center font-semibold text-slate-600">Camera Idle</div>
+                                        <div id="faceStatusChip" class="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-center font-semibold text-slate-600">Face: Standby</div>
+                                        <div id="accessStatusChip" class="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-center font-semibold text-slate-600">Access: --</div>
+                                        <div id="smsStatusChip" class="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-center font-semibold text-slate-600">SMS: --</div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 h-full">
-                    <div class="flex items-start justify-between gap-3 mb-4">
-                        <div>
-                            <h3 class="text-lg font-semibold text-slate-800">Quick Search & Filter</h3>
-                            <p class="text-xs text-slate-500 mt-1">Filter students, gate logs, and SMS logs instantly.</p>
+                <div class="xl:col-span-5 flex min-h-0 w-full">
+                    <div id="recentEntryLogsCard" class="dashboard-card rounded-2xl border border-slate-200 bg-white p-4 shadow-sm flex flex-col h-full w-full">
+                        <div class="flex items-start justify-between gap-3 mb-3">
+                            <div>
+                                <h3 class="text-base font-semibold text-slate-800">Recent Entry Logs</h3>
+                                <p class="text-xs text-slate-500 mt-1">Latest gate verification activity.</p>
+                            </div>
+                            <span class="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
+                                {{ search_gate_logs|length }}
+                            </span>
                         </div>
-                        <span class="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
-                            {{ search_students|length }} Students
-                        </span>
+                        <div class="space-y-2 text-sm overflow-y-auto pr-1 flex-1 min-h-0">
+                            {% for g in search_gate_logs[:6] %}
+                            <div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                                <p class="font-semibold text-slate-800 truncate">{{ g.student_name }} ({{ g.student_id }})</p>
+                                <p class="text-[11px] text-slate-500">{{ g.status }} | {{ g.timestamp }}</p>
+                            </div>
+                            {% else %}
+                            <p class="text-slate-500 text-xs">No recent gate entries available.</p>
+                            {% endfor %}
+                        </div>
                     </div>
-                    <form method="GET" action="/dashboard" class="space-y-3">
-                        <label class="block">
-                            <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Keyword</span>
-                            <input type="text" name="q" value="{{ filters.q }}" placeholder="Student ID or Name" class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 outline-none">
-                        </label>
 
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            <label class="block">
-                                <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Source</span>
-                                <select name="log_type" class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
-                                    <option value="all" {% if filters.log_type == 'all' %}selected{% endif %}>All Logs</option>
-                                    <option value="gate" {% if filters.log_type == 'gate' %}selected{% endif %}>Gate Logs</option>
-                                    <option value="sms" {% if filters.log_type == 'sms' %}selected{% endif %}>SMS Logs</option>
-                                </select>
-                            </label>
-                            <label class="block">
-                                <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Status</span>
-                                <select name="status" class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
-                                    <option value="" {% if not filters.status %}selected{% endif %}>Any Status</option>
-                                    <option value="Present" {% if filters.status == 'Present' %}selected{% endif %}>Present</option>
-                                    <option value="Late" {% if filters.status == 'Late' %}selected{% endif %}>Late</option>
-                                    <option value="SENT" {% if filters.status == 'SENT' %}selected{% endif %}>SMS Sent</option>
-                                    <option value="FAILED" {% if filters.status == 'FAILED' %}selected{% endif %}>SMS Failed</option>
-                                </select>
-                            </label>
-                        </div>
+                </div>
+            </section>
 
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            <label class="block">
-                                <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Date</span>
-                                <input type="date" name="date" value="{{ filters.date }}" class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
-                            </label>
-                            <label class="block">
-                                <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Class / Grade</span>
-                                <input type="text" name="student_class" value="{{ filters.student_class }}" placeholder="e.g. Grade 10" class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
-                            </label>
+            <section class="grid grid-cols-1 xl:grid-cols-12 gap-5">
+                <div class="xl:col-span-12">
+                    <div id="smsUnitsCard" class="dashboard-card rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                        <div class="flex items-start justify-between gap-3">
+                            <div class="flex items-center gap-3">
+                                <span class="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-violet-100 text-violet-700">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M21 11.25a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7H7.5l-4.5 2.25 1.35-3.6A8.5 8.5 0 115.25 3.75h7.25c4.7 0 8.5 3.8 8.5 8.5z" />
+                                    </svg>
+                                </span>
+                                <div>
+                                    <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">SMS Units Status</p>
+                                    <p class="text-sm font-semibold text-slate-800">PhilSMS Balance</p>
+                                </div>
+                            </div>
+                            <button id="smsUnitsRefreshBtn" type="button" class="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-600 transition hover:bg-slate-100">
+                                <svg id="smsUnitsRefreshIcon" xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12a7.5 7.5 0 0112.7-5.3L19.5 9M19.5 9V4.5M19.5 9H15M19.5 12a7.5 7.5 0 01-12.7 5.3L4.5 15M4.5 15V19.5M4.5 15H9" />
+                                </svg>
+                                <span>Refresh</span>
+                            </button>
                         </div>
-
-                        <div class="grid grid-cols-2 gap-2 pt-1">
-                            <button class="w-full bg-slate-800 text-white py-2 rounded-lg hover:bg-slate-900 transition text-sm font-medium">Apply</button>
-                            <a href="/dashboard" class="w-full text-center border border-slate-300 text-slate-700 py-2 rounded-lg hover:bg-slate-100 transition text-sm font-medium">Reset</a>
-                        </div>
-                    </form>
-                    <div class="mt-4 grid grid-cols-2 gap-2 text-xs">
-                        <div class="rounded-lg border border-emerald-100 bg-emerald-50 px-2.5 py-2">
-                            <p class="text-emerald-700 font-semibold">{{ search_gate_logs|length }}</p>
-                            <p class="text-emerald-700/80">Gate Matches</p>
-                        </div>
-                        <div class="rounded-lg border border-blue-100 bg-blue-50 px-2.5 py-2">
-                            <p class="text-blue-700 font-semibold">{{ search_sms_logs|length }}</p>
-                            <p class="text-blue-700/80">SMS Matches</p>
+                        <div class="mt-4 flex items-end justify-between gap-3">
+                            <div>
+                                <div class="flex items-baseline gap-2">
+                                    <span id="smsUnitsValue" class="text-3xl font-semibold text-slate-800">--</span>
+                                    <span id="smsUnitsBadge" class="hidden rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase"></span>
+                                </div>
+                                <p id="smsUnitsMeta" class="text-[11px] text-slate-500">Updated: --</p>
+                            </div>
+                            <div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-right text-[11px] text-slate-500">
+                                <p class="font-semibold text-slate-700">Monitoring</p>
+                                <p>Auto-refreshes after SMS sends</p>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -414,102 +481,82 @@
                 {% endif %}
             {% endfor %}
 
-            <section id="reports-charts" class="grid grid-cols-1 xl:grid-cols-12 gap-5">
-                <article class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 xl:col-span-8">
-                    <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
-                        <div>
-                            <h3 class="text-lg font-semibold text-slate-800">Daily Gate Entries</h3>
-                            <p class="text-xs text-slate-500 mt-1">30-day attendance flow from gate scans.</p>
+            <section id="reports-charts" class="space-y-5">
+                <div class="space-y-5">
+                    <article class="dashboard-card bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+                        <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
+                            <div>
+                                <h3 class="text-lg font-semibold text-slate-800">Daily Gate Entries</h3>
+                                <p class="text-xs text-slate-500 mt-1">30-day attendance flow from gate scans.</p>
+                            </div>
+                            <div class="grid grid-cols-3 gap-2 text-xs">
+                                <div class="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-center">
+                                    <p class="font-semibold text-slate-800">{{ gate_series|sum }}</p>
+                                    <p class="text-slate-500">30-Day Total</p>
+                                </div>
+                                <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-2 text-center">
+                                    <p class="font-semibold text-emerald-700">{{ session_counts['Morning In'] + session_counts['Afternoon In'] }}</p>
+                                    <p class="text-emerald-700/80">Today IN</p>
+                                </div>
+                                <div class="rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-2 text-center">
+                                    <p class="font-semibold text-blue-700">{{ session_counts['Noon Out'] + session_counts['Afternoon Out'] }}</p>
+                                    <p class="text-blue-700/80">Today OUT</p>
+                                </div>
+                            </div>
                         </div>
-                        <div class="grid grid-cols-3 gap-2 text-xs">
-                            <div class="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-center">
-                                <p class="font-semibold text-slate-800">{{ gate_series|sum }}</p>
-                                <p class="text-slate-500">30-Day Total</p>
-                            </div>
-                            <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-2 text-center">
-                                <p class="font-semibold text-emerald-700">{{ session_counts['Morning In'] + session_counts['Afternoon In'] }}</p>
-                                <p class="text-emerald-700/80">Today IN</p>
-                            </div>
-                            <div class="rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-2 text-center">
-                                <p class="font-semibold text-blue-700">{{ session_counts['Noon Out'] + session_counts['Afternoon Out'] }}</p>
-                                <p class="text-blue-700/80">Today OUT</p>
-                            </div>
+                        <div class="h-64">
+                            <canvas id="gateEntriesChart"></canvas>
                         </div>
-                    </div>
-                    <div class="h-64">
-                        <canvas id="gateEntriesChart"></canvas>
-                    </div>
-                </article>
+                    </article>
 
-                <article class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 xl:col-span-4">
-                    <div class="flex items-start justify-between gap-3 mb-4">
-                        <div>
-                            <h3 class="text-lg font-semibold text-slate-800">SMS Logs Sent Per Day</h3>
-                            <p class="text-xs text-slate-500 mt-1">Daily delivered parent notifications.</p>
-                        </div>
-                        <span class="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700">
-                            {{ sms_series|sum }} Total
-                        </span>
-                    </div>
-                    <div class="h-64">
-                        <canvas id="smsBarChart"></canvas>
-                    </div>
-                </article>
-
-                <article class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 xl:col-span-3">
-                    <h3 class="text-lg font-semibold text-slate-800">Attendance Distribution</h3>
-                    <p class="text-xs text-slate-500 mt-1 mb-3">Present, absent, and late composition for today.</p>
-                    <div class="h-52">
-                        <canvas id="attendancePieChart"></canvas>
-                    </div>
-                    <div class="mt-3 grid grid-cols-3 gap-2 text-[11px]">
-                        <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-center">
-                            <p class="font-semibold text-emerald-700">{{ attendance_distribution.present }}</p>
-                            <p class="text-emerald-700/80">Present</p>
-                        </div>
-                        <div class="rounded-lg border border-rose-200 bg-rose-50 px-2 py-1.5 text-center">
-                            <p class="font-semibold text-rose-700">{{ attendance_distribution.absent }}</p>
-                            <p class="text-rose-700/80">Absent</p>
-                        </div>
-                        <div class="rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-center">
-                            <p class="font-semibold text-amber-700">{{ attendance_distribution.late }}</p>
-                            <p class="text-amber-700/80">Late</p>
-                        </div>
-                    </div>
-                </article>
-
-                <article class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 xl:col-span-4">
-                    <div class="flex items-start justify-between gap-3 mb-3">
-                        <div>
-                            <h3 class="text-lg font-semibold text-slate-800">Student Matches</h3>
-                            <p class="text-xs text-slate-500 mt-1">Matched student records from the active filter.</p>
-                        </div>
-                        <span class="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
-                            {{ search_students|length }}
-                        </span>
-                    </div>
-                    <div class="max-h-72 overflow-y-auto pr-1 space-y-2 text-sm">
-                        {% for s in search_students %}
-                        <div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 flex items-center gap-3">
-                            <div class="h-10 w-10 rounded-lg bg-slate-100 border border-slate-200 overflow-hidden flex items-center justify-center">
-                                {% if s.profile_photo %}
-                                <img src="{{ s.profile_photo }}" alt="{{ s.name }}" class="h-full w-full object-cover">
-                                {% else %}
-                                <span class="text-[10px] font-semibold text-slate-500">No Photo</span>
-                                {% endif %}
+                    <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
+                        <article class="dashboard-card bg-white rounded-2xl shadow-sm border border-slate-200 p-5 lg:col-span-7">
+                            <div class="flex items-start justify-between gap-3 mb-4">
+                                <div>
+                                    <h3 class="text-lg font-semibold text-slate-800">SMS Logs Sent Per Day</h3>
+                                    <p class="text-xs text-slate-500 mt-1">Daily delivered parent notifications.</p>
+                                </div>
+                                <span class="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700">
+                                    {{ sms_series|sum }} Total
+                                </span>
                             </div>
-                            <div class="min-w-0">
-                                <p class="font-semibold text-slate-800 truncate">{{ s.name }} ({{ s.student_id }})</p>
-                                <p class="text-slate-500 text-xs truncate">{{ s.grade or '-' }} | {{ s.section or '-' }} | {{ s.parent_contact or 'No contact' }}</p>
+                            <div class="aspect-[16/9] w-full">
+                                <canvas id="smsBarChart" class="h-full w-full"></canvas>
                             </div>
-                        </div>
-                        {% else %}
-                        <p class="text-slate-500">No students found for current filters.</p>
-                        {% endfor %}
-                    </div>
-                </article>
+                        </article>
 
-                <article class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 xl:col-span-5">
+                        <article class="dashboard-card bg-white rounded-2xl shadow-sm border border-slate-200 p-5 lg:col-span-5">
+                            <div class="flex items-start justify-between gap-3 mb-4">
+                                <div>
+                                    <h3 class="text-lg font-semibold text-slate-800">Attendance Distribution</h3>
+                                    <p class="text-xs text-slate-500 mt-1">Present vs absent vs late.</p>
+                                </div>
+                            </div>
+                            <div class="h-48">
+                                <canvas id="attendancePieChart" class="h-full w-full"></canvas>
+                            </div>
+                            <div class="mt-3 grid grid-cols-3 gap-2 text-[11px]">
+                                <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-center">
+                                    <p class="font-semibold text-emerald-700">{{ attendance_distribution.present }}</p>
+                                    <p class="text-emerald-700/80">Present</p>
+                                </div>
+                                <div class="rounded-lg border border-rose-200 bg-rose-50 px-2 py-1.5 text-center">
+                                    <p class="font-semibold text-rose-700">{{ attendance_distribution.absent }}</p>
+                                    <p class="text-rose-700/80">Absent</p>
+                                </div>
+                                <div class="rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-center">
+                                    <p class="font-semibold text-amber-700">{{ attendance_distribution.late }}</p>
+                                    <p class="text-amber-700/80">Late</p>
+                                </div>
+                            </div>
+                        </article>
+                    </div>
+                </div>
+
+            </section>
+
+            <section id="system-activity" class="grid grid-cols-1 xl:grid-cols-12 gap-5 items-stretch">
+                <article class="dashboard-card bg-white rounded-2xl shadow-sm border border-slate-200 p-5 xl:col-span-7">
                     <div class="flex items-start justify-between gap-3 mb-3">
                         <div>
                             <h3 class="text-lg font-semibold text-slate-800">Log Matches</h3>
@@ -545,10 +592,31 @@
                         </div>
                     </div>
                 </article>
+
+                <article class="dashboard-card bg-white rounded-2xl shadow-sm border border-slate-200 p-5 xl:col-span-5">
+                    <div class="flex items-start justify-between gap-3 mb-3">
+                        <div>
+                            <h3 class="text-lg font-semibold text-slate-800">Login History</h3>
+                            <p class="text-xs text-slate-500 mt-1">Recent authentication activity.</p>
+                        </div>
+                        <span class="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-600">{{ login_rows|length }}</span>
+                    </div>
+                    <div class="max-h-72 overflow-y-auto text-sm pr-1 space-y-2">
+                        {% for row in login_rows %}
+                        <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                            <p class="font-medium text-slate-800 truncate">{{ row.username }} <span class="text-slate-500">({{ row.role }})</span></p>
+                            <p class="text-slate-500 text-xs truncate">{{ row.timestamp }}</p>
+                            <p class="text-slate-500 text-xs truncate">IP: {{ row.ip }}</p>
+                        </div>
+                        {% else %}
+                        <p class="text-slate-500">No login history available.</p>
+                        {% endfor %}
+                    </div>
+                </article>
             </section>
 
-            <section class="grid grid-cols-1 xl:grid-cols-12 gap-5">
-                <article id="user-management" class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 xl:col-span-6">
+            <section class="space-y-5">
+                <article id="user-management" class="dashboard-card bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
                     <div class="flex items-start justify-between gap-3 mb-4">
                         <div>
                             <h3 class="text-lg font-semibold text-slate-800">User Management & Roles</h3>
@@ -587,7 +655,7 @@
                     <p class="mb-4 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">Limited Access role cannot add or modify users.</p>
                     {% endif %}
 
-                    <div class="max-h-64 overflow-y-auto text-sm pr-1 space-y-1.5">
+                    <div class="text-sm space-y-1.5">
                         {% for user in users_list %}
                         <div class="py-2 border-b border-slate-100 flex items-center justify-between gap-3">
                             <div class="min-w-0">
@@ -602,51 +670,6 @@
                     </div>
                 </article>
 
-                <article class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 xl:col-span-3">
-                    <div class="flex items-start justify-between gap-3 mb-3">
-                        <div>
-                            <h3 class="text-lg font-semibold text-slate-800">Login History</h3>
-                            <p class="text-xs text-slate-500 mt-1">Recent authentication activity.</p>
-                        </div>
-                        <span class="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-600">{{ login_rows|length }}</span>
-                    </div>
-                    <div class="max-h-72 overflow-y-auto text-sm pr-1 space-y-2">
-                        {% for row in login_rows %}
-                        <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                            <p class="font-medium text-slate-800 truncate">{{ row.username }} <span class="text-slate-500">({{ row.role }})</span></p>
-                            <p class="text-slate-500 text-xs truncate">{{ row.timestamp }}</p>
-                            <p class="text-slate-500 text-xs truncate">IP: {{ row.ip }}</p>
-                        </div>
-                        {% else %}
-                        <p class="text-slate-500">No login history available.</p>
-                        {% endfor %}
-                    </div>
-                </article>
-
-                <article id="help-support" class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 xl:col-span-3">
-                    <h3 class="text-lg font-semibold text-slate-800 mb-3">Help & Support</h3>
-                    <div class="space-y-3 text-sm">
-                        <div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
-                            <p class="font-semibold text-slate-800 mb-1">Quick Links</p>
-                            <div class="flex flex-wrap gap-2 text-xs">
-                                <a href="/students" class="rounded-full border border-slate-300 bg-white px-2.5 py-1 font-semibold text-slate-700 hover:bg-slate-100">Students</a>
-                                <a href="/gate-logs" class="rounded-full border border-slate-300 bg-white px-2.5 py-1 font-semibold text-slate-700 hover:bg-slate-100">Gate Logs</a>
-                                <a href="/sms-logs" class="rounded-full border border-slate-300 bg-white px-2.5 py-1 font-semibold text-slate-700 hover:bg-slate-100">SMS Logs</a>
-                                <a href="/analytics" class="rounded-full border border-slate-300 bg-white px-2.5 py-1 font-semibold text-slate-700 hover:bg-slate-100">Analytics</a>
-                                <a href="/developers" class="rounded-full border border-slate-300 bg-white px-2.5 py-1 font-semibold text-slate-700 hover:bg-slate-100">Developers</a>
-                            </div>
-                        </div>
-                        <div class="rounded-xl border border-amber-200 bg-amber-50 px-3 py-3">
-                            <p class="font-semibold text-amber-800 mb-1">Troubleshooting</p>
-                            <p class="text-amber-800/90 text-xs">If scan or SMS fails, check Alerts first, then verify camera access and `.env` credentials.</p>
-                        </div>
-                        <div class="rounded-xl border border-blue-200 bg-blue-50 px-3 py-3">
-                            <p class="font-semibold text-blue-800 mb-1">Contact Support</p>
-                            <p class="text-blue-800/90 text-xs">support@chs-gate.local</p>
-                            <p class="text-blue-800/90 text-xs">+63 900 000 0000</p>
-                        </div>
-                    </div>
-                </article>
             </section>
 
         </main>
@@ -941,6 +964,17 @@ const statPresentToday = document.getElementById('statPresentToday');
 const statSmsSentToday = document.getElementById('statSmsSentToday');
 const statMaleStudents = document.getElementById('statMaleStudents');
 const statFemaleStudents = document.getElementById('statFemaleStudents');
+const smsUnitsCard = document.getElementById('smsUnitsCard');
+const smsUnitsValue = document.getElementById('smsUnitsValue');
+const smsUnitsMeta = document.getElementById('smsUnitsMeta');
+const smsUnitsBadge = document.getElementById('smsUnitsBadge');
+const smsUnitsRefreshBtn = document.getElementById('smsUnitsRefreshBtn');
+const smsUnitsRefreshIcon = document.getElementById('smsUnitsRefreshIcon');
+const cameraStatusChip = document.getElementById('cameraStatusChip');
+const faceStatusChip = document.getElementById('faceStatusChip');
+const accessStatusChip = document.getElementById('accessStatusChip');
+const smsStatusChip = document.getElementById('smsStatusChip');
+const alertsSummaryCount = document.getElementById('alertsSummaryCount');
 let scanPollingTimer = null;
 let lastEventId = 0;
 let isScanning = false;
@@ -956,6 +990,9 @@ let dashboardRealtimeInitialized = false;
 let dashboardRealtimeSnapshot = { revision: 0, students: 0, gate_logs: 0, sms_logs: 0 };
 let scanStatusResetTimer = null;
 let scanEventBadgeTimer = null;
+let smsBalanceRefreshTimer = null;
+let smsBalancePollTimer = null;
+let smsBalanceLoading = false;
 
 function getCurrentSessionLabel(now = new Date()) {
     const minutes = now.getHours() * 60 + now.getMinutes();
@@ -1071,6 +1108,7 @@ function applyScanModelStatus(status, registeredFaces = 0, force = false) {
         scanOverlay.classList.remove('hidden');
         setScanState('scanning', 'Status: Loading face database...');
         showScanEventBadge('info', 'Loading face database...');
+        setStatusChip(faceStatusChip, 'Face: Loading', 'info');
         return;
     }
 
@@ -1081,6 +1119,7 @@ function applyScanModelStatus(status, registeredFaces = 0, force = false) {
         scanOverlay.classList.remove('hidden');
         setScanState('scanning', `Status: Scanning (${scanSessionModeLabel(scanSessionMode)})`);
         showScanEventBadge('success', `Face recognition ready${countText}`);
+        setStatusChip(faceStatusChip, 'Face: Ready', 'success');
         return;
     }
 
@@ -1089,6 +1128,7 @@ function applyScanModelStatus(status, registeredFaces = 0, force = false) {
         scanOverlay.classList.remove('hidden');
         setScanState('warning', 'Status: Face encodings missing');
         showScanEventBadge('warning', 'Face encodings are missing.');
+        setStatusChip(faceStatusChip, 'Face: Update Needed', 'warning');
         return;
     }
 
@@ -1097,6 +1137,7 @@ function applyScanModelStatus(status, registeredFaces = 0, force = false) {
         scanOverlay.classList.remove('hidden');
         setScanState('warning', 'Status: No registered face encodings');
         showScanEventBadge('warning', 'No registered face encodings found.');
+        setStatusChip(faceStatusChip, 'Face: None', 'warning');
         return;
     }
 
@@ -1105,11 +1146,13 @@ function applyScanModelStatus(status, registeredFaces = 0, force = false) {
         scanOverlay.classList.remove('hidden');
         setScanState('error', 'Status: Face model not ready');
         showScanEventBadge('error', 'Face model not ready.');
+        setStatusChip(faceStatusChip, 'Face: Offline', 'danger');
         return;
     }
 
     scanOverlay.textContent = 'Scanning for faces...';
     scanOverlay.classList.remove('hidden');
+    setStatusChip(faceStatusChip, 'Face: Scanning', 'info');
 }
 
 async function fetchScanSessionModeState() {
@@ -1254,6 +1297,10 @@ function scheduleScanningStateRestore(delay = 1800) {
     scanStatusResetTimer = setTimeout(() => {
         if (!isScanning) return;
         setScanState('scanning', `Status: Scanning (${scanSessionModeLabel(scanSessionMode)})`);
+        setStatusChip(cameraStatusChip, 'Camera Active', 'info');
+        setStatusChip(faceStatusChip, 'Face: Scanning', 'info');
+        setStatusChip(accessStatusChip, 'Access: Standby', 'neutral');
+        setStatusChip(smsStatusChip, 'SMS: Standby', 'neutral');
     }, Math.max(500, Number(delay) || 1800));
 }
 
@@ -1383,6 +1430,167 @@ async function refreshDashboardStats() {
     }
 }
 
+function setStatusChip(element, text, tone = 'neutral') {
+    if (!element) return;
+    const palette = {
+        neutral: ['border-slate-200', 'bg-slate-50', 'text-slate-600'],
+        info: ['border-blue-200', 'bg-blue-50', 'text-blue-700'],
+        success: ['border-emerald-200', 'bg-emerald-50', 'text-emerald-700'],
+        warning: ['border-amber-200', 'bg-amber-50', 'text-amber-700'],
+        danger: ['border-rose-200', 'bg-rose-50', 'text-rose-700'],
+    };
+    element.className = 'rounded-lg border px-2 py-1.5 text-center text-[11px] font-semibold';
+    const tokens = palette[tone] || palette.neutral;
+    tokens.forEach((token) => element.classList.add(token));
+    element.textContent = text;
+}
+
+function applyGateStatusDefaults() {
+    if (isScanning) {
+        setStatusChip(cameraStatusChip, 'Camera Active', 'info');
+        setStatusChip(faceStatusChip, 'Face: Scanning', 'info');
+        setStatusChip(accessStatusChip, 'Access: Standby', 'neutral');
+        setStatusChip(smsStatusChip, 'SMS: Standby', 'neutral');
+        return;
+    }
+    setStatusChip(cameraStatusChip, 'Camera Idle', 'neutral');
+    setStatusChip(faceStatusChip, 'Face: Standby', 'neutral');
+    setStatusChip(accessStatusChip, 'Access: --', 'neutral');
+    setStatusChip(smsStatusChip, 'SMS: --', 'neutral');
+}
+
+function formatSmsUnits(value) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return '--';
+    if (Number.isInteger(numeric)) return numeric.toLocaleString();
+    return numeric.toLocaleString(undefined, { maximumFractionDigits: 2 });
+}
+
+function formatSmsUpdatedAt(value) {
+    if (!value) return '--';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '--';
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function setSmsUnitsBadge(text, classes) {
+    if (!smsUnitsBadge) return;
+    if (!text) {
+        smsUnitsBadge.classList.add('hidden');
+        smsUnitsBadge.textContent = '';
+        return;
+    }
+    smsUnitsBadge.className = `rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${classes || ''}`;
+    smsUnitsBadge.textContent = text;
+    smsUnitsBadge.classList.remove('hidden');
+}
+
+function setSmsUnitsCardState(state = 'normal', threshold = null) {
+    if (!smsUnitsCard) return;
+    smsUnitsCard.classList.remove('border-slate-200', 'bg-white', 'border-amber-200', 'bg-amber-50', 'border-rose-200', 'bg-rose-50');
+    if (state === 'low') {
+        smsUnitsCard.classList.add('border-amber-200', 'bg-amber-50');
+        const thresholdText = Number.isFinite(Number(threshold))
+            ? `Low < ${formatSmsUnits(Number(threshold))}`
+            : 'Low Balance';
+        setSmsUnitsBadge(thresholdText, 'bg-amber-100 text-amber-700');
+        return;
+    }
+    if (state === 'error') {
+        smsUnitsCard.classList.add('border-rose-200', 'bg-rose-50');
+        setSmsUnitsBadge('Check', 'bg-rose-100 text-rose-700');
+        return;
+    }
+    smsUnitsCard.classList.add('border-slate-200', 'bg-white');
+    setSmsUnitsBadge('', '');
+}
+
+function setSmsRefreshLoading(isLoading) {
+    if (!smsUnitsRefreshBtn) return;
+    smsUnitsRefreshBtn.disabled = Boolean(isLoading);
+    smsUnitsRefreshBtn.classList.toggle('opacity-70', Boolean(isLoading));
+    smsUnitsRefreshIcon?.classList.toggle('animate-spin', Boolean(isLoading));
+}
+
+function applySmsBalancePayload(payload = {}) {
+    if (!smsUnitsValue || !smsUnitsMeta) return;
+    const status = String(payload.status || 'ok').toLowerCase();
+    const unitsValue = payload.units;
+    const numericUnits = Number.isFinite(Number(unitsValue)) ? Number(unitsValue) : null;
+    const lowThreshold = Number(payload.low_threshold);
+    const isLow = Boolean(payload.is_low) || (numericUnits !== null && Number.isFinite(lowThreshold) && numericUnits < lowThreshold);
+    const updatedAt = payload.checked_at || payload.checkedAt || '';
+    const message = String(payload.message || '').trim();
+
+    if (numericUnits !== null) {
+        smsUnitsValue.textContent = formatSmsUnits(numericUnits);
+    } else {
+        smsUnitsValue.textContent = status === 'error' ? 'Unavailable' : '--';
+    }
+
+    if (updatedAt) {
+        smsUnitsMeta.textContent = `Updated: ${formatSmsUpdatedAt(updatedAt)}`;
+    } else if (message) {
+        smsUnitsMeta.textContent = message;
+    } else {
+        smsUnitsMeta.textContent = 'Updated: --';
+    }
+
+    if (status === 'error') {
+        setSmsUnitsCardState('error');
+        return;
+    }
+    if (isLow) {
+        setSmsUnitsCardState('low', lowThreshold);
+        return;
+    }
+    setSmsUnitsCardState('normal');
+}
+
+async function refreshSmsBalance({ silent = false, force = false } = {}) {
+    if (!smsUnitsCard || smsBalanceLoading) return;
+    smsBalanceLoading = true;
+    if (!silent) {
+        smsUnitsValue.textContent = 'Loading...';
+        smsUnitsMeta.textContent = 'Fetching latest units...';
+        setSmsUnitsCardState('normal');
+        setSmsRefreshLoading(true);
+    }
+    try {
+        const url = force ? '/api/sms/balance?force=1' : '/api/sms/balance';
+        const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.status !== 'ok') {
+            throw new Error(data.message || 'SMS balance unavailable.');
+        }
+        applySmsBalancePayload(data.data || {});
+    } catch (error) {
+        applySmsBalancePayload({ status: 'error', message: error.message || 'SMS balance unavailable.' });
+    } finally {
+        smsBalanceLoading = false;
+        setSmsRefreshLoading(false);
+    }
+}
+
+function queueSmsBalanceRefresh(delay = 350) {
+    if (!smsUnitsCard || smsBalanceRefreshTimer) return;
+    smsBalanceRefreshTimer = setTimeout(() => {
+        smsBalanceRefreshTimer = null;
+        refreshSmsBalance({ silent: true });
+    }, Math.max(80, Number(delay) || 350));
+}
+
+function initSmsBalancePolling() {
+    if (!smsUnitsCard) return;
+    refreshSmsBalance();
+    if (smsBalancePollTimer) {
+        clearInterval(smsBalancePollTimer);
+    }
+    smsBalancePollTimer = setInterval(() => {
+        refreshSmsBalance({ silent: true });
+    }, 45000);
+}
+
 function queueDashboardStatsRefresh() {
     if (dashboardStatsRefreshTimer) return;
     dashboardStatsRefreshTimer = setTimeout(async () => {
@@ -1424,6 +1632,9 @@ function applyDashboardRealtimeSnapshot(payload) {
     if (studentsChanged || gateLogsChanged || smsLogsChanged) {
         queueDashboardStatsRefresh();
         queueDashboardContentRefresh();
+    }
+    if (smsLogsChanged) {
+        queueSmsBalanceRefresh();
     }
 }
 
@@ -1504,6 +1715,21 @@ function startPollingEvents() {
                         playNotificationTone();
                     }
                     speakVerification(evt.voice_message || displayMessage);
+                    const smsStatus = String(evt.sms_status || '').toLowerCase();
+                    setStatusChip(faceStatusChip, 'Face: Detected', 'success');
+                    setStatusChip(accessStatusChip, 'Access: Granted', 'success');
+                    if (smsStatus === 'sent') {
+                        setStatusChip(smsStatusChip, 'SMS: Sent', 'success');
+                    } else if (smsStatus === 'failed') {
+                        setStatusChip(smsStatusChip, 'SMS: Failed', 'danger');
+                    } else if (smsStatus) {
+                        setStatusChip(smsStatusChip, `SMS: ${smsStatus.toUpperCase()}`, 'warning');
+                    } else {
+                        setStatusChip(smsStatusChip, 'SMS: --', 'neutral');
+                    }
+                    if (smsStatus === 'sent' || smsStatus === 'failed') {
+                        queueSmsBalanceRefresh(500);
+                    }
                 }
 
                 if (evt.type === 'not_registered') {
@@ -1516,6 +1742,9 @@ function startPollingEvents() {
                     showScanEventBadge('warning', `Not Registered${confidenceText}`);
                     scheduleScanningStateRestore(2200);
                     playErrorTone();
+                    setStatusChip(faceStatusChip, 'Face: Unknown', 'warning');
+                    setStatusChip(accessStatusChip, 'Access: Denied', 'danger');
+                    setStatusChip(smsStatusChip, 'SMS: Skipped', 'neutral');
                 }
 
                 if (evt.type === 'scan_warning') {
@@ -1525,6 +1754,9 @@ function startPollingEvents() {
                     showScanEventBadge('error', evt.message || 'Scan warning.');
                     scheduleScanningStateRestore(2300);
                     playErrorTone();
+                    setStatusChip(faceStatusChip, 'Face: Review', 'warning');
+                    setStatusChip(accessStatusChip, 'Access: Review', 'warning');
+                    setStatusChip(smsStatusChip, 'SMS: --', 'neutral');
                 }
             });
         } catch (error) {
@@ -1566,6 +1798,7 @@ startBtn.addEventListener('click', async () => {
     if (response.ok) {
         isScanning = true;
         setScanButtons();
+        applyGateStatusDefaults();
         scanPlaceholder.classList.add('hidden');
         video.classList.remove('hidden');
         scanOverlay.classList.remove('hidden');
@@ -1586,6 +1819,7 @@ startBtn.addEventListener('click', async () => {
         scanPlaceholder.classList.remove('hidden');
         video.classList.add('hidden');
         scanOverlay.classList.add('hidden');
+        applyGateStatusDefaults();
     }
 });
 
@@ -1598,6 +1832,7 @@ stopBtn.addEventListener('click', async () => {
         scanStatusResetTimer = null;
     }
     setScanButtons();
+    applyGateStatusDefaults();
     video.src = '';
     video.classList.add('hidden');
     scanPlaceholder.classList.remove('hidden');
@@ -1611,6 +1846,10 @@ scanFullscreenBtn?.addEventListener('click', (event) => {
     event.preventDefault();
     event.stopPropagation();
     toggleScanFullscreen();
+});
+smsUnitsRefreshBtn?.addEventListener('click', (event) => {
+    event.preventDefault();
+    refreshSmsBalance({ silent: false, force: true });
 });
 document.addEventListener('fullscreenchange', updateScanFullscreenButton);
 document.addEventListener('webkitfullscreenchange', updateScanFullscreenButton);
@@ -1627,12 +1866,14 @@ window.addEventListener('beforeunload', () => {
 });
 setScanButtons();
 setScanState('idle', 'Status: Idle');
+applyGateStatusDefaults();
 updateScanFullscreenButton();
 updateCurrentSessionBadge();
 updateSessionActionHint();
 fetchScanSessionModeState();
 initDashboardRealtime();
 refreshDashboardStats();
+initSmsBalancePolling();
 setInterval(() => {
     updateCurrentSessionBadge();
     updateSessionActionHint();
@@ -2414,6 +2655,9 @@ function setUnreadCount(count) {
     if (sidebarAlertsBadge) {
         sidebarAlertsBadge.textContent = String(unreadValue);
         sidebarAlertsBadge.classList.toggle('hidden', unreadValue <= 0);
+    }
+    if (alertsSummaryCount) {
+        alertsSummaryCount.textContent = String(unreadValue);
     }
 }
 
