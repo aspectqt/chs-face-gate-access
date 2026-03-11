@@ -40,6 +40,7 @@ from functools import wraps
 from urllib.parse import urlencode
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
+from werkzeug.middleware.proxy_fix import ProxyFix
 import re
 import uuid
 import requests
@@ -100,6 +101,18 @@ def env_bool(name, default=False):
     raw = os.getenv(name, str(int(bool(default))))
     return str(raw).strip().lower() in {"1", "true", "yes", "on"}
 
+HTTPS_ENABLED = env_bool("HTTPS_ENABLED", False)
+FORCE_HTTPS = env_bool("FORCE_HTTPS", HTTPS_ENABLED)
+TRUST_PROXY_HEADERS = env_bool("TRUST_PROXY_HEADERS", False)
+SSL_CERT_FILE = os.getenv("SSL_CERT_FILE", "").strip()
+SSL_KEY_FILE = os.getenv("SSL_KEY_FILE", "").strip()
+FLASK_HOST = os.getenv("FLASK_HOST", "0.0.0.0").strip() or "0.0.0.0"
+FLASK_PORT = env_int("FLASK_PORT", 5000, minimum=1, maximum=65535)
+PREFERRED_URL_SCHEME = (
+    os.getenv("PREFERRED_URL_SCHEME", "https" if HTTPS_ENABLED else "http").strip().lower()
+    or ("https" if HTTPS_ENABLED else "http")
+)
+
 # =====================================
 # FLASK SETUP
 # =====================================
@@ -110,10 +123,14 @@ if app.secret_key == "super_secret_key_change_this":
 app.permanent_session_lifetime = timedelta(days=14)
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
-app.config["SESSION_COOKIE_SECURE"] = env_bool("SESSION_COOKIE_SECURE", False)
+app.config["SESSION_COOKIE_SECURE"] = env_bool("SESSION_COOKIE_SECURE", HTTPS_ENABLED)
+app.config["PREFERRED_URL_SCHEME"] = PREFERRED_URL_SCHEME
 app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
 AVATAR_UPLOAD_DIR = os.path.join(app.root_path, "static", "avatars")
 os.makedirs(AVATAR_UPLOAD_DIR, exist_ok=True)
+
+if TRUST_PROXY_HEADERS:
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
 # =====================================
 # CONFIGURATION
@@ -978,6 +995,23 @@ def require_permission(permission, api=False):
     return decorator
 
 
+def is_https_request():
+    if request.is_secure:
+        return True
+    proto_header = (request.headers.get("X-Forwarded-Proto") or "").split(",")[0].strip().lower()
+    return proto_header == "https"
+
+
+@app.before_request
+def enforce_https_redirect():
+    if not FORCE_HTTPS:
+        return None
+    if is_https_request():
+        return None
+    https_url = request.url.replace("http://", "https://", 1)
+    return redirect(https_url, code=308)
+
+
 def start_background_jobs_if_needed():
     global background_jobs_started
     if not ENABLE_BACKGROUND_JOBS:
@@ -1024,7 +1058,7 @@ def apply_security_headers(response):
     csp_header_name = "Content-Security-Policy" if CSP_ENFORCE else "Content-Security-Policy-Report-Only"
     response.headers.setdefault(csp_header_name, CONTENT_SECURITY_POLICY)
 
-    if request.is_secure:
+    if is_https_request():
         response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 
     if login_required() and request.endpoint != "static":
@@ -3217,40 +3251,29 @@ def refresh_face_index_async():
 
 
 def start_scan_capture():
+    """
+    Start scan mode. In the new client-side camera approach, this initializes
+    the face recognition system without requiring a server-side camera.
+    Frames will be sent by client devices.
+    """
     with scan_lock:
         if scan_state["active"]:
             return True, "Scan already running"
 
-    capture = open_capture_device()
-    if not capture or not capture.isOpened():
-        if capture is not None:
-            try:
-                capture.release()
-            except Exception:
-                pass
-        create_alert(
-            level="critical",
-            message="Gate system offline: webcam is unavailable.",
-            category="system",
-        )
-        return False, "Webcam could not be opened"
-
-    configure_capture_device(capture)
-    for _ in range(3):
-        try:
-            capture.read()
-        except Exception:
-            break
-
     with scan_lock:
         if scan_state["active"]:
             try:
-                capture.release()
+                capture = scan_state.get("capture")
+                if capture:
+                    capture.release()
             except Exception:
                 pass
             return True, "Scan already running"
+        
+        # In client-side frame mode, we don't need a server-side capture device
+        # Just mark the system as active
         last_scanned.clear()
-        scan_state["capture"] = capture
+        scan_state["capture"] = None  # No server-side camera needed
         scan_state["active"] = True
         scan_state["known_encodings"] = np.empty((0, 128), dtype=np.float64)
         scan_state["known_students"] = []
@@ -3260,7 +3283,7 @@ def start_scan_capture():
         scan_state["last_multi_face_ts"] = 0.0
 
     refresh_face_index_async()
-    return True, "Scan started"
+    return True, "Scan started (waiting for client frames)"
 
 
 def stop_scan_capture():
@@ -3281,6 +3304,11 @@ def stop_scan_capture():
 
 
 def generate_frames():
+    """
+    Legacy frame generator. With client-side camera, this function is not actively used
+    for getting frames (which now come from client via /process_scan_frame). 
+    This remains for backward compatibility and can provide default images if needed.
+    """
     banner = ""
     banner_until = 0.0
     cached_overlays = []
@@ -3295,165 +3323,29 @@ def generate_frames():
     target_h = max(240, int(SCAN_FRAME_HEIGHT))
     jpeg_quality_params = [int(cv2.IMWRITE_JPEG_QUALITY), int(SCAN_JPEG_QUALITY)]
 
+    # Create a placeholder frame since we're using client-side cameras
+    placeholder_frame = np.zeros((target_h, target_w, 3), dtype=np.uint8)
+    cv2.rectangle(placeholder_frame, (0, 0), (target_w, target_h), (40, 40, 40), -1)
+    cv2.putText(
+        placeholder_frame, 
+        "Waiting for client camera frames...", 
+        (int(target_w * 0.1), int(target_h // 2)),
+        cv2.FONT_HERSHEY_SIMPLEX, 
+        0.6, 
+        (150, 150, 150), 
+        2
+    )
+
+    # Stream placeholder frames
     while True:
         frame_start = time.time()
         with scan_lock:
             active = scan_state["active"]
-            capture = scan_state.get("capture")
-            db_encodings = scan_state.get("known_encodings", [])
-            db_students = scan_state.get("known_students", [])
-            model_status = scan_state.get("model_status", "idle")
 
-        if not active or capture is None:
+        if not active:
             break
 
-        grabbed = False
-        if flush_grabs > 0:
-            for _ in range(flush_grabs):
-                try:
-                    if capture.grab():
-                        grabbed = True
-                except Exception:
-                    break
-
-        if grabbed:
-            try:
-                ok, frame = capture.retrieve()
-            except Exception:
-                ok, frame = capture.read()
-        else:
-            ok, frame = capture.read()
-        if not ok:
-            create_alert(
-                level="critical",
-                message="Gate system offline: video feed interrupted.",
-                category="system",
-            )
-            break
-
-        if SCAN_FORCE_RESIZE and frame is not None:
-            try:
-                frame_h, frame_w = frame.shape[:2]
-                if frame_w != target_w or frame_h != target_h:
-                    interpolation = cv2.INTER_AREA if (frame_w > target_w or frame_h > target_h) else cv2.INTER_LINEAR
-                    frame = cv2.resize(frame, (target_w, target_h), interpolation=interpolation)
-            except Exception:
-                pass
-
-        frame_counter += 1
-        now_ts = time.time()
-        should_process = (
-            frame_counter % process_every_n == 0
-            and (now_ts - last_analysis_ts) >= recognition_interval
-        )
-
-        if should_process:
-            if scale < 1.0:
-                small_frame = cv2.resize(frame, (0, 0), fx=scale, fy=scale, interpolation=cv2.INTER_LINEAR)
-            else:
-                small_frame = frame
-            rgb_small = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
-            face_locations_small = face_recognition.face_locations(
-                rgb_small,
-                number_of_times_to_upsample=0,
-                model="hog",
-            )
-            cached_overlays = []
-            h, w = frame.shape[:2]
-            inv_scale = 1.0 / scale
-
-            def scale_box(box):
-                top_s, right_s, bottom_s, left_s = box
-                top = max(0, min(h - 1, int(top_s * inv_scale)))
-                right = max(0, min(w - 1, int(right_s * inv_scale)))
-                bottom = max(0, min(h - 1, int(bottom_s * inv_scale)))
-                left = max(0, min(w - 1, int(left_s * inv_scale)))
-                return top, right, bottom, left
-
-            if len(face_locations_small) > 1:
-                for box in face_locations_small:
-                    cached_overlays.append({
-                        "box": scale_box(box),
-                        "color": (0, 165, 255),
-                        "label": "Multiple Faces",
-                    })
-                push_multi_face_event(len(face_locations_small))
-                banner = "Multiple faces detected. One person at a time."
-                banner_until = now_ts + 2.0
-            elif len(face_locations_small) == 1:
-                top, right, bottom, left = scale_box(face_locations_small[0])
-                label = "Not Registered!"
-                color = (0, 64, 255)
-                confidence_pct = 0.0
-
-                face_encs = face_recognition.face_encodings(
-                    rgb_small,
-                    face_locations_small,
-                    model="small",
-                )
-
-                db_encoding_count = int(len(db_encodings)) if db_encodings is not None else 0
-                if model_status == "loading":
-                    label = "Initializing face index..."
-                    color = (0, 165, 255)
-                elif not face_encs:
-                    push_not_registered_event("face_not_encoded", 0.0)
-                elif model_status != "ready" or db_encoding_count == 0:
-                    reason = "model_not_ready" if model_status == "model_not_ready" else "no_registered_students"
-                    push_not_registered_event(reason, 0.0)
-                else:
-                    enc = face_encs[0]
-                    distances = face_recognition.face_distance(db_encodings, enc)
-                    if len(distances) > 0:
-                        best_idx = int(np.argmin(distances))
-                        best_distance = float(distances[best_idx])
-                        confidence_pct = calculate_match_confidence(best_distance)
-                        is_match = best_distance <= RECOGNITION_TOLERANCE and confidence_pct >= MIN_RECOGNITION_CONFIDENCE
-
-                        if is_match and best_idx < len(db_students):
-                            candidate = db_students[best_idx]
-                            label = candidate.get("name", "Verified")
-                            color = (46, 204, 113)
-                            verification = handle_verified_student(candidate, confidence_pct)
-                            if verification:
-                                banner = f"{candidate.get('name', '')}  |  {verification['display_message']}"
-                                banner_until = now_ts + 2.2
-                        else:
-                            push_not_registered_event("low_confidence", confidence_pct)
-                    else:
-                        push_not_registered_event("no_face_index", 0.0)
-
-                if label == "Not Registered!" and confidence_pct > 0:
-                    label = f"{label} ({confidence_pct:.1f}%)"
-                cached_overlays.append({
-                    "box": (top, right, bottom, left),
-                    "color": color,
-                    "label": label,
-                })
-            last_analysis_ts = now_ts
-
-        for overlay in cached_overlays:
-            top, right, bottom, left = overlay.get("box", (0, 0, 0, 0))
-            color = overlay.get("color", (0, 64, 255))
-            label = str(overlay.get("label") or "").strip()
-            cv2.rectangle(frame, (left, top), (right, bottom), color, 2)
-            if label:
-                cv2.putText(
-                    frame,
-                    label,
-                    (left, max(22, top - 10)),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.6,
-                    color,
-                    2,
-                )
-
-        if time.time() < banner_until and banner:
-            h, w = frame.shape[:2]
-            cv2.rectangle(frame, (0, h - 46), (w, h), (16, 124, 85), -1)
-            cv2.putText(frame, banner, (14, h - 16), cv2.FONT_HERSHEY_SIMPLEX, 0.72, (255, 255, 255), 2)
-
-        ret, buffer = cv2.imencode(".jpg", frame, jpeg_quality_params)
+        ret, buffer = cv2.imencode(".jpg", placeholder_frame, jpeg_quality_params)
         if not ret:
             continue
 
@@ -4638,6 +4530,140 @@ def start_scan():
 def stop_scan():
     stop_scan_capture()
     return jsonify({"status": "ok", "message": "Scan stopped"})
+
+
+def process_client_frame(frame_bytes):
+    """
+    Process a frame sent from the client device's camera.
+    Performs face recognition and pushes events.
+    
+    Returns: (success: bool, message: str)
+    """
+    try:
+        # Decode image from bytes
+        nparr = np.frombuffer(frame_bytes, np.uint8)
+        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        
+        if frame is None or frame.size == 0:
+            return False, "Failed to decode image"
+        
+        # Get current scan state
+        with scan_lock:
+            active = scan_state.get("active", False)
+            db_encodings = scan_state.get("known_encodings", np.empty((0, 128), dtype=np.float64))
+            db_students = scan_state.get("known_students", [])
+            model_status = scan_state.get("model_status", "idle")
+        
+        if not active:
+            return False, "Scan not active"
+        
+        # Process frame for face recognition
+        scale = min(max(SCAN_RECOGNITION_SCALE, 0.25), 1.0)
+        
+        if scale < 1.0:
+            small_frame = cv2.resize(frame, (0, 0), fx=scale, fy=scale, interpolation=cv2.INTER_LINEAR)
+        else:
+            small_frame = frame
+        
+        rgb_small = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
+        
+        # Detect faces
+        face_locations_small = face_recognition.face_locations(
+            rgb_small,
+            number_of_times_to_upsample=0,
+            model="hog",
+        )
+        
+        # Handle multiple faces
+        if len(face_locations_small) > 1:
+            push_multi_face_event(len(face_locations_small))
+            return True, f"Multiple faces detected ({len(face_locations_small)})"
+        
+        # Handle single face
+        if len(face_locations_small) == 1:
+            face_encs = face_recognition.face_encodings(
+                rgb_small,
+                face_locations_small,
+                model="small",
+            )
+            
+            db_encoding_count = int(len(db_encodings)) if db_encodings is not None else 0
+            
+            if model_status == "loading":
+                return True, "Model still loading"
+            elif not face_encs:
+                push_not_registered_event("face_not_encoded", 0.0)
+                return True, "Face not encoded"
+            elif model_status != "ready" or db_encoding_count == 0:
+                reason = "model_not_ready" if model_status == "model_not_ready" else "no_registered_students"
+                push_not_registered_event(reason, 0.0)
+                return True, f"Not ready: {reason}"
+            else:
+                # Compare faces with database
+                enc = face_encs[0]
+                distances = face_recognition.face_distance(db_encodings, enc)
+                
+                if len(distances) > 0:
+                    best_idx = int(np.argmin(distances))
+                    best_distance = float(distances[best_idx])
+                    confidence_pct = calculate_match_confidence(best_distance)
+                    is_match = best_distance <= RECOGNITION_TOLERANCE and confidence_pct >= MIN_RECOGNITION_CONFIDENCE
+                    
+                    if is_match and best_idx < len(db_students):
+                        candidate = db_students[best_idx]
+                        verification = handle_verified_student(candidate, confidence_pct)
+                        if verification:
+                            return True, f"Verified: {candidate.get('name', 'Unknown')}"
+                        else:
+                            return True, "Duplicate scan (cooldown)"
+                    else:
+                        push_not_registered_event("low_confidence", confidence_pct)
+                        return True, f"Low confidence: {confidence_pct:.1f}%"
+                else:
+                    push_not_registered_event("no_face_index", 0.0)
+                    return True, "No face index"
+        
+        return True, "No faces detected"
+        
+    except Exception as exc:
+        error_msg = f"Frame processing error: {str(exc)}"
+        print(f"[ERROR] {error_msg}")
+        return False, error_msg
+
+
+@app.route("/process_scan_frame", methods=["POST"])
+@require_permission("scan", api=True)
+def process_scan_frame():
+    """
+    Endpoint to receive and process frames from client device camera.
+    Expects multipart/form-data with 'frame' file field.
+    """
+    try:
+        if 'frame' not in request.files:
+            return jsonify({"status": "error", "message": "No frame data provided"}), 400
+        
+        frame_file = request.files['frame']
+        if frame_file.filename == '':
+            return jsonify({"status": "error", "message": "Empty frame"}), 400
+        
+        # Read frame bytes
+        frame_bytes = frame_file.read()
+        if not frame_bytes:
+            return jsonify({"status": "error", "message": "No frame content"}), 400
+        
+        # Process the frame
+        success, message = process_client_frame(frame_bytes)
+        
+        return jsonify({
+            "status": "ok" if success else "error",
+            "message": message,
+            "processed": success,
+        }), (200 if success else 400)
+        
+    except Exception as exc:
+        error_msg = f"Failed to process frame: {str(exc)}"
+        print(f"[ERROR] {error_msg}")
+        return jsonify({"status": "error", "message": error_msg}), 500
 
 
 @app.route("/video_feed")
@@ -7222,7 +7248,39 @@ def debug_sms_test():
 # =====================================
 # RUN APP
 # =====================================
+def resolve_ssl_context():
+    if not HTTPS_ENABLED:
+        return None
+
+    cert_path = SSL_CERT_FILE
+    key_path = SSL_KEY_FILE
+
+    if cert_path:
+        if not os.path.exists(cert_path):
+            print(f"[WARNING] SSL_CERT_FILE '{cert_path}' not found. Falling back to adhoc certificate.")
+        elif key_path and not os.path.exists(key_path):
+            print(f"[WARNING] SSL_KEY_FILE '{key_path}' not found. Falling back to adhoc certificate.")
+        else:
+            return (cert_path, key_path) if key_path else cert_path
+
+    return "adhoc"
+
+
 if __name__ == "__main__":
     debug_mode = os.getenv("FLASK_DEBUG", "1").strip().lower() in {"1", "true", "yes", "on"}
-    app.run(host="0.0.0.0", port=5000, debug=debug_mode, use_reloader=debug_mode)
+    ssl_context = resolve_ssl_context()
+
+    if not HTTPS_ENABLED:
+        print("[WARNING] HTTPS_ENABLED=0. Browsers will block camera access on non-HTTPS origins (except localhost).")
+
+    scheme = "https" if ssl_context else "http"
+    print(f"[INFO] Starting Flask server on {scheme}://{FLASK_HOST}:{FLASK_PORT} (debug={debug_mode})")
+
+    app.run(
+        host=FLASK_HOST,
+        port=FLASK_PORT,
+        debug=debug_mode,
+        use_reloader=debug_mode,
+        ssl_context=ssl_context,
+    )
 

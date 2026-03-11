@@ -50,6 +50,18 @@ TEST_SMS_RECIPIENT=+639171234567
 3. Run the app:
    - `python app.py`
 
+## HTTPS / Camera access
+
+- Browsers only allow camera/microphone on HTTPS (or `http://localhost`). Use HTTPS when serving to other devices on the network.
+- Enable TLS in `.env`:
+  - `HTTPS_ENABLED=1`, `FORCE_HTTPS=1`, `FLASK_HOST=0.0.0.0`, `FLASK_PORT=5444`
+  - Set `SSL_CERT_FILE`/`SSL_KEY_FILE` to your certificate paths; leave blank to use the auto-generated adhoc dev cert.
+  - Set `SESSION_COOKIE_SECURE=1` and `APP_BASE_URL=https://<your-hostname-or-ip>:5444` for password reset links.
+- Quick self-signed cert (OpenSSL): `openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout certs/dev.key -out certs/dev.crt -subj "/CN=localhost"`
+- Start the server: `python app.py` then open `https://<host>:5444` and trust the cert on each device.
+- If other devices cannot reach the app, allow inbound TCP `5444` in Windows Firewall.
+- If TLS is terminated by a reverse proxy, keep `HTTPS_ENABLED=0` but set `FORCE_HTTPS=1` and `TRUST_PROXY_HEADERS=1` so redirects/HSTS still work.
+
 ## API Endpoints
 
 - `POST /api/sms/send` (protected)

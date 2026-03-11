@@ -15,6 +15,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap"
         rel="stylesheet">
     {% include 'partials/theme_assets.html' %}
+    <script src="{{ url_for('static', filename='client_camera.js') }}"></script>
     <style>
         :root {
             --dash-card-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
@@ -69,7 +70,7 @@
         #scanFrame:-webkit-full-screen #videoFeed {
             width: min(95vw, 1500px);
             height: min(88vh, 880px);
-            object-fit: contain;
+            object-fit: cover;
             border-radius: 0.75rem;
         }
 
@@ -426,8 +427,8 @@
                                                         open the camera.</p>
                                                 </div>
                                             </div>
-                                            <img id="videoFeed" class="hidden h-full w-full object-cover" src=""
-                                                alt="Gate video stream">
+                                            <video id="videoFeed" class="hidden h-full w-full object-cover" autoplay playsinline style="transform: scaleX(-1);"
+                                                title="Client device camera stream"></video>
                                             <div id="scanOverlay"
                                                 class="hidden absolute bottom-0 left-0 right-0 border-t border-white/10 bg-black/70 px-4 py-2.5 text-sm text-white text-center backdrop-blur-sm">
                                                 No active verification event.
@@ -1331,6 +1332,21 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <script>
+        // Initialize client-side camera
+        let clientCamera = new ClientCamera();
+        
+        clientCamera.onError = function(message) {
+            console.error('[Camera Error]', message);
+            showScanEventBadge('error', message);
+            if (isScanning) {
+                setScanState('error', 'Status: Camera Error - ' + message);
+            }
+        };
+        
+        clientCamera.onSuccess = function(message) {
+            console.log('[Camera Success]', message);
+        };
+
         const video = document.getElementById('videoFeed');
         const statusText = document.getElementById('status');
         const scanOverlay = document.getElementById('scanOverlay');
@@ -2163,6 +2179,42 @@
             }
         }
 
+        let frameProcessingTimer = null;
+        const FRAME_SEND_INTERVAL = 500; // Send a frame every 500ms for processing
+
+        function startFrameProcessing() {
+            if (frameProcessingTimer) return; // Already running
+            
+            frameProcessingTimer = setInterval(async () => {
+                if (!isScanning || !clientCamera.isActive()) return;
+                
+                try {
+                    const frameBlob = await clientCamera.getFrameAsBlob('image/jpeg');
+                    if (!frameBlob) return;
+                    
+                    // Send frame to server for face recognition processing
+                    const formData = new FormData();
+                    formData.append('frame', frameBlob, 'frame.jpg');
+                    
+                    // Fire and forget - don't wait for response
+                    fetch('/process_scan_frame', {
+                        method: 'POST',
+                        body: formData
+                    }).catch(err => console.debug('Frame send failed (expected):', err.message));
+                    
+                } catch (error) {
+                    console.debug('Frame capture error:', error.message);
+                }
+            }, FRAME_SEND_INTERVAL);
+        }
+
+        function stopFrameProcessing() {
+            if (frameProcessingTimer) {
+                clearInterval(frameProcessingTimer);
+                frameProcessingTimer = null;
+            }
+        }
+
         if (sessionModeSelect) {
             sessionModeSelect.addEventListener('change', () => {
                 const selectedMode = (sessionModeSelect.value || 'auto').trim();
@@ -2177,6 +2229,19 @@
 
         startBtn.addEventListener('click', async () => {
             if (isScanning) return;
+            
+            // Initialize client camera first
+            const cameraReady = await clientCamera.initialize('videoFeed');
+            if (!cameraReady) {
+                setScanState('error', 'Status: Failed to access camera - check permissions');
+                showScanEventBadge('error', 'Failed to initialize camera on this device.');
+                scanPlaceholder.classList.remove('hidden');
+                video.classList.add('hidden');
+                scanOverlay.classList.add('hidden');
+                applyGateStatusDefaults();
+                return;
+            }
+            
             const selectedModeForStart = sessionModeSelect
                 ? (sessionModeSelect.value || scanSessionMode || 'auto').trim()
                 : (scanSessionMode || 'auto');
@@ -2193,7 +2258,6 @@
                 scanPlaceholder.classList.add('hidden');
                 video.classList.remove('hidden');
                 scanOverlay.classList.remove('hidden');
-                video.src = `/video_feed?t=${Date.now()}`;
                 if (data.scan_session_mode) {
                     applyScanSessionMode(data.scan_session_mode, data.effective_session || null);
                 } else {
@@ -2201,10 +2265,14 @@
                     updateSessionActionHint();
                 }
                 setScanState('scanning', `Status: Scanning (${scanSessionModeLabel(scanSessionMode)})`);
-                showScanEventBadge('info', 'Camera stream started.');
+                showScanEventBadge('info', 'Camera stream started on your device.');
                 applyScanModelStatus(data.model_status || 'loading', data.registered_faces || 0, true);
                 startPollingEvents();
+                // Start sending frames to server for processing
+                startFrameProcessing();
             } else {
+                // Stop camera if scan failed
+                clientCamera.stop();
                 setScanState('error', `Status: Failed to start scan${data.message ? ' - ' + data.message : ''}`);
                 showScanEventBadge('error', data.message || 'Failed to start scan.');
                 scanPlaceholder.classList.remove('hidden');
@@ -2215,6 +2283,10 @@
         });
 
         stopBtn.addEventListener('click', async () => {
+            // Stop frame processing and camera
+            stopFrameProcessing();
+            clientCamera.stop();
+            
             await fetch('/stop_scan', { method: 'POST' }).catch(() => null);
             isScanning = false;
             scanModelStatus = 'idle';
@@ -2224,7 +2296,6 @@
             }
             setScanButtons();
             applyGateStatusDefaults();
-            video.src = '';
             video.classList.add('hidden');
             scanPlaceholder.classList.remove('hidden');
             scanOverlay.classList.add('hidden');
