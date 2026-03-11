@@ -7224,4 +7224,5 @@ def debug_sms_test():
 # =====================================
 if __name__ == "__main__":
     debug_mode = os.getenv("FLASK_DEBUG", "1").strip().lower() in {"1", "true", "yes", "on"}
-    app.run(debug=debug_mode, use_reloader=debug_mode)
+    app.run(host="0.0.0.0", port=5000, debug=debug_mode, use_reloader=debug_mode)
+

@@ -11,13 +11,20 @@
   {% include 'partials/theme_assets.html' %}
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 </head>
-<body class="bg-slate-100 h-screen overflow-hidden text-slate-800" data-authenticated="1" data-user-theme="{{ current_theme|default('') }}">
+<body class="bg-slate-100 h-screen overflow-hidden text-slate-800" data-authenticated="1" data-user-theme="{{ current_theme|default('') }}" x-data="{ mobileMenuOpen: false }">
 <div class="flex h-full">
     {% include 'partials/sidebar.html' %}
 
-  <div class="flex-1 flex flex-col" x-data="smsLogsPage()">
-    <header class="h-16 bg-white shadow-sm flex items-center justify-between px-6">
-      <h1 class="text-lg font-semibold text-gray-800">SMS Logs</h1>
+  <div class="flex-1 flex flex-col min-w-0 h-full overflow-hidden" x-data="smsLogsPage()">
+    <header class="h-16 bg-white shadow-sm flex shrink-0 items-center justify-between px-4 md:px-6">
+      <div class="flex items-center gap-3">
+        <button @click="mobileMenuOpen = true" class="md:hidden text-gray-500 hover:text-gray-700 focus:outline-none">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+        <h1 class="text-lg font-semibold text-gray-800 hidden sm:block">SMS Logs</h1>
+      </div>
       <div class="flex items-center gap-2">
         {% set theme_toggle_classes = 'relative p-2 rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200 transition focus:outline-none focus:ring-2 focus:ring-emerald-400' %}
         {% include 'partials/theme_toggle_button.html' %}
@@ -92,8 +99,8 @@
           </div>
         </div>
 
-        <form method="GET" action="/sms-logs" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-3 items-end">
-          <div class="xl:col-span-3">
+        <form method="GET" action="/sms-logs" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-12 gap-3 items-end">
+          <div class="xl:col-span-4">
             <label class="text-xs uppercase text-slate-500 font-semibold">Search</label>
             <div class="relative mt-1">
               <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
@@ -101,14 +108,14 @@
                   <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-4.35-4.35M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Z" />
                 </svg>
               </span>
-              <input type="text" name="q" value="{{ filters.q }}" placeholder="Student name or phone number" class="w-full rounded-xl border border-slate-300 pl-10 pr-3 py-2 text-sm">
+              <input type="text" name="q" value="{{ filters.q }}" placeholder="Recipient, ID, number, date" class="w-full rounded-xl border border-slate-300 pl-10 pr-3 py-2 text-sm">
             </div>
           </div>
-          <div class="xl:col-span-2">
+          <div class="xl:col-span-3">
             <label class="text-xs uppercase text-slate-500 font-semibold">From</label>
             <input type="date" name="start_date" value="{{ filters.start_date }}" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
           </div>
-          <div class="xl:col-span-2">
+          <div class="xl:col-span-3">
             <label class="text-xs uppercase text-slate-500 font-semibold">To</label>
             <input type="date" name="end_date" value="{{ filters.end_date }}" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
           </div>
@@ -193,6 +200,8 @@
             {% endfor %}
             {% if pagination.has_next %}<a href="{{ pagination.next_url }}" class="px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-semibold hover:bg-slate-100">Next</a>{% else %}<span class="px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-100 text-xs text-slate-400">Next</span>{% endif %}
           </div>
+        </div>
+      </section>
         </div>
       </section>
     </main>

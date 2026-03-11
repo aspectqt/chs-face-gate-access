@@ -10,12 +10,19 @@
 {% include 'partials/theme_assets.html' %}
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
 </head>
-<body class="bg-slate-100 h-screen overflow-hidden text-slate-800" data-authenticated="1" data-user-theme="{{ current_theme|default('') }}">
+<body class="bg-slate-100 h-screen overflow-hidden text-slate-800" data-authenticated="1" data-user-theme="{{ current_theme|default('') }}" x-data="{ mobileMenuOpen: false }">
 <div class="flex h-full">
   {% include 'partials/sidebar.html' %}
-  <div class="flex-1 flex flex-col">
-    <header class="h-16 bg-white shadow-sm flex items-center justify-between px-6">
-      <h1 class="text-lg font-semibold">Students</h1>
+  <div class="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
+    <header class="h-16 bg-white shadow-sm flex shrink-0 items-center justify-between px-4 md:px-6">
+      <div class="flex items-center gap-3">
+        <button @click="mobileMenuOpen = true" class="md:hidden text-gray-500 hover:text-gray-700 focus:outline-none">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+        <h1 class="text-lg font-semibold hidden sm:block">Students</h1>
+      </div>
       <div class="flex items-center gap-2">
         {% set theme_toggle_classes = 'relative p-2 rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200 transition focus:outline-none focus:ring-2 focus:ring-emerald-400' %}
         {% include 'partials/theme_toggle_button.html' %}
@@ -181,7 +188,7 @@
             <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Section Analytics</p>
             <h3 id="sectionStatsTitle" class="mt-1 text-sm font-semibold text-slate-900">No section selected</h3>
             <p id="sectionStatsSubtitle" class="mt-1 text-xs text-slate-500">Click a section chip to view detailed gender statistics.</p>
-            <div class="mt-3 grid grid-cols-3 gap-2">
+            <div class="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
               <article class="rounded-lg border border-slate-200 bg-white px-2 py-2 text-center">
                 <p class="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Total</p>
                 <p id="sectionStatsTotal" class="mt-1 text-lg font-bold text-slate-900">0</p>

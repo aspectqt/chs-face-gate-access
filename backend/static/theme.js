@@ -454,6 +454,89 @@
     });
   }
 
+  /* --- Global Page Transitions --- */
+  let pageTransitionOverlay = null;
+
+  function ensurePageTransitionOverlay() {
+    if (pageTransitionOverlay) return pageTransitionOverlay;
+    pageTransitionOverlay = document.getElementById("global-page-transition");
+    if (pageTransitionOverlay) return pageTransitionOverlay;
+
+    pageTransitionOverlay = document.createElement("div");
+    pageTransitionOverlay.id = "global-page-transition";
+    pageTransitionOverlay.innerHTML = '<div class="page-transition-spinner"></div>';
+    document.body.appendChild(pageTransitionOverlay);
+    return pageTransitionOverlay;
+  }
+
+  function triggerPageTransition(href) {
+    const overlay = ensurePageTransitionOverlay();
+    overlay.classList.add("page-transition-active");
+    
+    // Give animation a moment to start before blocking the thread with navigation.
+    setTimeout(() => {
+      window.location.href = href;
+    }, 180);
+  }
+
+  function setupPageTransitions() {
+    ensurePageTransitionOverlay();
+
+    // Listen to clicks globally to catch all anchor tags.
+    document.addEventListener("click", (event) => {
+      // Ignore if default prevented (e.g., Alpine handled it, or logout modal)
+      if (event.defaultPrevented) return;
+      // Ignore non-left clicks or modifier keys
+      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+
+      // Find closest anchor tag up the DOM tree
+      const link = event.target.closest("a");
+      if (!link) return;
+
+      const href = link.getAttribute("href");
+      if (!href) return;
+
+      // Ignore standard exclusions:
+      // - anchors within the same page
+      // - javascript links
+      // - external links
+      // - links opening in new tabs
+      // - explicitly marked non-transition links
+      if (
+        href.startsWith("#") ||
+        href.startsWith("javascript:") ||
+        link.target === "_blank" ||
+        link.hasAttribute("data-no-transition") ||
+        isLogoutHref(href)
+      ) {
+        return;
+      }
+
+      // Check for same origin cross-page navigation
+      try {
+        const url = new URL(link.href, window.location.origin);
+        if (url.origin !== window.location.origin) return;
+        
+        // Same document, just a hash change? Ignore.
+        if (url.pathname === window.location.pathname && url.search === window.location.search) {
+            return;
+        }
+
+        event.preventDefault();
+        triggerPageTransition(link.href);
+      } catch (err) {
+        // Fallback to default if URL parsing fails
+      }
+    });
+
+    // When returning via bfcache (back button), hide the overlay immediately.
+    window.addEventListener("pageshow", (event) => {
+      if (event.persisted && pageTransitionOverlay) {
+        pageTransitionOverlay.classList.remove("page-transition-active");
+      }
+    });
+  }
+
   function createSelectArrowElement() {
     const arrow = document.createElement("span");
     arrow.className = "ui-select-arrow";
@@ -628,6 +711,7 @@
     bindFullscreenButtons();
     enhanceSelectElements(document);
     bindLogoutLinks(document);
+    setupPageTransitions();
     ensureLogoutModal();
     observeSelectInsertions();
     syncThemeFromServerIfNeeded();

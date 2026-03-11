@@ -11,15 +11,22 @@
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   {% include 'partials/theme_assets.html' %}
 </head>
-<body class="bg-slate-100 h-screen overflow-hidden text-slate-800" data-authenticated="1" data-user-theme="{{ current_theme|default('') }}">
+<body class="bg-slate-100 h-screen overflow-hidden text-slate-800" data-authenticated="1" data-user-theme="{{ current_theme|default('') }}" x-data="{ mobileMenuOpen: false }">
 <div class="flex h-full">
   {% include 'partials/sidebar.html' %}
 
-  <div class="flex-1 flex flex-col">
-    <header class="h-16 bg-white shadow-sm flex items-center justify-between px-6">
-      <div>
-        <h1 class="text-lg font-semibold text-slate-800">Developers</h1>
-        <p class="text-xs text-slate-500">Project Team, Institution, and System Profile</p>
+  <div class="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
+    <header class="h-16 bg-white shadow-sm flex shrink-0 items-center justify-between px-4 md:px-6">
+      <div class="flex items-center gap-3">
+        <button @click="mobileMenuOpen = true" class="md:hidden text-gray-500 hover:text-gray-700 focus:outline-none">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+        <div class="hidden sm:block">
+          <h1 class="text-lg font-semibold text-slate-800">Developers</h1>
+          <p class="text-xs text-slate-500">Project Team, Institution, and System Profile</p>
+        </div>
       </div>
       <div class="flex items-center gap-2">
         {% set theme_toggle_classes = 'relative p-2 rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200 transition focus:outline-none focus:ring-2 focus:ring-emerald-400' %}

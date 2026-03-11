@@ -9,8 +9,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     {% include 'partials/theme_assets.html' %}
 </head>
-<body class="bg-gray-100" data-authenticated="{{ '1' if session.get('admin') else '0' }}" data-user-theme="{{ current_theme|default('') }}">
-    <div class="fixed top-4 right-4 z-40">
+<body class="bg-gray-100" data-authenticated="{{ '1' if session.get('admin') else '0' }}" data-user-theme="{{ current_theme|default('') }}" x-data="{ mobileMenuOpen: false }">
+    <div class="fixed top-4 right-4 z-40 hidden md:block">
         {% set theme_toggle_classes = 'inline-flex items-center justify-center h-10 w-10 rounded-full border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 transition focus:outline-none focus:ring-2 focus:ring-emerald-400' %}
         {% include 'partials/theme_toggle_button.html' %}
     </div>
