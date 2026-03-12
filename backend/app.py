@@ -165,6 +165,22 @@ LOGIN_MAX_ATTEMPTS = env_int("LOGIN_MAX_ATTEMPTS", 5, minimum=3, maximum=20)
 LOGIN_LOCKOUT_MINUTES = env_int("LOGIN_LOCKOUT_MINUTES", 15, minimum=1, maximum=240)
 SMS_BALANCE_CACHE_TTL_SECONDS = env_int("SMS_BALANCE_CACHE_TTL_SECONDS", 60, minimum=10, maximum=600)
 SMS_BALANCE_LOW_THRESHOLD = env_int("SMS_BALANCE_LOW_THRESHOLD", 50, minimum=0, maximum=1000000)
+SMS_TEMPLATE_MAX_LENGTH = env_int("SMS_TEMPLATE_MAX_LENGTH", 480, minimum=80, maximum=2000)
+ATTENDANCE_SMS_TEMPLATE_DEFAULT = (
+    os.getenv("ATTENDANCE_SMS_TEMPLATE", "").strip()
+    or "CHS Gate Access: {student_name} {movement_text} the gate ({status}) at {time} on {date}."
+)
+ATTENDANCE_SMS_TEMPLATE_DOC_ID = "attendance_gate_scan"
+ATTENDANCE_SMS_TEMPLATE_VARIABLES = (
+    "student_name",
+    "student_id",
+    "movement_text",
+    "gate_action",
+    "status",
+    "session",
+    "time",
+    "date",
+)
 CORRECTION_ALLOWED_STATUSES = {"Present", "Late", "Absent"}
 MORNING_START = dtime(hour=5, minute=0)
 NOON_START = dtime(hour=12, minute=0)
@@ -300,6 +316,7 @@ ROLE_PERMISSIONS = {
     "Limited Access": {"dashboard", "scan", "students_read", "logs", "analytics", "alerts_manage"},
 }
 password_reset_tokens = users.database["password_reset_tokens"]
+sms_templates = users.database["sms_templates"]
 try:
     password_reset_tokens.create_index([("token_hash", 1)], unique=True)
     password_reset_tokens.create_index([("expiresAt", 1)], expireAfterSeconds=0)
@@ -307,6 +324,10 @@ try:
     password_reset_tokens.create_index([("requestIp", 1), ("createdAt", -1)])
 except Exception as exc:
     print(f"[WARNING] Could not initialize password_reset_tokens indexes: {exc}")
+try:
+    sms_templates.create_index([("updatedAt", -1)])
+except Exception as exc:
+    print(f"[WARNING] Could not initialize sms_templates indexes: {exc}")
 
 
 # =====================================
@@ -2588,6 +2609,108 @@ def get_sms_balance_snapshot(force=False):
     }
 
 
+def normalize_sms_template_text(value):
+    return sanitize_profile_text(value, SMS_TEMPLATE_MAX_LENGTH, allow_newlines=False)
+
+
+def get_default_attendance_sms_template():
+    fallback = "CHS Gate Access: {student_name} {movement_text} the gate ({status}) at {time} on {date}."
+    from_env = normalize_sms_template_text(ATTENDANCE_SMS_TEMPLATE_DEFAULT)
+    return from_env or fallback
+
+
+def ensure_sms_template_defaults():
+    now_ts = now_iso()
+    default_template = get_default_attendance_sms_template()
+    try:
+        sms_templates.update_one(
+            {"_id": ATTENDANCE_SMS_TEMPLATE_DOC_ID},
+            {
+                "$setOnInsert": {
+                    "name": "Attendance Gate Scan Notification",
+                    "context": "attendance_gate_scan",
+                    "template": default_template,
+                    "variables": list(ATTENDANCE_SMS_TEMPLATE_VARIABLES),
+                    "maxLength": SMS_TEMPLATE_MAX_LENGTH,
+                    "createdAt": now_ts,
+                    "updatedAt": now_ts,
+                    "updatedBy": {"username": "system", "role": "System"},
+                }
+            },
+            upsert=True,
+        )
+    except Exception as exc:
+        print(f"[WARNING] Failed ensuring SMS template default: {exc}")
+
+
+def get_attendance_sms_template_payload():
+    default_template = get_default_attendance_sms_template()
+    payload = {
+        "template": default_template,
+        "default_template": default_template,
+        "updated_at": "",
+        "updated_by": "",
+        "max_length": SMS_TEMPLATE_MAX_LENGTH,
+        "variables": list(ATTENDANCE_SMS_TEMPLATE_VARIABLES),
+    }
+
+    try:
+        doc = sms_templates.find_one({"_id": ATTENDANCE_SMS_TEMPLATE_DOC_ID}) or {}
+    except Exception as exc:
+        print(f"[WARNING] Failed reading SMS template from MongoDB: {exc}")
+        return payload
+
+    stored_template = normalize_sms_template_text(doc.get("template", ""))
+    payload["template"] = stored_template or default_template
+    payload["updated_at"] = str(doc.get("updatedAt") or "").strip()
+
+    updated_by_value = doc.get("updatedBy")
+    if isinstance(updated_by_value, dict):
+        payload["updated_by"] = str(updated_by_value.get("username") or "").strip()
+    else:
+        payload["updated_by"] = str(updated_by_value or "").strip()
+
+    return payload
+
+
+def save_attendance_sms_template(template_text, actor_username="", actor_role=""):
+    cleaned_template = normalize_sms_template_text(template_text)
+    if not cleaned_template:
+        raise ValueError("SMS template cannot be empty.")
+
+    now_ts = now_iso()
+    actor_name = sanitize_profile_text(actor_username, 64)
+    actor_role_text = sanitize_profile_text(actor_role, 64)
+
+    sms_templates.update_one(
+        {"_id": ATTENDANCE_SMS_TEMPLATE_DOC_ID},
+        {
+            "$set": {
+                "name": "Attendance Gate Scan Notification",
+                "context": "attendance_gate_scan",
+                "template": cleaned_template,
+                "variables": list(ATTENDANCE_SMS_TEMPLATE_VARIABLES),
+                "maxLength": SMS_TEMPLATE_MAX_LENGTH,
+                "updatedAt": now_ts,
+                "updatedBy": {
+                    "username": actor_name or "system",
+                    "role": actor_role_text or "System",
+                },
+            },
+            "$setOnInsert": {
+                "createdAt": now_ts,
+            },
+        },
+        upsert=True,
+    )
+
+    payload = get_attendance_sms_template_payload()
+    payload["template"] = cleaned_template
+    payload["updated_at"] = now_ts
+    payload["updated_by"] = actor_name or "system"
+    return payload
+
+
 def log_skipped_sms(student_id="", student_name="", parent_contact="", message="", reason="skipped", sms_type="transactional", metadata=None):
     now = now_local()
     timestamp = now_iso()
@@ -3061,12 +3184,37 @@ def log_attendance_and_sms(student):
 
     if parent_contact:
         movement_text = "entered" if gate_action == "IN" else "exited"
-        msg_text = f"CHS Gate Access: {student_name} {movement_text} the gate ({status}) at {time_str} on {date_str}."
+        template_payload = get_attendance_sms_template_payload()
+        template_text = template_payload.get("template") or get_default_attendance_sms_template()
+        template_variables = {
+            "student_name": student_name,
+            "student_id": student_id,
+            "movement_text": movement_text,
+            "gate_action": gate_action,
+            "status": status,
+            "session": session_name,
+            "time": time_str,
+            "date": date_str,
+        }
+        try:
+            msg_text = SmsProvider.render_template(template_text, template_variables)
+        except Exception:
+            msg_text = SmsProvider.render_template(get_default_attendance_sms_template(), template_variables)
+        msg_text = normalize_sms_template_text(msg_text) or SmsProvider.render_template(
+            get_default_attendance_sms_template(),
+            template_variables,
+        )
+
         sms_result = send_sms(
             parent_contact,
             msg_text,
             sms_type="transactional",
-            metadata={"context": "attendance_gate_scan", "session": session_name},
+            metadata={
+                "context": "attendance_gate_scan",
+                "session": session_name,
+                "template_id": ATTENDANCE_SMS_TEMPLATE_DOC_ID,
+                "template_updated_at": template_payload.get("updated_at", ""),
+            },
             student_id=student_id,
             student_name=student_name,
             parent_contact=parent_contact,
@@ -3500,6 +3648,7 @@ ensure_default_admin_user()
 migrate_plaintext_user_passwords()
 ensure_user_theme_defaults()
 ensure_user_profile_defaults()
+ensure_sms_template_defaults()
 
 
 # =====================================
@@ -5449,6 +5598,102 @@ def students_page():
     )
 
 
+@app.route("/students/export", methods=["GET"])
+@require_permission("students_read")
+def students_export():
+    query, q_value, grade_level, section_value = build_students_query(
+        request.args.get("q", ""),
+        request.args.get("grade", "") or request.args.get("grade_level", ""),
+        request.args.get("section", ""),
+    )
+
+    def excel_text(value):
+        text = str(value or "")
+        text = text.replace("\r\n", "\n").replace("\r", "\n")
+        escaped = text.replace('"', '""')
+        return f'="{escaped}"'
+
+    total_students_all = students.count_documents({})
+    total_students_scope = students.count_documents(query)
+
+    section_pipeline = []
+    if query:
+        section_pipeline.append({"$match": query})
+    section_pipeline.extend([
+        {"$group": {"_id": {"$ifNull": ["$section", ""]}, "count": {"$sum": 1}}},
+        {"$project": {"_id": 0, "section": {"$cond": [{"$eq": ["$_id", ""]}, "Unassigned", "$_id"]}, "count": 1}},
+        {"$sort": {"count": -1, "section": 1}},
+    ])
+    section_breakdown = list(students.aggregate(section_pipeline))
+
+    rows = list(students.find(query).sort([("created_at", -1), ("name", 1)]))
+
+    output = StringIO(newline="")
+    writer = csv.writer(
+        output,
+        delimiter=",",
+        quotechar='"',
+        quoting=csv.QUOTE_ALL,
+        lineterminator="\r\n",
+    )
+
+    writer.writerow(["sep=,"])
+    writer.writerow(["Students Export"])
+    writer.writerow(["Generated At", now_iso()])
+    writer.writerow(["Search Filter", q_value or ""])
+    writer.writerow(["Grade Filter", grade_level or "All Grades"])
+    writer.writerow(["Section Filter", section_value or "All Sections"])
+    writer.writerow(["Total Students (All Records)", int(total_students_all)])
+    writer.writerow(["Total Students (Export Scope)", int(total_students_scope)])
+    writer.writerow([])
+    writer.writerow(["Section Breakdown"])
+    writer.writerow(["Section", "Student Count"])
+    if section_breakdown:
+        for item in section_breakdown:
+            writer.writerow([str(item.get("section") or "Unassigned"), int(item.get("count") or 0)])
+    else:
+        writer.writerow(["No records", 0])
+
+    writer.writerow([])
+    writer.writerow(["Student Records"])
+    writer.writerow([
+        "LRN",
+        "Student ID",
+        "Name",
+        "Grade Level",
+        "Section",
+        "Parent Contact",
+        "Gender",
+        "Status",
+        "Face Registered",
+        "Created At",
+        "Updated At",
+    ])
+
+    for row in rows:
+        writer.writerow([
+            excel_text(row.get("lrn", "")),
+            excel_text(row.get("student_id", "")),
+            str(row.get("name", "") or ""),
+            str(row.get("grade_level", row.get("grade", "")) or ""),
+            str(row.get("section", "") or ""),
+            excel_text(row.get("parent_contact", "")),
+            str(row.get("gender", row.get("sex", "")) or ""),
+            str(row.get("status", "") or ""),
+            "Yes" if bool(row.get("face_registered")) else "No",
+            excel_text(row.get("created_at", "")),
+            excel_text(row.get("updated_at", row.get("updatedAt", ""))),
+        ])
+
+    filename = f"students_export_{now_local().strftime('%Y%m%d_%H%M%S')}.csv"
+    csv_bytes = output.getvalue().encode("utf-8-sig")
+    return Response(
+        csv_bytes,
+        mimetype="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
 @app.route("/api/students/stats", methods=["GET"])
 @require_permission("students_read", api=True)
 def api_students_stats():
@@ -6022,7 +6267,7 @@ def gate_logs_page():
     except ValueError:
         page = 1
 
-    per_page = 15
+    per_page = 10
     total_filtered = attendance_logs.count_documents(query)
     pagination = build_pagination_payload(page, per_page, total_filtered, filters_payload, "gate_logs_page")
     skip = (pagination["page"] - 1) * per_page
@@ -6070,26 +6315,54 @@ def gate_logs_export():
     query, sort_spec, _filters_payload = build_gate_logs_query(request.args)
     rows = list(attendance_logs.find(query).sort(sort_spec).limit(5000))
 
-    output = StringIO()
-    writer = csv.writer(output)
-    writer.writerow(["Student ID", "Name", "Date", "Time", "Action", "Session", "Status", "Verification Label", "Timestamp"])
+    def excel_text(value):
+        text = str(value or "")
+        text = text.replace("\r\n", "\n").replace("\r", "\n")
+        escaped = text.replace('"', '""')
+        return f'="{escaped}"'
+
+    output = StringIO(newline="")
+    writer = csv.writer(
+        output,
+        delimiter=",",
+        quotechar='"',
+        quoting=csv.QUOTE_ALL,
+        lineterminator="\r\n",
+    )
+    writer.writerow(["sep=,"])
+    writer.writerow([
+        "Log ID",
+        "Student ID",
+        "Name",
+        "Date",
+        "Time",
+        "Action",
+        "Session",
+        "Status",
+        "Verification Label",
+        "Source",
+        "Timestamp",
+    ])
     for row in rows:
         writer.writerow([
-            row.get("student_id", ""),
+            excel_text(row.get("_id", "")),
+            excel_text(row.get("student_id", "")),
             row.get("student_name", ""),
-            row.get("date", ""),
-            row.get("time", ""),
+            excel_text(row.get("date", "")),
+            excel_text(row.get("time", "")),
             row.get("gate_action", ""),
             row.get("session", ""),
             row.get("status", ""),
             row.get("verification_label", ""),
-            row.get("timestamp", ""),
+            row.get("source", ""),
+            excel_text(row.get("timestamp", "")),
         ])
 
     filename = f"gate_logs_{now_local().strftime('%Y%m%d_%H%M%S')}.csv"
+    csv_bytes = output.getvalue().encode("utf-8-sig")
     return Response(
-        output.getvalue(),
-        mimetype="text/csv",
+        csv_bytes,
+        mimetype="text/csv; charset=utf-8",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
 
@@ -6407,7 +6680,7 @@ def sms_logs_page():
     except ValueError:
         page = 1
 
-    per_page = 15
+    per_page = 10
     total_filtered = sms_logs.count_documents(query)
     pagination = build_pagination_payload(page, per_page, total_filtered, filters_payload, "sms_logs_page")
     skip = (pagination["page"] - 1) * per_page
@@ -6435,15 +6708,75 @@ def sms_logs_page():
         "sent_count": sms_logs.count_documents({**query, "status": sms_status_mongo_filter("sent")}),
         "failed_count": sms_logs.count_documents({**query, "status": sms_status_mongo_filter("failed")}),
     }
+    sms_template = get_attendance_sms_template_payload()
 
     return render_template(
         "sms_logs.html",
         logs=logs,
         stats=stats,
+        sms_template=sms_template,
+        sms_template_variables=ATTENDANCE_SMS_TEMPLATE_VARIABLES,
         filters=filters_payload,
         pagination=pagination,
         export_query=urlencode({k: v for k, v in filters_payload.items() if v not in ("", None)}),
         **sidebar_context("sms_logs"),
+    )
+
+
+@app.route("/sms-logs/template", methods=["POST"])
+@require_permission("logs", api=True)
+def sms_logs_template_update():
+    if request.is_json:
+        payload = request.get_json(silent=True) or {}
+        raw_template = payload.get("template", "")
+    else:
+        raw_template = request.form.get("template", "")
+
+    actor_username = session.get("admin", "system")
+    actor_role = session.get("role", "System")
+
+    try:
+        saved_template = save_attendance_sms_template(
+            raw_template,
+            actor_username=actor_username,
+            actor_role=actor_role,
+        )
+    except ValueError as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 400
+    except Exception as exc:
+        log_audit_event(
+            action="sms.template.update",
+            outcome="failed",
+            severity="warn",
+            target_type="sms_template",
+            target_id=ATTENDANCE_SMS_TEMPLATE_DOC_ID,
+            details={"error": str(exc)},
+        )
+        return jsonify({"status": "error", "message": "Failed to save SMS template."}), 500
+
+    log_audit_event(
+        action="sms.template.update",
+        outcome="success",
+        severity="info",
+        target_type="sms_template",
+        target_id=ATTENDANCE_SMS_TEMPLATE_DOC_ID,
+        details={
+            "updated_by": actor_username,
+            "template_preview": saved_template.get("template", "")[:120],
+            "max_length": SMS_TEMPLATE_MAX_LENGTH,
+        },
+    )
+    return jsonify(
+        {
+            "status": "ok",
+            "message": "SMS template saved.",
+            "template": saved_template.get("template", ""),
+            "updated_at": saved_template.get("updated_at", ""),
+            "updated_by": saved_template.get("updated_by", ""),
+            "default_template": saved_template.get("default_template", ""),
+            "max_length": saved_template.get("max_length", SMS_TEMPLATE_MAX_LENGTH),
+            "variables": saved_template.get("variables", list(ATTENDANCE_SMS_TEMPLATE_VARIABLES)),
+        }
     )
 
 
@@ -6453,27 +6786,43 @@ def sms_logs_export():
     query, sort_spec, _filters_payload = build_sms_logs_query(request.args)
     rows = list(sms_logs.find(query).sort(sort_spec).limit(5000))
 
-    output = StringIO()
-    writer = csv.writer(output)
+    def excel_text(value):
+        # Force Excel to keep identifiers/date-like values as text (no scientific notation/date coercion).
+        text = str(value or "")
+        text = text.replace("\r\n", "\n").replace("\r", "\n")
+        escaped = text.replace('"', '""')
+        return f'="{escaped}"'
+
+    output = StringIO(newline="")
+    writer = csv.writer(
+        output,
+        delimiter=",",
+        quotechar='"',
+        quoting=csv.QUOTE_ALL,
+        lineterminator="\r\n",
+    )
+    # Excel delimiter hint for locales that default to semicolon-separated CSV.
+    writer.writerow(["sep=,"])
     writer.writerow(["Student ID", "Name", "Parent Contact", "Date", "Time", "Status", "Message", "SID", "Error", "Timestamp"])
     for row in rows:
         writer.writerow([
-            row.get("student_id", ""),
+            excel_text(row.get("student_id", "")),
             row.get("name", ""),
-            row.get("parent_contact", ""),
-            row.get("date", ""),
-            row.get("time", ""),
+            excel_text(row.get("parent_contact", "")),
+            excel_text(row.get("date", "")),
+            excel_text(row.get("time", "")),
             row.get("status", ""),
             row.get("message", ""),
-            row.get("sid", ""),
+            excel_text(row.get("sid", "")),
             row.get("error", ""),
-            row.get("timestamp", ""),
+            excel_text(row.get("timestamp", "")),
         ])
 
     filename = f"sms_logs_{now_local().strftime('%Y%m%d_%H%M%S')}.csv"
+    csv_bytes = output.getvalue().encode("utf-8-sig")
     return Response(
-        output.getvalue(),
-        mimetype="text/csv",
+        csv_bytes,
+        mimetype="text/csv; charset=utf-8",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
 

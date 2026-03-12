@@ -9,6 +9,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="{{ url_for('static', filename='chart_system.js', v='20260312a') }}"></script>
   {% include 'partials/theme_assets.html' %}
 </head>
 <body class="bg-slate-100 h-screen overflow-hidden text-slate-800" data-authenticated="1" data-user-theme="{{ current_theme|default('') }}" x-data="{ mobileMenuOpen: false }">
@@ -428,149 +429,22 @@ const gateSeries = {{ gate_series | tojson }};
 const smsSeries = {{ sms_series | tojson }};
 const attendanceDistribution = {{ attendance_distribution | tojson }};
 
-const gateCanvas = document.getElementById('gateEntriesChart');
-const smsCanvas = document.getElementById('smsBarChart');
-const attendanceCanvas = document.getElementById('attendancePieChart');
-
-const gateCtx = gateCanvas.getContext('2d');
-const smsCtx = smsCanvas.getContext('2d');
-
-const gateAreaGradient = gateCtx.createLinearGradient(0, 0, 0, 260);
-gateAreaGradient.addColorStop(0, 'rgba(5, 150, 105, 0.26)');
-gateAreaGradient.addColorStop(1, 'rgba(5, 150, 105, 0.03)');
-
-const smsBarGradient = smsCtx.createLinearGradient(0, 0, 0, 260);
-smsBarGradient.addColorStop(0, '#2563eb');
-smsBarGradient.addColorStop(1, '#60a5fa');
-
-const gateEntriesChart = new Chart(gateCanvas, {
-  type: 'line',
-  data: {
-    labels: chartLabels,
-    datasets: [{
-      label: 'Gate Entries',
-      data: gateSeries,
-      borderColor: '#059669',
-      backgroundColor: gateAreaGradient,
-      fill: true,
-      tension: 0.35,
-      borderWidth: 2.25,
-      pointRadius: 2.5,
-      pointHoverRadius: 4,
-      pointBackgroundColor: '#047857',
-      pointBorderColor: '#ffffff',
-      pointBorderWidth: 1.5
-    }]
-  },
-  options: {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { display: false },
-      tooltip: {
-        backgroundColor: '#0f172a',
-        titleColor: '#f8fafc',
-        bodyColor: '#f8fafc',
-        padding: 10,
-        displayColors: false,
-      },
-    },
-    scales: {
-      x: { grid: { color: '#e2e8f0' }, ticks: { maxRotation: 0, autoSkip: true } },
-      y: { beginAtZero: true, grid: { color: '#e2e8f0' }, ticks: { precision: 0 } }
-    }
-  }
+const analyticsCharts = window.AppCharts?.initCoreCharts({
+  gateCanvas: document.getElementById('gateEntriesChart'),
+  smsCanvas: document.getElementById('smsBarChart'),
+  attendanceCanvas: document.getElementById('attendancePieChart'),
+  labels: chartLabels,
+  gateSeries,
+  smsSeries,
+  attendanceDistribution,
+  initialTheme: window.AppTheme?.getTheme?.() || 'light',
 });
 
-const smsBarChart = new Chart(smsCanvas, {
-  type: 'bar',
-  data: {
-    labels: chartLabels,
-    datasets: [{
-      label: 'SMS Sent',
-      data: smsSeries,
-      backgroundColor: smsBarGradient,
-      borderRadius: 8,
-      maxBarThickness: 28
-    }]
-  },
-  options: {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { display: false },
-      tooltip: {
-        backgroundColor: '#0f172a',
-        titleColor: '#f8fafc',
-        bodyColor: '#f8fafc',
-        padding: 10,
-        displayColors: false,
-      },
-    },
-    scales: {
-      x: { grid: { color: '#e2e8f0' }, ticks: { maxRotation: 0, autoSkip: true } },
-      y: { beginAtZero: true, grid: { color: '#e2e8f0' }, ticks: { precision: 0 } }
-    }
-  }
-});
-
-const attendancePieChart = new Chart(attendanceCanvas, {
-  type: 'pie',
-  data: {
-    labels: ['Present', 'Absent', 'Late'],
-    datasets: [{
-      data: [attendanceDistribution.present, attendanceDistribution.absent, attendanceDistribution.late],
-      backgroundColor: ['#16a34a', '#ef4444', '#f59e0b'],
-      borderColor: '#ffffff',
-      borderWidth: 2
-    }]
-  },
-  options: {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        position: 'bottom',
-        labels: {
-          boxWidth: 12,
-          boxHeight: 12,
-          usePointStyle: true,
-          pointStyle: 'circle',
-        },
-      },
-      tooltip: {
-        backgroundColor: '#0f172a',
-        titleColor: '#f8fafc',
-        bodyColor: '#f8fafc',
-        padding: 10,
-      },
-    },
-  }
-});
-
-function applyChartTheme(theme) {
-  const isDark = theme === 'dark';
-  const textColor = isDark ? '#cbd5e1' : '#334155';
-  const gridColor = isDark ? 'rgba(71,85,105,0.45)' : '#e2e8f0';
-
-  if (window.Chart) {
-    Chart.defaults.color = textColor;
-    Chart.defaults.borderColor = gridColor;
-  }
-
-  [gateEntriesChart, smsBarChart].forEach((chart) => {
-    if (!chart || !chart.options || !chart.options.scales) return;
-    if (chart.options.scales.x && chart.options.scales.x.grid) chart.options.scales.x.grid.color = gridColor;
-    if (chart.options.scales.y && chart.options.scales.y.grid) chart.options.scales.y.grid.color = gridColor;
-    chart.update('none');
+if (analyticsCharts?.applyTheme) {
+  window.addEventListener('app-theme-change', (event) => {
+    analyticsCharts.applyTheme(event.detail?.theme || 'light');
   });
-  attendancePieChart.update('none');
 }
-
-applyChartTheme(window.AppTheme?.getTheme?.() || 'light');
-window.addEventListener('app-theme-change', (event) => {
-  applyChartTheme(event.detail?.theme || 'light');
-});
 
 const rangeSelect = document.getElementById('rangeSelect');
 const startInput = document.getElementById('startDateInput');

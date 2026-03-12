@@ -57,6 +57,7 @@
     changeStart: defaultStart,
     changeEnd: defaultEnd,
     askChart: null,
+    askChartPayload: null,
     riskPage: 1,
     riskPerPage: 8,
     riskPagination: {
@@ -352,10 +353,60 @@
     ui.askHead.innerHTML = '';
     ui.askBody.innerHTML = '';
     ui.askChartWrap.classList.add('hidden');
+    state.askChartPayload = null;
     if (state.askChart) {
       state.askChart.destroy();
       state.askChart = null;
     }
+  }
+
+  function buildAskChart(chartPayload) {
+    const helper = window.AppCharts?.createAiAskChart;
+    if (typeof helper === 'function') {
+      return helper(
+        ui.askChartCanvas,
+        chartPayload,
+        window.AppTheme?.getTheme?.() || 'light',
+      );
+    }
+    if (!window.Chart) return null;
+
+    const type = chartPayload.type || 'bar';
+    return new Chart(ui.askChartCanvas, {
+      type,
+      data: {
+        labels: chartPayload.labels,
+        datasets: [{
+          label: chartPayload.label || 'Value',
+          data: chartPayload.values,
+          backgroundColor: type === 'line' ? 'rgba(5,150,105,0.16)' : '#2563eb',
+          borderColor: '#059669',
+          tension: 0.3,
+          fill: type === 'line',
+          borderRadius: type === 'bar' ? 6 : 0,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { color: '#e2e8f0' } },
+          y: { beginAtZero: true, grid: { color: '#e2e8f0' } },
+        },
+      },
+    });
+  }
+
+  function rerenderAskChartForTheme() {
+    if (!state.askChartPayload || !ui.askChartWrap || ui.askChartWrap.classList.contains('hidden')) {
+      return;
+    }
+    if (state.askChart) {
+      state.askChart.destroy();
+      state.askChart = null;
+    }
+    state.askChart = buildAskChart(state.askChartPayload);
   }
 
   function renderAskResult(payload) {
@@ -371,8 +422,9 @@
     }
 
     const chart = payload.chart || null;
-    if (!chart || !window.Chart || !Array.isArray(chart.labels) || !Array.isArray(chart.values)) {
+    if (!chart || !Array.isArray(chart.labels) || !Array.isArray(chart.values)) {
       ui.askChartWrap.classList.add('hidden');
+      state.askChartPayload = null;
       if (state.askChart) {
         state.askChart.destroy();
         state.askChart = null;
@@ -381,31 +433,12 @@
     }
 
     ui.askChartWrap.classList.remove('hidden');
+    state.askChartPayload = chart;
     if (state.askChart) state.askChart.destroy();
-    state.askChart = new Chart(ui.askChartCanvas, {
-      type: chart.type || 'bar',
-      data: {
-        labels: chart.labels,
-        datasets: [{
-          label: chart.label || 'Value',
-          data: chart.values,
-          backgroundColor: chart.type === 'line' ? 'rgba(5,150,105,0.16)' : '#2563eb',
-          borderColor: '#059669',
-          tension: 0.3,
-          fill: chart.type === 'line',
-          borderRadius: chart.type === 'bar' ? 6 : 0,
-        }],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: {
-          x: { grid: { color: '#e2e8f0' } },
-          y: { beginAtZero: true, grid: { color: '#e2e8f0' } },
-        },
-      },
-    });
+    state.askChart = buildAskChart(chart);
+    if (!state.askChart) {
+      ui.askChartWrap.classList.add('hidden');
+    }
   }
 
   function buildQueryString(params) {
@@ -571,6 +604,7 @@
   });
 
   ui.clearDrilldownBtn.addEventListener('click', () => setDrilldown(null));
+  window.addEventListener('app-theme-change', rerenderAskChartForTheme);
 
   loadAll();
 })();

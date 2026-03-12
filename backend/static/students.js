@@ -60,6 +60,7 @@
       note: "Live counts from MongoDB.",
       updatedAt: "",
     },
+    addModalView: "manual",
   };
 
   let sectionStatsRequestToken = 0;
@@ -68,6 +69,7 @@
 
   const refs = {
     toast: document.getElementById("toast"),
+    studentsExportBtn: document.getElementById("studentsExportBtn"),
     statTotalStudents: document.getElementById("statTotalStudents"),
     statActiveStudents: document.getElementById("statActiveStudents"),
     statInactiveStudents: document.getElementById("statInactiveStudents"),
@@ -90,7 +92,19 @@
     paginationSummary: document.getElementById("paginationSummary"),
     paginationControls: document.getElementById("paginationControls"),
     openAddBtn: document.getElementById("openAddBtn"),
+    addManualTabBtn: document.getElementById("addManualTabBtn"),
+    addImportTabBtn: document.getElementById("addImportTabBtn"),
+    addManualPanel: document.getElementById("addManualPanel"),
+    addImportPanel: document.getElementById("addImportPanel"),
     addForm: document.getElementById("addForm"),
+    addFormAlert: document.getElementById("addFormAlert"),
+    addFormSubmitBtn: document.getElementById("addFormSubmitBtn"),
+    addFormSubmitLabel: document.getElementById("addFormSubmitLabel"),
+    addLrnError: document.getElementById("addLrnError"),
+    addNameError: document.getElementById("addNameError"),
+    addSectionError: document.getElementById("addSectionError"),
+    addParentContactError: document.getElementById("addParentContactError"),
+    addGenderError: document.getElementById("addGenderError"),
     addSectionSelect: document.getElementById("addSectionSelect"),
     addSectionValue: document.getElementById("addSectionValue"),
     addGradeLevelValue: document.getElementById("addGradeLevelValue"),
@@ -151,6 +165,8 @@
   const gradeLabel = (key) => /^\d+$/.test(String(key)) ? `Grade ${key}` : String(key || "");
   const PH_CONTACT_PREFIX = "+63";
   const SECTION_ASSIGNMENT_DELIMITER = "||";
+  const ADD_MODAL_MANUAL_VIEW = "manual";
+  const ADD_MODAL_IMPORT_VIEW = "import";
 
   const buildSectionAssignmentValue = (grade, section) => `${String(grade || "")}${SECTION_ASSIGNMENT_DELIMITER}${String(section || "")}`;
 
@@ -256,6 +272,137 @@
     refs.addImportSummary.textContent = String(message || "").trim();
     refs.addImportSummary.className = `mt-3 rounded-xl border px-3 py-2 text-xs ${isError ? "border-rose-200 bg-rose-50 text-rose-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`;
     refs.addImportSummary.classList.toggle("hidden", !String(message || "").trim());
+  };
+
+  const addFormFieldElements = () => ({
+    lrn: refs.addForm?.elements?.lrn || null,
+    name: refs.addForm?.elements?.name || null,
+    section: refs.addSectionSelect || null,
+    parent_contact: refs.addForm?.elements?.parent_contact || null,
+    gender: refs.addForm?.elements?.gender || null,
+  });
+
+  const addFormErrorElements = {
+    lrn: refs.addLrnError,
+    name: refs.addNameError,
+    section: refs.addSectionError,
+    parent_contact: refs.addParentContactError,
+    gender: refs.addGenderError,
+  };
+
+  const clearAddFormAlert = () => {
+    if (!refs.addFormAlert) return;
+    refs.addFormAlert.textContent = "";
+    refs.addFormAlert.classList.add("hidden");
+  };
+
+  const setAddFormAlert = (message) => {
+    if (!refs.addFormAlert) return;
+    const text = String(message || "").trim();
+    refs.addFormAlert.textContent = text;
+    refs.addFormAlert.classList.toggle("hidden", !text);
+  };
+
+  const setAddFieldError = (fieldKey, message = "") => {
+    const errors = addFormErrorElements;
+    const fields = addFormFieldElements();
+    const field = fields[fieldKey];
+    const errorNode = errors[fieldKey];
+    const text = String(message || "").trim();
+    const hasError = Boolean(text);
+
+    if (errorNode) {
+      errorNode.textContent = text;
+      errorNode.classList.toggle("hidden", !hasError);
+    }
+
+    if (field) {
+      field.classList.toggle("border-rose-400", hasError);
+      field.classList.toggle("bg-rose-50", hasError);
+      field.setAttribute("aria-invalid", hasError ? "true" : "false");
+    }
+  };
+
+  const clearAddFormValidation = () => {
+    ["lrn", "name", "section", "parent_contact", "gender"].forEach((key) => setAddFieldError(key, ""));
+    clearAddFormAlert();
+  };
+
+  const setAddTabButtonState = (button, isActive) => {
+    if (!button) return;
+    button.classList.toggle("bg-white", isActive);
+    button.classList.toggle("text-slate-900", isActive);
+    button.classList.toggle("shadow-sm", isActive);
+    button.classList.toggle("text-slate-600", !isActive);
+    button.classList.toggle("hover:text-slate-900", !isActive);
+  };
+
+  const switchAddModalView = (view) => {
+    const targetView = view === ADD_MODAL_IMPORT_VIEW ? ADD_MODAL_IMPORT_VIEW : ADD_MODAL_MANUAL_VIEW;
+    state.addModalView = targetView;
+
+    const showManual = targetView === ADD_MODAL_MANUAL_VIEW;
+    if (refs.addManualPanel) refs.addManualPanel.classList.toggle("hidden", !showManual);
+    if (refs.addImportPanel) refs.addImportPanel.classList.toggle("hidden", showManual);
+    setAddTabButtonState(refs.addManualTabBtn, showManual);
+    setAddTabButtonState(refs.addImportTabBtn, !showManual);
+  };
+
+  const setAddFormSubmitting = (isSubmitting) => {
+    if (refs.addFormSubmitBtn) refs.addFormSubmitBtn.disabled = Boolean(isSubmitting);
+    if (refs.addFormSubmitLabel) refs.addFormSubmitLabel.textContent = isSubmitting ? "Saving..." : "Save Student";
+  };
+
+  const validateAddForm = ({ focusFirst = false, showAlert = false } = {}) => {
+    syncAddSectionAssignment();
+    const payload = formPayload(refs.addForm);
+    const issues = {};
+    const fieldOrder = ["lrn", "name", "section", "gender", "parent_contact"];
+    const fields = addFormFieldElements();
+
+    if (!payload.lrn) {
+      issues.lrn = "LRN is required.";
+    } else if (!/^[A-Za-z0-9_-]+$/.test(payload.lrn)) {
+      issues.lrn = "LRN may contain only letters, numbers, dashes, and underscores.";
+    }
+
+    if (!payload.name) {
+      issues.name = "Name is required.";
+    }
+
+    if (!payload.section || !payload.grade_level) {
+      issues.section = "Please select a section assignment.";
+    }
+
+    if (!payload.gender) {
+      issues.gender = "Sex / Gender is required.";
+    }
+
+    const normalizedContact = normalizeParentContactInput(payload.parent_contact, true);
+    if (fields.parent_contact) fields.parent_contact.value = normalizedContact;
+    payload.parent_contact = normalizedContact === PH_CONTACT_PREFIX ? "" : normalizedContact;
+    if (!isValidParentContact(payload.parent_contact)) {
+      issues.parent_contact = "Parent contact must be in +639XXXXXXXXX format.";
+    }
+
+    fieldOrder.forEach((fieldKey) => setAddFieldError(fieldKey, issues[fieldKey] || ""));
+    if (showAlert) {
+      setAddFormAlert(Object.keys(issues).length ? "Please review the highlighted fields before saving." : "");
+    } else {
+      clearAddFormAlert();
+    }
+
+    if (focusFirst) {
+      const firstFieldKey = fieldOrder.find((fieldKey) => Boolean(issues[fieldKey]));
+      const firstField = firstFieldKey ? fields[firstFieldKey] : null;
+      if (firstField && typeof firstField.focus === "function") firstField.focus();
+    }
+
+    return {
+      valid: Object.keys(issues).length === 0,
+      payload,
+      issues,
+    };
   };
 
   const setStatValue = (el, value) => {
@@ -415,6 +562,22 @@
     return data;
   };
 
+  const updateStudentsExportLink = () => {
+    if (!refs.studentsExportBtn) return;
+    const params = new URLSearchParams();
+    if (state.filters.q) params.set("q", state.filters.q);
+    if (state.filters.grade) params.set("grade", state.filters.grade);
+    if (state.filters.section) params.set("section", state.filters.section);
+    const query = params.toString();
+    const url = query ? `/students/export?${query}` : "/students/export";
+    if (refs.studentsExportBtn.dataset) {
+      refs.studentsExportBtn.dataset.downloadUrl = url;
+    }
+    if (refs.studentsExportBtn.tagName === "A") {
+      refs.studentsExportBtn.href = url;
+    }
+  };
+
   const formPayload = (form) => Object.fromEntries(Array.from(new FormData(form).entries()).map(([k, v]) => [k, String(v || "").trim()]));
 
   const getFocusableElements = (container) => {
@@ -445,6 +608,11 @@
     }
     if (id === "faceModal") stopFaceCapture();
     if (id === "deleteModal") state.deleteTarget = { id: "", label: "" };
+    if (id === "addModal") {
+      clearAddFormValidation();
+      setAddFormSubmitting(false);
+      switchAddModalView(ADD_MODAL_MANUAL_VIEW);
+    }
   };
 
   const trapFocus = (event) => {
@@ -669,6 +837,7 @@
       return state.requests.students;
     }
     state.requests.studentsQueuedReload = false;
+    updateStudentsExportLink();
 
     state.requests.students = (async () => {
       const params = new URLSearchParams();
@@ -1178,11 +1347,16 @@
   };
 
   const initEvents = () => {
-    refs.searchInput.addEventListener("input", debounce(() => {
+    const triggerStudentSearch = debounce(() => {
+      loadStudents();
+    }, 320);
+
+    refs.searchInput.addEventListener("input", () => {
       state.filters.q = refs.searchInput.value.trim();
       state.pagination.page = 1;
-      loadStudents();
-    }, 320));
+      updateStudentsExportLink();
+      triggerStudentSearch();
+    });
 
     refs.gradeFilter.addEventListener("change", () => {
       state.filters.grade = refs.gradeFilter.value;
@@ -1237,7 +1411,19 @@
       syncAddSectionAssignment();
       refs.addImportForm?.reset();
       setAddImportSummary("");
+      clearAddFormValidation();
+      setAddFormSubmitting(false);
+      switchAddModalView(ADD_MODAL_MANUAL_VIEW);
       showModal("addModal");
+      refs.addForm?.elements?.lrn?.focus();
+    });
+
+    refs.addManualTabBtn?.addEventListener("click", () => {
+      switchAddModalView(ADD_MODAL_MANUAL_VIEW);
+    });
+
+    refs.addImportTabBtn?.addEventListener("click", () => {
+      switchAddModalView(ADD_MODAL_IMPORT_VIEW);
     });
 
     refs.addSectionBtn?.addEventListener("click", async () => {
@@ -1273,6 +1459,7 @@
 
     refs.addSectionSelect?.addEventListener("change", () => {
       syncAddSectionAssignment();
+      validateAddForm({ showAlert: false });
     });
 
     refs.addForm.elements.parent_contact?.addEventListener("input", () => {
@@ -1280,6 +1467,19 @@
         refs.addForm.elements.parent_contact.value,
         true,
       );
+      validateAddForm({ showAlert: false });
+    });
+
+    refs.addForm.elements.lrn?.addEventListener("input", () => {
+      validateAddForm({ showAlert: false });
+    });
+
+    refs.addForm.elements.name?.addEventListener("input", () => {
+      validateAddForm({ showAlert: false });
+    });
+
+    refs.addForm.elements.gender?.addEventListener("change", () => {
+      validateAddForm({ showAlert: false });
     });
 
     refs.editForm.elements.parent_contact?.addEventListener("input", () => {
@@ -1361,20 +1561,14 @@
 
     refs.addForm.addEventListener("submit", async (event) => {
       event.preventDefault();
-      syncAddSectionAssignment();
-      const payload = formPayload(refs.addForm);
-      if (!payload.section || !payload.grade_level) {
-        showToast("Please select a section assignment first.", true);
-        refs.addSectionSelect?.focus();
+      const validation = validateAddForm({ focusFirst: true, showAlert: true });
+      if (!validation.valid) {
+        const firstIssue = Object.values(validation.issues || {}).find(Boolean) || "Please complete all required fields.";
+        showToast(firstIssue, true);
         return;
       }
-      payload.parent_contact = normalizeParentContactInput(payload.parent_contact, true);
-      if (payload.parent_contact === PH_CONTACT_PREFIX) payload.parent_contact = "";
-      if (!isValidParentContact(payload.parent_contact)) {
-        showToast("Parent contact must be in +639XXXXXXXXX format.", true);
-        refs.addForm.elements.parent_contact?.focus();
-        return;
-      }
+      const payload = validation.payload;
+      setAddFormSubmitting(true);
       try {
         await api("/api/students", { method: "POST", body: payload });
         closeModal("addModal");
@@ -1395,6 +1589,8 @@
         }
       } catch (error) {
         showToast(error.message, true);
+      } finally {
+        setAddFormSubmitting(false);
       }
     });
 
@@ -1472,6 +1668,9 @@
   initEvents();
   renderFaceState();
   renderSectionStats();
+  switchAddModalView(ADD_MODAL_MANUAL_VIEW);
+  clearAddFormValidation();
+  setAddFormSubmitting(false);
   renderAddSectionAssignments();
   syncAddSectionAssignment();
   startRealtimeUpdates();

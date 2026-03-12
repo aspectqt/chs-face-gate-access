@@ -30,6 +30,12 @@ body {
   color: var(--app-text) !important;
 }
 
+/* Consistent slight blur for modal backdrops across the app. */
+.modal-backdrop-blur {
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+}
+
 html[data-theme="dark"] body.bg-gradient-to-br {
   background-image: linear-gradient(135deg, #0b1220, #111c2f, #1a2c42) !important;
 }

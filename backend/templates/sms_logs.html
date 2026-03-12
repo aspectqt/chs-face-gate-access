@@ -28,6 +28,16 @@
       <div class="flex items-center gap-2">
         {% set theme_toggle_classes = 'relative p-2 rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200 transition focus:outline-none focus:ring-2 focus:ring-emerald-400' %}
         {% include 'partials/theme_toggle_button.html' %}
+        <button
+          type="button"
+          data-file-download
+          data-download-url="{{ '/sms-logs/export?' ~ export_query if export_query else '/sms-logs/export' }}"
+          class="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 16V4m0 12-4-4m4 4 4-4M4 20h16" />
+          </svg>
+          Export CSV
+        </button>
       </div>
     </header>
 
@@ -88,63 +98,129 @@
         </article>
       </section>
 
-      <section class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 lg:p-5">
-        <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
+      <section class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 lg:p-5 space-y-4">
+        <div class="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 class="text-base font-semibold text-slate-800">SMS Search & Filters</h2>
-            <p class="text-xs text-slate-500 mt-1">Track SMS deliveries by recipient, date range, and status.</p>
+            <h2 class="text-base font-semibold text-slate-800">Attendance SMS Template</h2>
+            <p class="text-xs text-slate-500 mt-1">Edit the parent notification message used when students scan at the gate.</p>
           </div>
           <div class="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
-            Live from MongoDB
+            Saved to MongoDB
           </div>
         </div>
 
-        <form method="GET" action="/sms-logs" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-12 gap-3 items-end">
+        <form class="space-y-3" @submit.prevent="saveTemplate">
+          <div>
+            <label class="text-xs uppercase text-slate-500 font-semibold">Template Message</label>
+            <textarea
+              x-model="templateText"
+              x-bind:maxlength="templateMaxLength"
+              rows="4"
+              class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+              placeholder="Use placeholders like {student_name} and {status}"></textarea>
+            <div class="mt-1 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500">
+              <p x-text="templateCharacterCount() + ' / ' + templateMaxLength + ' characters'"></p>
+              <p x-show="templateUpdatedAt" class="text-slate-500">
+                Last saved:
+                <span x-text="templateUpdatedAt"></span>
+                <span x-show="templateUpdatedBy">by <span x-text="templateUpdatedBy"></span></span>
+              </p>
+            </div>
+          </div>
+
+          <div>
+            <p class="text-xs uppercase text-slate-500 font-semibold">Available Placeholders</p>
+            <div class="mt-2 flex flex-wrap gap-2">
+              {% for variable in sms_template_variables %}
+              {% set token = '{' ~ variable ~ '}' %}
+              <button
+                type="button"
+                class="rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100 transition"
+                @click="insertTemplateToken({{ token|tojson }})">{{ token }}</button>
+              {% endfor %}
+            </div>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2">
+            <button
+              type="submit"
+              class="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black transition disabled:opacity-60"
+              :disabled="templateSaving">
+              <span x-show="!templateSaving">Save Template</span>
+              <span x-show="templateSaving">Saving...</span>
+            </button>
+            <button
+              type="button"
+              class="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition"
+              @click="loadDefaultTemplate">Load Default</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 lg:p-5">
+        {% set active_filters = (1 if filters.q else 0) + (1 if filters.start_date else 0) + (1 if filters.end_date else 0) + (1 if filters.status else 0) + (1 if filters.sort == 'oldest' else 0) %}
+        <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
+          <div>
+            <h2 class="text-base font-semibold text-slate-800">Search and Filter SMS Logs</h2>
+            <p class="text-xs text-slate-500 mt-1">Refine SMS records by student details, date range, delivery status, and sort order.</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
+              Data Source: MongoDB
+            </span>
+            {% if active_filters %}
+            <span class="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
+              {{ active_filters }} Active Filter{% if active_filters != 1 %}s{% endif %}
+            </span>
+            {% endif %}
+          </div>
+        </div>
+
+        <form method="GET" action="{{ url_for('sms_logs_page') }}" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-12 gap-3 items-end">
           <div class="xl:col-span-4">
-            <label class="text-xs uppercase text-slate-500 font-semibold">Search</label>
+            <label for="smsSearchInput" class="text-xs uppercase text-slate-500 font-semibold">Keyword Search</label>
             <div class="relative mt-1">
               <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-4.35-4.35M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Z" />
                 </svg>
               </span>
-              <input type="text" name="q" value="{{ filters.q }}" placeholder="Recipient, ID, number, date" class="w-full rounded-xl border border-slate-300 pl-10 pr-3 py-2 text-sm">
+              <input id="smsSearchInput" type="text" name="q" value="{{ filters.q }}" placeholder="Student name, ID, or parent contact number" class="w-full rounded-xl border border-slate-300 pl-10 pr-3 py-2 text-sm">
             </div>
           </div>
-          <div class="xl:col-span-3">
-            <label class="text-xs uppercase text-slate-500 font-semibold">From</label>
-            <input type="date" name="start_date" value="{{ filters.start_date }}" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
-          </div>
-          <div class="xl:col-span-3">
-            <label class="text-xs uppercase text-slate-500 font-semibold">To</label>
-            <input type="date" name="end_date" value="{{ filters.end_date }}" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
+          <div class="xl:col-span-2">
+            <label for="smsStartDate" class="text-xs uppercase text-slate-500 font-semibold">Start Date</label>
+            <input id="smsStartDate" type="date" name="start_date" value="{{ filters.start_date }}" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
           </div>
           <div class="xl:col-span-2">
-            <label class="text-xs uppercase text-slate-500 font-semibold">Status</label>
-            <select name="status" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
-              <option value="">Any</option>
+            <label for="smsEndDate" class="text-xs uppercase text-slate-500 font-semibold">End Date</label>
+            <input id="smsEndDate" type="date" name="end_date" value="{{ filters.end_date }}" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
+          </div>
+          <div class="xl:col-span-2">
+            <label for="smsStatusFilter" class="text-xs uppercase text-slate-500 font-semibold">Delivery Status</label>
+            <select id="smsStatusFilter" name="status" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
+              <option value="">All Statuses</option>
               <option value="SENT" {% if filters.status == 'SENT' %}selected{% endif %}>Sent</option>
               <option value="FAILED" {% if filters.status == 'FAILED' %}selected{% endif %}>Failed</option>
               <option value="SENDING" {% if filters.status == 'SENDING' %}selected{% endif %}>Sending</option>
               <option value="QUEUED" {% if filters.status == 'QUEUED' %}selected{% endif %}>Queued</option>
             </select>
           </div>
-          <div>
-            <label class="text-xs uppercase text-slate-500 font-semibold">Sort</label>
-            <select name="sort" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
-              <option value="newest" {% if filters.sort != 'oldest' %}selected{% endif %}>Newest</option>
-              <option value="oldest" {% if filters.sort == 'oldest' %}selected{% endif %}>Oldest</option>
+          <div class="xl:col-span-2">
+            <label for="smsSortOrder" class="text-xs uppercase text-slate-500 font-semibold">Sort Order</label>
+            <select id="smsSortOrder" name="sort" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
+              <option value="newest" {% if filters.sort != 'oldest' %}selected{% endif %}>Newest First</option>
+              <option value="oldest" {% if filters.sort == 'oldest' %}selected{% endif %}>Oldest First</option>
             </select>
           </div>
-          <div class="xl:col-span-2 flex items-end gap-2">
-            <button type="submit" class="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black transition">Apply</button>
-            <a href="/sms-logs" class="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition">Reset</a>
+          <div class="xl:col-span-12 flex flex-wrap items-center justify-between gap-2 pt-1">
+            <p class="text-[11px] text-slate-500">Tip: You may combine keyword, date range, and status filters for more precise results.</p>
+            <div class="flex items-center gap-2">
+              <button type="submit" class="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black transition">Apply Filters</button>
+              <a href="{{ url_for('sms_logs_page') }}" class="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition">Clear Filters</a>
+            </div>
           </div>
         </form>
-
-        <div class="mt-4 pt-4 border-t border-slate-200">
-          <a href="/sms-logs/export?{{ export_query }}" class="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 transition">Export CSV</a>
-        </div>
       </section>
 
       <section class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
@@ -202,23 +278,53 @@
           </div>
         </div>
       </section>
-        </div>
-      </section>
     </main>
   </div>
 </div>
 
+<script src="{{ url_for('static', filename='download_utils.js', v='20260312d') }}"></script>
 <script>
 function smsLogsPage() {
   return {
     toastMessage: '',
     toastType: 'success',
+    templateText: {{ sms_template.template|tojson }},
+    templateDefault: {{ sms_template.default_template|tojson }},
+    templateUpdatedAt: {{ sms_template.updated_at|tojson }},
+    templateUpdatedBy: {{ sms_template.updated_by|tojson }},
+    templateMaxLength: {{ sms_template.max_length }},
+    templateSaving: false,
     realtimeEnabled: {{ 'true' if (not filters.q and not filters.start_date and not filters.end_date and not filters.status and filters.sort != 'oldest' and pagination.page == 1) else 'false' }},
     changesStream: null,
     changesReconnectTimer: null,
     changesInitialized: false,
     reloadScheduled: false,
+    reloadTimer: null,
+    suppressReloadUntil: 0,
     changesSnapshot: { revision: 0, sms_logs: 0 },
+    isDownloadActive() {
+      return Boolean(window.AppFileDownload?.isBusy?.());
+    },
+    requestReload(delayMs = 0) {
+      if (this.reloadTimer) return;
+      const runReload = () => {
+        this.reloadTimer = null;
+        const now = Date.now();
+        if (this.isDownloadActive() || now < this.suppressReloadUntil) {
+          this.requestReload(900);
+          return;
+        }
+        window.location.reload();
+      };
+      this.reloadTimer = setTimeout(runReload, Math.max(0, Number(delayMs) || 0));
+    },
+    clearReloadTimer() {
+      if (this.reloadTimer) {
+        clearTimeout(this.reloadTimer);
+        this.reloadTimer = null;
+      }
+      this.reloadScheduled = false;
+    },
     setToast(message, type = 'success') {
       this.toastMessage = message;
       this.toastType = type;
@@ -227,7 +333,50 @@ function smsLogsPage() {
     scheduleReload() {
       if (this.reloadScheduled) return;
       this.reloadScheduled = true;
-      setTimeout(() => window.location.reload(), 600);
+      this.requestReload(600);
+    },
+    templateCharacterCount() {
+      return (this.templateText || '').length;
+    },
+    insertTemplateToken(token) {
+      this.templateText = `${this.templateText || ''}${token || ''}`;
+    },
+    loadDefaultTemplate() {
+      this.templateText = this.templateDefault || '';
+      this.setToast('Default template loaded. Save to apply it.', 'success');
+    },
+    async saveTemplate() {
+      if (this.templateSaving) return;
+      const templateValue = (this.templateText || '').trim();
+      if (!templateValue) {
+        this.setToast('SMS template cannot be empty.', 'error');
+        return;
+      }
+
+      this.templateSaving = true;
+      try {
+        const res = await fetch('/sms-logs/template', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ template: templateValue }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.status !== 'ok') {
+          this.setToast(data.message || 'Failed to save SMS template.', 'error');
+          return;
+        }
+
+        this.templateText = data.template || templateValue;
+        this.templateDefault = data.default_template || this.templateDefault;
+        this.templateUpdatedAt = data.updated_at || this.templateUpdatedAt;
+        this.templateUpdatedBy = data.updated_by || this.templateUpdatedBy;
+        this.templateMaxLength = Number.parseInt(data.max_length || this.templateMaxLength, 10) || this.templateMaxLength;
+        this.setToast(data.message || 'SMS template saved.', 'success');
+      } catch (_error) {
+        this.setToast('Failed to save SMS template.', 'error');
+      } finally {
+        this.templateSaving = false;
+      }
     },
     closeRealtime() {
       if (this.changesStream) {
@@ -289,9 +438,16 @@ function smsLogsPage() {
         return;
       }
       this.setToast(data.message || 'SMS resend processed.', data.sms_status === 'FAILED' ? 'error' : 'success');
-      setTimeout(() => window.location.reload(), 700);
+      this.requestReload(700);
     },
     init() {
+      document.addEventListener('app-file-download-start', () => {
+        this.suppressReloadUntil = Date.now() + 10000;
+        this.clearReloadTimer();
+      });
+      document.addEventListener('app-file-download-end', () => {
+        this.suppressReloadUntil = Date.now() + 2500;
+      });
       if (!this.realtimeEnabled) return;
       this.connectRealtime();
       window.addEventListener('beforeunload', () => this.closeRealtime());

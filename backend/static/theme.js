@@ -346,7 +346,7 @@
   function buildLogoutModal() {
     const modal = document.createElement("div");
     modal.id = "globalLogoutConfirmModal";
-    modal.className = "fixed inset-0 z-[220] hidden items-center justify-center bg-slate-900/55 p-4";
+    modal.className = "modal-backdrop-blur fixed inset-0 z-[220] hidden items-center justify-center bg-slate-900/55 p-4";
     modal.innerHTML = `
       <div class="w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-2xl">
         <div class="border-b border-slate-200 px-5 py-4">

@@ -99,7 +99,7 @@
         <div class="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
 
             <!-- HEADER -->
-            <header class="h-16 bg-white shadow-sm flex shrink-0 items-center justify-between px-4 md:px-6">
+            <header class="relative z-20 h-16 bg-white shadow-sm flex shrink-0 items-center justify-between px-4 md:px-6">
                 <div class="flex items-center gap-3">
                     <button @click="mobileMenuOpen = true" class="md:hidden text-gray-500 hover:text-gray-700 focus:outline-none">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -189,7 +189,7 @@
                         </button>
 
                         <div id="userDropdown"
-                            class="ui-dropdown-menu ui-dropdown-hidden absolute right-0 mt-2 w-52 bg-white rounded-xl shadow-lg border border-gray-200 hidden p-2">
+                            class="ui-dropdown-menu ui-dropdown-hidden absolute right-0 z-[120] mt-2 w-52 bg-white rounded-xl shadow-lg border border-gray-200 hidden p-2">
                             <a href="/logout" data-logout-link="1"
                                 class="inline-flex w-full items-center gap-2 rounded-lg border border-rose-200 bg-gradient-to-r from-rose-50 to-white px-3 py-2 text-sm font-semibold text-rose-700 transition hover:from-rose-100 hover:to-rose-50 hover:text-rose-800">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none"
@@ -528,16 +528,16 @@
                                         </p>
                                         <div class="mt-3 grid grid-cols-2 gap-2 text-[11px] sm:grid-cols-4">
                                             <div id="cameraStatusChip"
-                                                class="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-center font-semibold text-slate-600">
-                                                Camera Idle</div>
+                                                class="text-center text-[11px] font-semibold text-slate-600">
+                                                Camera: Idle</div>
                                             <div id="faceStatusChip"
-                                                class="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-center font-semibold text-slate-600">
+                                                class="text-center text-[11px] font-semibold text-slate-600">
                                                 Face: Standby</div>
                                             <div id="accessStatusChip"
-                                                class="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-center font-semibold text-slate-600">
+                                                class="text-center text-[11px] font-semibold text-slate-600">
                                                 Access: --</div>
                                             <div id="smsStatusChip"
-                                                class="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-center font-semibold text-slate-600">
+                                                class="text-center text-[11px] font-semibold text-slate-600">
                                                 SMS: --</div>
                                         </div>
                                     </div>
@@ -976,7 +976,7 @@
 
     <!-- NOTIFICATION MODAL -->
     <div id="notificationModal" class="fixed inset-0 z-[75] hidden" aria-hidden="true">
-        <div id="notificationModalBackdrop" class="absolute inset-0 bg-slate-950/45 backdrop-blur-[2px]"></div>
+        <div id="notificationModalBackdrop" class="modal-backdrop-blur absolute inset-0 bg-slate-950/45"></div>
         <div class="absolute inset-0 flex items-center justify-center p-3 sm:p-5">
             <div id="notificationModalPanel"
                 class="relative flex max-h-[calc(100vh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl"
@@ -1039,7 +1039,7 @@
 
     <!-- PROFILE MODAL -->
     <div id="profileModal" class="fixed inset-0 z-[70] hidden" aria-hidden="true">
-        <div id="profileModalBackdrop" class="absolute inset-0 bg-black/50"></div>
+        <div id="profileModalBackdrop" class="modal-backdrop-blur absolute inset-0 bg-black/50"></div>
         <div class="absolute inset-0 p-2 sm:p-4 md:p-6 flex items-start md:items-center justify-center overflow-y-auto">
             <div id="profileModalPanel"
                 class="w-full max-w-4xl rounded-3xl border border-slate-200 bg-white shadow-2xl overflow-hidden max-h-[calc(100vh-1rem)] sm:max-h-[calc(100vh-2rem)] md:max-h-[calc(100vh-3rem)] flex flex-col"
@@ -1330,6 +1330,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="{{ url_for('static', filename='chart_system.js', v='20260312a') }}"></script>
 
     <script>
         // Initialize client-side camera
@@ -1704,7 +1705,7 @@
             scanStatusResetTimer = setTimeout(() => {
                 if (!isScanning) return;
                 setScanState('scanning', `Status: Scanning (${scanSessionModeLabel(scanSessionMode)})`);
-                setStatusChip(cameraStatusChip, 'Camera Active', 'info');
+                setStatusChip(cameraStatusChip, 'Camera: Active', 'info');
                 setStatusChip(faceStatusChip, 'Face: Scanning', 'info');
                 setStatusChip(accessStatusChip, 'Access: Standby', 'neutral');
                 setStatusChip(smsStatusChip, 'SMS: Standby', 'neutral');
@@ -1840,13 +1841,13 @@
         function setStatusChip(element, text, tone = 'neutral') {
             if (!element) return;
             const palette = {
-                neutral: ['border-slate-200', 'bg-slate-50', 'text-slate-600'],
-                info: ['border-blue-200', 'bg-blue-50', 'text-blue-700'],
-                success: ['border-emerald-200', 'bg-emerald-50', 'text-emerald-700'],
-                warning: ['border-amber-200', 'bg-amber-50', 'text-amber-700'],
-                danger: ['border-rose-200', 'bg-rose-50', 'text-rose-700'],
+                neutral: ['text-slate-600'],
+                info: ['text-blue-700'],
+                success: ['text-emerald-700'],
+                warning: ['text-amber-700'],
+                danger: ['text-rose-700'],
             };
-            element.className = 'rounded-lg border px-2 py-1.5 text-center text-[11px] font-semibold';
+            element.className = 'text-center text-[11px] font-semibold';
             const tokens = palette[tone] || palette.neutral;
             tokens.forEach((token) => element.classList.add(token));
             element.textContent = text;
@@ -1854,13 +1855,13 @@
 
         function applyGateStatusDefaults() {
             if (isScanning) {
-                setStatusChip(cameraStatusChip, 'Camera Active', 'info');
+                setStatusChip(cameraStatusChip, 'Camera: Active', 'info');
                 setStatusChip(faceStatusChip, 'Face: Scanning', 'info');
                 setStatusChip(accessStatusChip, 'Access: Standby', 'neutral');
                 setStatusChip(smsStatusChip, 'SMS: Standby', 'neutral');
                 return;
             }
-            setStatusChip(cameraStatusChip, 'Camera Idle', 'neutral');
+            setStatusChip(cameraStatusChip, 'Camera: Idle', 'neutral');
             setStatusChip(faceStatusChip, 'Face: Standby', 'neutral');
             setStatusChip(accessStatusChip, 'Access: --', 'neutral');
             setStatusChip(smsStatusChip, 'SMS: --', 'neutral');
@@ -3570,90 +3571,22 @@
         const gateSeries = {{ gate_series | tojson }};
         const smsSeries = {{ sms_series | tojson }};
         const attendanceDistribution = {{ attendance_distribution | tojson }};
-        const gateEntriesChart = new Chart(document.getElementById('gateEntriesChart'), {
-            type: 'line',
-            data: {
-                labels: chartLabels,
-                datasets: [{
-                    label: 'Gate Entries',
-                    data: gateSeries,
-                    borderColor: '#10b981',
-                    backgroundColor: 'rgba(16,185,129,0.18)',
-                    fill: true,
-                    tension: 0.3,
-                    pointRadius: 2,
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
-                scales: {
-                    x: { grid: { color: '#e2e8f0' } },
-                    y: { beginAtZero: true, grid: { color: '#e2e8f0' } }
-                }
-            }
+        const dashboardCharts = window.AppCharts?.initCoreCharts({
+            gateCanvas: document.getElementById('gateEntriesChart'),
+            smsCanvas: document.getElementById('smsBarChart'),
+            attendanceCanvas: document.getElementById('attendancePieChart'),
+            labels: chartLabels,
+            gateSeries,
+            smsSeries,
+            attendanceDistribution,
+            initialTheme: window.AppTheme?.getTheme?.() || 'light',
         });
 
-        const smsBarChart = new Chart(document.getElementById('smsBarChart'), {
-            type: 'bar',
-            data: {
-                labels: chartLabels,
-                datasets: [{
-                    label: 'SMS Sent',
-                    data: smsSeries,
-                    backgroundColor: '#3b82f6',
-                    borderRadius: 6,
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    x: { grid: { color: '#e2e8f0' } },
-                    y: { beginAtZero: true, grid: { color: '#e2e8f0' } }
-                }
-            }
-        });
-
-        const attendancePieChart = new Chart(document.getElementById('attendancePieChart'), {
-            type: 'pie',
-            data: {
-                labels: ['Present', 'Absent', 'Late'],
-                datasets: [{
-                    data: [attendanceDistribution.present, attendanceDistribution.absent, attendanceDistribution.late],
-                    backgroundColor: ['#16a34a', '#ef4444', '#f59e0b'],
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-            }
-        });
-
-        function applyChartTheme(theme) {
-            const isDark = theme === 'dark';
-            const textColor = isDark ? '#cbd5e1' : '#334155';
-            const gridColor = isDark ? 'rgba(71,85,105,0.45)' : '#e2e8f0';
-
-            if (window.Chart) {
-                Chart.defaults.color = textColor;
-                Chart.defaults.borderColor = gridColor;
-            }
-
-            [gateEntriesChart, smsBarChart].forEach((chart) => {
-                if (!chart || !chart.options || !chart.options.scales) return;
-                if (chart.options.scales.x && chart.options.scales.x.grid) chart.options.scales.x.grid.color = gridColor;
-                if (chart.options.scales.y && chart.options.scales.y.grid) chart.options.scales.y.grid.color = gridColor;
-                chart.update('none');
+        if (dashboardCharts?.applyTheme) {
+            window.addEventListener('app-theme-change', (event) => {
+                dashboardCharts.applyTheme(event.detail?.theme || 'light');
             });
-            attendancePieChart.update('none');
         }
-
-        applyChartTheme(window.AppTheme?.getTheme?.() || 'light');
-        window.addEventListener('app-theme-change', (event) => {
-            applyChartTheme(event.detail?.theme || 'light');
-        });
     </script>
 
 </body>

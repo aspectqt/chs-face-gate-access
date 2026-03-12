@@ -26,6 +26,13 @@
       <div class="flex items-center gap-2">
         {% set theme_toggle_classes = 'relative p-2 rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200 transition focus:outline-none focus:ring-2 focus:ring-emerald-400' %}
         {% include 'partials/theme_toggle_button.html' %}
+        <button id="studentsExportBtn" type="button" data-file-download data-download-url="{{ url_for('students_export') }}"
+          class="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 16V4m0 12-4-4m4 4 4-4M4 20h16" />
+          </svg>
+          Export CSV
+        </button>
       </div>
     </header>
 
@@ -237,14 +244,14 @@
   </div>
 </div>
 
-<div id="addModal" class="modal hidden fixed inset-0 z-[90] bg-black/55 p-3 sm:p-4 flex items-center justify-center" data-overlay>
-  <div class="w-full max-w-5xl rounded-3xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/20 max-h-[90vh] overflow-y-auto">
+<div id="addModal" class="modal modal-backdrop-blur hidden fixed inset-0 z-[90] bg-black/55 p-3 sm:p-4 flex items-center justify-center" data-overlay>
+  <div class="w-full max-w-4xl rounded-3xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/20 max-h-[90vh] overflow-y-auto">
     <div class="sticky top-0 z-10 border-b border-slate-200 bg-gradient-to-r from-slate-900 via-slate-800 to-emerald-900 px-5 py-4 text-white sm:px-6">
       <div class="flex items-start justify-between gap-4">
         <div>
           <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-200">Student Enrollment</p>
           <h3 class="mt-1 text-xl font-semibold leading-tight">Add Student Profile</h3>
-          <p class="mt-1 text-xs text-slate-200/90">Create a record manually or import multiple students from Excel.</p>
+          <p class="mt-1 text-xs text-slate-200/90">Create a single profile manually or bulk import via Excel.</p>
         </div>
         <button data-close="addModal" class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/20 bg-white/10 text-white transition hover:bg-white/20" aria-label="Close add student modal">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -255,115 +262,190 @@
     </div>
 
     <div class="p-4 sm:p-6">
-      <div class="grid grid-cols-1 xl:grid-cols-2 gap-5">
-        <section class="rounded-2xl border border-slate-200 bg-slate-50/60">
-          <div class="flex items-center gap-3 border-b border-slate-200 px-4 py-3">
-            <span class="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
-              </svg>
-            </span>
-            <div>
-              <p class="text-sm font-semibold text-slate-900">Manual Entry</p>
-              <p class="text-xs text-slate-500">Create one student profile at a time.</p>
-            </div>
-          </div>
-          <form id="addForm" class="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4">
-            <label class="text-sm font-medium text-slate-700">LRN
-              <input name="lrn" required class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100">
-            </label>
-            <label class="text-sm font-medium text-slate-700">Name
-              <input name="name" required class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100">
-            </label>
-            <label class="text-sm font-medium text-slate-700">Section Assignment
-              <select id="addSectionSelect" required class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100">
-                <option value="">Select Grade + Section</option>
-              </select>
-              <input id="addSectionValue" name="section" type="hidden">
-              <input id="addGradeLevelValue" name="grade_level" type="hidden">
-              <p class="mt-1 text-[11px] text-slate-500">Loaded dynamically from MongoDB sections.</p>
-            </label>
-            <label class="text-sm font-medium text-slate-700">Grade Level (Auto)
-              <input id="addGradeLevelDisplay" type="text" readonly placeholder="Select a section first" class="mt-1 w-full rounded-xl border border-slate-300 bg-slate-100 px-3 py-2.5 text-sm text-slate-700">
-            </label>
-            <label class="text-sm font-medium text-slate-700">Parent Contact
-              <input name="parent_contact" type="tel" value="+63" inputmode="numeric" maxlength="13" placeholder="+639XXXXXXXXX" class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100">
-            </label>
-            <label class="text-sm font-medium text-slate-700">Sex / Gender
-              <select name="gender" required class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100">
-                <option value="">Select Sex / Gender</option><option value="Male">Male</option><option value="Female">Female</option>
-              </select>
-            </label>
-            <label class="text-sm font-medium text-slate-700 sm:col-span-2">Status
-              <select name="status" class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100">
-                <option value="Active">Active</option><option value="Inactive">Inactive</option>
-              </select>
-            </label>
-            <div class="sm:col-span-2 flex flex-wrap justify-end gap-2 pt-1">
-              <button type="button" data-close="addModal" class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">Cancel</button>
-              <button type="submit" class="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-                </svg>
-                Save Student
-              </button>
-            </div>
-          </form>
-        </section>
-
-        <section class="rounded-2xl border border-slate-200 bg-white">
-          <div class="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
-            <div class="flex items-center gap-3">
-              <span class="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-blue-100 text-blue-700">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M3 7h18M8 7v12m8-12v12M5 7l1-3h12l1 3M9 12h6" />
-                </svg>
-              </span>
-              <div>
-                <p class="text-sm font-semibold text-slate-900">Excel Bulk Import</p>
-                <p class="text-xs text-slate-500">Upload a spreadsheet and add many students at once.</p>
-              </div>
-            </div>
-            <a
-              href="{{ url_for('api_students_import_template') }}"
-              class="inline-flex items-center rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
-            >
-              Download Template
-            </a>
-          </div>
-          <div class="p-4">
-            <p class="text-xs text-slate-500 mb-3">Template format: <span class="font-semibold">LRN, NAME, Sex / Gender, Section, Grade Level</span>. Only LRN, NAME, and Sex / Gender are required.</p>
-            <form id="addImportForm" class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
-              <label class="text-sm font-medium text-slate-700 md:col-span-12">Excel File (.xlsx)
-                <input id="addImportFile" name="file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
-              </label>
-              <label class="text-sm font-medium text-slate-700 md:col-span-6">Default Grade Level
-                <select name="default_grade_level" class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
-                  <option value="">Optional (from file)</option>
-                  {% for grade in grade_options %}<option value="{{ grade }}">{{ grade }}</option>{% endfor %}
-                </select>
-              </label>
-              <label class="text-sm font-medium text-slate-700 md:col-span-6">Default Section
-                <input name="default_section" type="text" placeholder="Optional (e.g. AVILA)" class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
-              </label>
-              <div class="md:col-span-12 flex justify-end">
-                <button id="addImportSubmitBtn" type="submit" class="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 16V4m0 12l-4-4m4 4l4-4M4 20h16" />
-                  </svg>
-                  Import Students
-                </button>
-              </div>
-            </form>
-            <p id="addImportSummary" class="mt-3 hidden rounded-xl border px-3 py-2 text-xs"></p>
-          </div>
-        </section>
+      <div id="addModalTabs" class="mb-4 inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1">
+        <button
+          id="addManualTabBtn"
+          type="button"
+          class="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-slate-900 shadow-sm transition"
+          data-add-tab="manual"
+          aria-controls="addManualPanel"
+        >
+          Manual Entry
+        </button>
+        <button
+          id="addImportTabBtn"
+          type="button"
+          class="rounded-lg px-4 py-2 text-sm font-semibold text-slate-600 transition hover:text-slate-900"
+          data-add-tab="import"
+          aria-controls="addImportPanel"
+        >
+          Excel Import
+        </button>
       </div>
+
+      <section id="addManualPanel" class="rounded-2xl border border-slate-200 bg-gradient-to-br from-white via-slate-50 to-emerald-50/40 p-4 sm:p-5">
+        <div class="mb-4">
+          <h4 class="text-sm font-semibold text-slate-900">Manual Student Entry</h4>
+          <p class="mt-1 text-xs text-slate-500">Fill out all required details. Validation is checked before saving.</p>
+        </div>
+        <form id="addForm" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label for="addLrnField" class="text-sm font-medium text-slate-700">LRN <span class="text-rose-600">*</span></label>
+            <input
+              id="addLrnField"
+              name="lrn"
+              required
+              maxlength="32"
+              autocomplete="off"
+              placeholder="e.g. 120526180006"
+              class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+            >
+            <p id="addLrnError" class="mt-1 hidden text-xs font-medium text-rose-600"></p>
+          </div>
+
+          <div>
+            <label for="addNameField" class="text-sm font-medium text-slate-700">Name <span class="text-rose-600">*</span></label>
+            <input
+              id="addNameField"
+              name="name"
+              required
+              maxlength="120"
+              autocomplete="off"
+              placeholder="e.g. Juan Dela Cruz"
+              class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+            >
+            <p id="addNameError" class="mt-1 hidden text-xs font-medium text-rose-600"></p>
+          </div>
+
+          <div>
+            <label for="addSectionSelect" class="text-sm font-medium text-slate-700">Section Assignment <span class="text-rose-600">*</span></label>
+            <select
+              id="addSectionSelect"
+              required
+              class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+            >
+              <option value="">Select Grade + Section</option>
+            </select>
+            <input id="addSectionValue" name="section" type="hidden">
+            <input id="addGradeLevelValue" name="grade_level" type="hidden">
+            <p class="mt-1 text-[11px] text-slate-500">Loaded dynamically from MongoDB sections.</p>
+            <p id="addSectionError" class="mt-1 hidden text-xs font-medium text-rose-600"></p>
+          </div>
+
+          <div>
+            <label for="addGradeLevelDisplay" class="text-sm font-medium text-slate-700">Grade Level (Auto)</label>
+            <input
+              id="addGradeLevelDisplay"
+              type="text"
+              readonly
+              placeholder="Select a section first"
+              class="mt-1 w-full rounded-xl border border-slate-300 bg-slate-100 px-3 py-2.5 text-sm text-slate-700"
+            >
+          </div>
+
+          <div>
+            <label for="addParentContactField" class="text-sm font-medium text-slate-700">Parent Contact</label>
+            <input
+              id="addParentContactField"
+              name="parent_contact"
+              type="tel"
+              value="+63"
+              inputmode="numeric"
+              maxlength="13"
+              placeholder="+639XXXXXXXXX"
+              class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+            >
+            <p class="mt-1 text-[11px] text-slate-500">Optional. Use Philippine mobile format.</p>
+            <p id="addParentContactError" class="mt-1 hidden text-xs font-medium text-rose-600"></p>
+          </div>
+
+          <div>
+            <label for="addGenderField" class="text-sm font-medium text-slate-700">Sex / Gender <span class="text-rose-600">*</span></label>
+            <select
+              id="addGenderField"
+              name="gender"
+              required
+              class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+            >
+              <option value="">Select Sex / Gender</option>
+              <option value="Male">Male</option>
+              <option value="Female">Female</option>
+            </select>
+            <p id="addGenderError" class="mt-1 hidden text-xs font-medium text-rose-600"></p>
+          </div>
+
+          <div class="sm:col-span-2">
+            <label for="addStatusField" class="text-sm font-medium text-slate-700">Status</label>
+            <select
+              id="addStatusField"
+              name="status"
+              class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+            >
+              <option value="Active">Active</option>
+              <option value="Inactive">Inactive</option>
+            </select>
+          </div>
+
+          <div id="addFormAlert" class="sm:col-span-2 hidden rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700"></div>
+
+          <div class="sm:col-span-2 flex flex-wrap justify-end gap-2 pt-1">
+            <button type="button" data-close="addModal" class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">Cancel</button>
+            <button id="addFormSubmitBtn" type="submit" class="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+              <span id="addFormSubmitLabel">Save Student</span>
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <section id="addImportPanel" class="hidden rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+        <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h4 class="text-sm font-semibold text-slate-900">Excel Bulk Import</h4>
+            <p class="mt-1 text-xs text-slate-500">Upload a spreadsheet and add many students at once.</p>
+          </div>
+          <button
+            type="button"
+            data-file-download
+            data-download-url="{{ url_for('api_students_import_template') }}"
+            data-filename="students_import_template.xlsx"
+            class="inline-flex items-center rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+          >
+            Download Template
+          </button>
+        </div>
+        <p class="mb-3 text-xs text-slate-500">Template format: <span class="font-semibold">LRN, NAME, Sex / Gender, Section, Grade Level</span>. Only LRN, NAME, and Sex / Gender are required.</p>
+        <form id="addImportForm" class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+          <label class="text-sm font-medium text-slate-700 md:col-span-12">Excel File (.xlsx)
+            <input id="addImportFile" name="file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
+          </label>
+          <label class="text-sm font-medium text-slate-700 md:col-span-6">Default Grade Level
+            <select name="default_grade_level" class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
+              <option value="">Optional (from file)</option>
+              {% for grade in grade_options %}<option value="{{ grade }}">{{ grade }}</option>{% endfor %}
+            </select>
+          </label>
+          <label class="text-sm font-medium text-slate-700 md:col-span-6">Default Section
+            <input name="default_section" type="text" placeholder="Optional (e.g. AVILA)" class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
+          </label>
+          <div class="md:col-span-12 flex justify-end">
+            <button id="addImportSubmitBtn" type="submit" class="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 16V4m0 12l-4-4m4 4l4-4M4 20h16" />
+              </svg>
+              Import Students
+            </button>
+          </div>
+        </form>
+        <p id="addImportSummary" class="mt-3 hidden rounded-xl border px-3 py-2 text-xs"></p>
+      </section>
     </div>
   </div>
 </div>
 
-<div id="editModal" class="modal hidden fixed inset-0 z-[90] bg-black/50 p-4 flex items-center justify-center" data-overlay>
+<div id="editModal" class="modal modal-backdrop-blur hidden fixed inset-0 z-[90] bg-black/50 p-4 flex items-center justify-center" data-overlay>
   <div class="bg-white w-full max-w-2xl rounded-2xl max-h-[85vh] overflow-y-auto">
     <div class="sticky top-0 bg-white border-b px-5 py-4 flex justify-between items-center">
       <h3 class="text-lg font-semibold">Edit Student</h3>
@@ -399,7 +481,7 @@
   </div>
 </div>
 
-<div id="deleteModal" class="modal hidden fixed inset-0 z-[92] bg-black/50 p-4 flex items-center justify-center" data-overlay>
+<div id="deleteModal" class="modal modal-backdrop-blur hidden fixed inset-0 z-[92] bg-black/50 p-4 flex items-center justify-center" data-overlay>
   <div class="bg-white w-full max-w-md rounded-2xl max-h-[85vh] overflow-y-auto">
     <div class="border-b px-5 py-4 flex justify-between items-center">
       <h3 class="text-lg font-semibold text-rose-700">Delete Student</h3>
@@ -417,7 +499,7 @@
   </div>
 </div>
 
-<div id="faceModal" class="modal hidden fixed inset-0 z-[95] bg-black/60 p-4 flex items-center justify-center" data-overlay>
+<div id="faceModal" class="modal modal-backdrop-blur hidden fixed inset-0 z-[95] bg-black/60 p-4 flex items-center justify-center" data-overlay>
   <div class="bg-white w-full max-w-4xl rounded-2xl max-h-[85vh] overflow-y-auto">
     <div class="sticky top-0 bg-white border-b px-5 py-4 flex justify-between items-center">
       <div>
@@ -486,6 +568,7 @@
   </div>
 </div>
 
+<script src="{{ url_for('static', filename='download_utils.js', v='20260312d') }}"></script>
 <script src="{{ url_for('static', filename='students.js', v='20260306c') }}"></script>
 </body>
 </html>
