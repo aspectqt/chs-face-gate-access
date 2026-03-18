@@ -10,7 +10,7 @@
 {% include 'partials/theme_assets.html' %}
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
 </head>
-<body class="bg-slate-100 h-screen overflow-hidden text-slate-800" data-authenticated="1" data-user-theme="{{ current_theme|default('') }}" x-data="{ mobileMenuOpen: false }">
+<body class="bg-slate-100 h-screen overflow-hidden text-slate-800" data-authenticated="1" data-user-theme="{{ current_theme|default('') }}" data-selected-school-year="{{ selected_school_year }}" data-current-school-year="{{ current_school_year }}" data-archived-view="{% if archived_view %}1{% else %}0{% endif %}" x-data="{ mobileMenuOpen: false }">
 <div class="flex h-full">
   {% include 'partials/sidebar.html' %}
   <div class="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
@@ -24,20 +24,42 @@
         <h1 class="text-lg font-semibold hidden sm:block">Students</h1>
       </div>
       <div class="flex items-center gap-2">
-        {% set theme_toggle_classes = 'relative p-2 rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200 transition focus:outline-none focus:ring-2 focus:ring-emerald-400' %}
-        {% include 'partials/theme_toggle_button.html' %}
-        <button id="studentsExportBtn" type="button" data-file-download data-download-url="{{ url_for('students_export') }}"
-          class="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 16V4m0 12-4-4m4 4 4-4M4 20h16" />
-          </svg>
-          Export CSV
-        </button>
-      </div>
+  {% set theme_toggle_classes = 'relative p-2 rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200 transition focus:outline-none focus:ring-2 focus:ring-emerald-400' %}
+  {% include 'partials/theme_toggle_button.html' %}
+
+  <a id="studentsExportBtn" href="{{ url_for('students_export_pdf') }}"
+    data-file-download
+    data-no-transition
+    data-download-url="{{ url_for('students_export_pdf') }}"
+    class="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100">
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M12 16V4m0 12-4-4m4 4 4-4" />
+    </svg>
+    Export PDF
+  </a>
+</div>
     </header>
 
     <main class="flex-1 overflow-y-auto p-4 sm:p-6">
-      <div id="toast" class="fixed top-5 right-5 z-[100] hidden rounded-xl px-4 py-3 text-sm shadow-lg border"></div>
+      <div id="toast" class="fixed top-5 right-5 z-[100] hidden w-full max-w-lg rounded-2xl border shadow-xl" role="status" aria-live="polite">
+        <div class="flex items-start gap-3 p-4">
+          <div class="min-w-0 flex-1">
+            <p id="toastTitle" class="text-sm font-semibold"></p>
+            <p id="toastMessage" class="mt-1 text-sm leading-5"></p>
+            <ul id="toastDetails" class="mt-3 hidden max-h-40 list-disc space-y-1 overflow-y-auto pl-5 text-xs leading-5"></ul>
+          </div>
+          <button
+            id="toastCloseBtn"
+            type="button"
+            class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-current/15 bg-white/60 transition hover:bg-white"
+            aria-label="Close notification"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      </div>
 
       {% if message %}
       <div class="mb-4 rounded-xl border px-4 py-3 text-sm {% if message_type == 'error' %}border-red-200 bg-red-50 text-red-700{% else %}border-emerald-200 bg-emerald-50 text-emerald-700{% endif %}">
@@ -108,112 +130,148 @@
         </article>
       </section>
 
-      <section class="grid grid-cols-1 xl:grid-cols-12 gap-4 mb-5">
-        <article class="bg-white rounded-2xl border border-slate-200 p-4 xl:col-span-8 shadow-sm">
-          <div class="flex flex-wrap items-start justify-between gap-3 mb-3">
+      <section class="mb-5">
+        <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div class="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h2 class="text-base font-semibold text-slate-800">Search Students</h2>
-              <p class="text-xs text-slate-500 mt-1">Find by name, LRN, section, or grade filter.</p>
+              <p class="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">School Year</p>
+              <h2 class="mt-1 text-base font-semibold text-slate-900">Enrollment Workspace</h2>
+              <p id="schoolYearHint" class="mt-1 text-xs text-slate-500">
+                {% if archived_view %}
+                Viewing archived records for {{ selected_school_year }}. Archived school years are read-only.
+                {% else %}
+                Managing active enrollment records for {{ selected_school_year }}.
+                {% endif %}
+              </p>
+            </div>
+            <span id="schoolYearModeBadge" class="inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold {% if archived_view %}border-amber-200 bg-amber-50 text-amber-700{% else %}border-emerald-200 bg-emerald-50 text-emerald-700{% endif %}">
+              {% if archived_view %}Archived View{% else %}Current School Year{% endif %}
+            </span>
+          </div>
+
+          <div class="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-12">
+            <div class="rounded-xl border border-slate-200 bg-slate-50 p-3 lg:col-span-4">
+              <label for="schoolYearSelect" class="text-sm font-semibold text-slate-800">Select School Year</label>
+              <select id="schoolYearSelect" class="mt-2 h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-700">
+                {% for option in school_year_options %}
+                <option value="{{ option.label }}" {% if option.label == selected_school_year %}selected{% endif %}>{{ option.label }}{% if option.is_current %} (Current){% endif %}</option>
+                {% endfor %}
+              </select>
+              <p class="mt-2 text-[11px] text-slate-500">Switch between current and archived enrollment records without deleting old data.</p>
+            </div>
+
+            <div class="rounded-xl border border-slate-200 bg-slate-50 p-3 lg:col-span-4">
+              <p class="text-sm font-semibold text-slate-800">Current Active Year</p>
+              <p id="currentSchoolYearLabel" class="mt-2 text-2xl font-bold text-slate-900">{{ current_school_year }}</p>
+              <p class="mt-1 text-[11px] text-slate-500">Newly created school years become the active enrollment workspace.</p>
+            </div>
+
+            <div class="grid grid-cols-1 gap-2 lg:col-span-4 lg:content-start">
+              <button id="createSchoolYearBtn" type="button" class="inline-flex h-[46px] items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-slate-50">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+                </svg>
+                Create School Year
+              </button>
+              <button id="openReenrollBtn" type="button" class="inline-flex h-[46px] items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-gradient-to-r from-emerald-600 to-emerald-700 px-4 text-sm font-semibold text-white shadow-sm transition hover:from-emerald-700 hover:to-emerald-800 disabled:cursor-not-allowed disabled:opacity-60" {% if archived_view %}disabled{% endif %}>
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0-5 5m5-5H6" />
+                </svg>
+                Re-enroll From Previous Year
+              </button>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section class="mb-5">
+        <article class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 class="text-base font-semibold text-slate-800">Year Level Sections</h2>
+              <p class="mt-1 text-xs text-slate-500">Browse sections and live counts in a compact dashboard layout.</p>
             </div>
             <div class="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
               Live from MongoDB
             </div>
           </div>
-          <div class="grid grid-cols-1 lg:grid-cols-12 gap-3 items-end">
-            <div class="lg:col-span-8">
-              <label class="text-xs font-semibold uppercase tracking-wide text-slate-500">Search</label>
-              <div class="relative mt-1">
-                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-4.35-4.35M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Z" />
-                  </svg>
-                </span>
-                <input id="searchInput" placeholder="Name, LRN, section" class="w-full rounded-xl border border-slate-300 pl-10 pr-3 py-2.5 text-sm">
+          <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-12">
+            <article class="rounded-xl border border-slate-200 bg-slate-50 p-3 xl:col-span-3">
+              <p class="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Year Level</p>
+              <label for="sectionsGradeSelect" class="mt-2 block text-sm font-semibold text-slate-800">Select Grade</label>
+              <select id="sectionsGradeSelect" class="mt-2 h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-700">
+                  <option value="">Select Year Level</option>
+                  {% for grade in grade_options %}
+                  <option value="{{ grade }}">{{ grade }}</option>
+                  {% endfor %}
+                </select>
+            </article>
+            <article class="rounded-xl border border-slate-200 bg-slate-50 p-3 xl:col-span-4">
+              <div class="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <p class="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Available Sections</p>
+                  <h3 id="sectionsPanelTitle" class="mt-1 text-sm font-semibold text-slate-900">Select a year level</h3>
+                </div>
+                <span id="sectionsCountBadge" class="inline-flex rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600">0 Sections</span>
               </div>
-            </div>
-            <div class="lg:col-span-4">
-              <label class="text-xs font-semibold uppercase tracking-wide text-slate-500">Grade</label>
-              <select id="gradeFilter" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm">
-                <option value="">All Grades</option>
-                {% for grade in grade_options %}
-                <option value="{{ grade }}">{{ grade }}</option>
-                {% endfor %}
-              </select>
+              <div id="sectionsPanel" class="mt-3 flex max-h-24 flex-wrap gap-2 overflow-y-auto pr-1"></div>
+            </article>
+            <article class="rounded-xl border border-slate-200 bg-slate-50 p-3 xl:col-span-2">
+              <p class="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Selected Section</p>
+              <h3 id="sectionStatsTitle" class="mt-2 text-sm font-semibold text-slate-900">No section selected</h3>
+              <p id="sectionStatsSubtitle" class="mt-1 text-[11px] leading-5 text-slate-500"></p>
+              <p id="sectionStatsNote" class="mt-2 text-[11px] leading-5 text-slate-500">Live counts will appear after selecting a section.</p>
+              <p id="sectionStatsUpdated" class="mt-2 text-[11px] text-slate-400">Last updated: -</p>
+            </article>
+            <div class="grid w-full max-w-full grid-cols-3 gap-2 self-start sm:col-span-2 sm:w-fit xl:col-span-3 xl:justify-self-end">
+              <article class="min-w-[4.5rem] self-start rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-center">
+                <p class="text-[10px] font-semibold uppercase tracking-[0.12em] leading-none text-slate-500">Total</p>
+                <p id="sectionStatsTotal" class="mt-1 text-2xl font-bold leading-none text-slate-900">0</p>
+              </article>
+              <article class="min-w-[4.5rem] self-start rounded-xl border border-blue-200 bg-blue-50/80 px-3 py-1.5 text-center">
+                <p class="text-[10px] font-semibold uppercase tracking-[0.12em] leading-none text-blue-600">Male</p>
+                <p id="sectionStatsMale" class="mt-1 text-2xl font-bold leading-none text-blue-700">0</p>
+              </article>
+              <article class="min-w-[4.5rem] self-start rounded-xl border border-rose-200 bg-rose-50/80 px-3 py-1.5 text-center">
+                <p class="text-[10px] font-semibold uppercase tracking-[0.12em] leading-none text-rose-600">Female</p>
+                <p id="sectionStatsFemale" class="mt-1 text-2xl font-bold leading-none text-rose-700">0</p>
+              </article>
             </div>
           </div>
         </article>
+      </section>
 
-        <article class="bg-white rounded-2xl border border-slate-200 p-4 xl:col-span-4 shadow-sm flex flex-col justify-between">
-          <div>
-            <h2 class="text-base font-semibold text-slate-800">Quick Actions</h2>
-            <p class="text-xs text-slate-500 mt-1">Add new student profiles and keep records updated.</p>
-          </div>
-          <div class="mt-4">
-            <button id="openAddBtn" type="button" class="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700">
+      <div class="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div class="grid w-full min-w-0 grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] lg:flex-1 lg:max-w-3xl">
+          <div class="relative min-w-0">
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-4.35-4.35M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Z" />
               </svg>
-              Add Student
-            </button>
+            </span>
+            <input id="searchInput" type="search" aria-label="Search students" placeholder="Search name, LRN, section, or year level" class="h-[46px] w-full min-w-0 rounded-xl border border-slate-300 bg-white pl-10 pr-3 text-sm text-slate-700 transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100">
           </div>
-        </article>
-      </section>
-
-      <section class="bg-white rounded-2xl border border-slate-200 p-4 mb-5 shadow-sm">
-        <div class="flex flex-wrap items-start justify-between gap-3 mb-3">
-          <div>
-            <h2 class="text-base font-semibold text-slate-800">Sections Filter</h2>
-            <p class="text-xs text-slate-500 mt-1">Select a section chip to filter students instantly.</p>
-          </div>
-          <button id="clearSectionBtn" type="button" class="text-xs font-semibold text-emerald-700 underline hidden">Clear Section</button>
+          <select id="faceRegistrationFilter" aria-label="Filter by face status" class="h-[46px] w-full rounded-xl border border-slate-300 bg-white px-3 pr-8 text-sm text-slate-700 transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 sm:w-auto sm:min-w-[8.75rem]">
+            <option value="">All Students</option>
+            <option value="registered">Registered</option>
+            <option value="unregistered">Unregistered</option>
+          </select>
         </div>
-        <div class="mb-4 grid grid-cols-1 md:grid-cols-12 gap-2">
-          <div class="md:col-span-4">
-            <label class="text-xs font-semibold uppercase tracking-wide text-slate-500">Grade</label>
-            <select id="newSectionGrade" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
-              <option value="">Select Grade</option>
-              {% for grade in grade_options %}
-              <option value="{{ grade }}">{{ grade }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="md:col-span-5">
-            <label class="text-xs font-semibold uppercase tracking-wide text-slate-500">New Section</label>
-            <input id="newSectionName" type="text" maxlength="64" placeholder="e.g. Rizal" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
-          </div>
-          <div class="md:col-span-3 flex items-end">
-            <button id="addSectionBtn" type="button" class="w-full rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
-              Add Section
-            </button>
-          </div>
+        <div class="flex w-full flex-col gap-3 sm:flex-row sm:justify-end lg:w-auto lg:flex-none">
+          <button id="openAddBtn" type="button" class="inline-flex h-[46px] w-full items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-gradient-to-r from-emerald-600 to-emerald-700 px-4 text-sm font-semibold text-white shadow-sm transition hover:from-emerald-700 hover:to-emerald-800 hover:shadow disabled:cursor-not-allowed disabled:opacity-60 md:w-[10rem]" {% if archived_view %}disabled{% endif %}>
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+            Add Student
+          </button>
+          <button id="openAddSectionBtn" type="button" class="inline-flex h-[46px] w-full items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-slate-50 hover:shadow disabled:cursor-not-allowed disabled:opacity-60 md:w-[10rem]" {% if archived_view %}disabled{% endif %}>
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14-6H5m14 12H5m7 4H5" />
+            </svg>
+            Add Section
+          </button>
         </div>
-        <div class="grid grid-cols-1 xl:grid-cols-12 gap-3">
-          <div class="xl:col-span-8">
-            <div id="sectionsPanel" class="space-y-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3"></div>
-          </div>
-          <aside class="xl:col-span-4 rounded-xl border border-slate-200 bg-gradient-to-br from-white via-slate-50 to-emerald-50/40 p-4">
-            <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Section Analytics</p>
-            <h3 id="sectionStatsTitle" class="mt-1 text-sm font-semibold text-slate-900">No section selected</h3>
-            <p id="sectionStatsSubtitle" class="mt-1 text-xs text-slate-500">Click a section chip to view detailed gender statistics.</p>
-            <div class="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
-              <article class="rounded-lg border border-slate-200 bg-white px-2 py-2 text-center">
-                <p class="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Total</p>
-                <p id="sectionStatsTotal" class="mt-1 text-lg font-bold text-slate-900">0</p>
-              </article>
-              <article class="rounded-lg border border-blue-200 bg-blue-50/80 px-2 py-2 text-center">
-                <p class="text-[10px] font-semibold uppercase tracking-wide text-blue-600">Male</p>
-                <p id="sectionStatsMale" class="mt-1 text-lg font-bold text-blue-700">0</p>
-              </article>
-              <article class="rounded-lg border border-rose-200 bg-rose-50/80 px-2 py-2 text-center">
-                <p class="text-[10px] font-semibold uppercase tracking-wide text-rose-600">Female</p>
-                <p id="sectionStatsFemale" class="mt-1 text-lg font-bold text-rose-700">0</p>
-              </article>
-            </div>
-            <p id="sectionStatsNote" class="mt-3 text-xs text-slate-500">Live counts from MongoDB.</p>
-            <p id="sectionStatsUpdated" class="mt-1 text-[11px] text-slate-400">Last updated: -</p>
-          </aside>
-        </div>
-      </section>
+      </div>
 
       <section class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
         <div class="overflow-x-auto">
@@ -241,6 +299,44 @@
         </div>
       </section>
     </main>
+  </div>
+</div>
+
+<div id="schoolYearModal" class="modal modal-backdrop-blur hidden fixed inset-0 z-[90] bg-black/55 p-3 sm:p-4 flex items-center justify-center" data-overlay>
+  <div class="w-full max-w-lg rounded-3xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/20">
+    <div class="border-b border-slate-200 bg-gradient-to-r from-slate-900 via-slate-800 to-emerald-900 px-5 py-4 text-white sm:px-6">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-200">School Year Setup</p>
+          <h3 class="mt-1 text-xl font-semibold leading-tight">Create New School Year</h3>
+          <p class="mt-1 text-xs text-slate-200/90">A new school year opens a clean enrollment workspace while preserving old records in the archive.</p>
+        </div>
+        <button data-close="schoolYearModal" class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/20 bg-white/10 text-white transition hover:bg-white/20" aria-label="Close school year modal">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    </div>
+    <div class="p-4 sm:p-6">
+      <form id="schoolYearForm" class="space-y-4">
+        <div>
+          <label for="schoolYearLabel" class="text-sm font-medium text-slate-700">School Year <span class="text-rose-600">*</span></label>
+          <input id="schoolYearLabel" name="school_year" maxlength="9" placeholder="e.g. 2026-2027" class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100">
+          <p class="mt-1 text-[11px] text-slate-500">Use the academic year format <span class="font-semibold">YYYY-YYYY</span>.</p>
+        </div>
+        <div id="schoolYearFormAlert" class="hidden rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700"></div>
+        <div class="flex flex-wrap justify-end gap-2 pt-1">
+          <button type="button" data-close="schoolYearModal" class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">Cancel</button>
+          <button id="schoolYearSubmitBtn" type="submit" class="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+            Save School Year
+          </button>
+        </div>
+      </form>
+    </div>
   </div>
 </div>
 
@@ -421,26 +517,201 @@
           <label class="text-sm font-medium text-slate-700 md:col-span-12">Excel File (.xlsx)
             <input id="addImportFile" name="file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
           </label>
-          <label class="text-sm font-medium text-slate-700 md:col-span-6">Default Grade Level
-            <select name="default_grade_level" class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
-              <option value="">Optional (from file)</option>
-              {% for grade in grade_options %}<option value="{{ grade }}">{{ grade }}</option>{% endfor %}
-            </select>
-          </label>
-          <label class="text-sm font-medium text-slate-700 md:col-span-6">Default Section
-            <input name="default_section" type="text" placeholder="Optional (e.g. AVILA)" class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
-          </label>
+
           <div class="md:col-span-12 flex justify-end">
-            <button id="addImportSubmitBtn" type="submit" class="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M12 16V4m0 12l-4-4m4 4l4-4M4 20h16" />
-              </svg>
-              Import Students
+         <button id="addImportSubmitBtn" type="submit" class="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="5">
+             <path stroke-linecap="round" stroke-linejoin="round" d="M12 8V20m0-12l-4 4m4-4l4 4" />
+           </svg>
+             Import Students
             </button>
           </div>
         </form>
-        <p id="addImportSummary" class="mt-3 hidden rounded-xl border px-3 py-2 text-xs"></p>
+        <div id="addImportSummary" class="mt-3 hidden rounded-xl border px-3 py-2 text-xs"></div>
       </section>
+    </div>
+  </div>
+</div>
+
+<div id="reenrollModal" class="modal modal-backdrop-blur hidden fixed inset-0 z-[91] bg-black/55 p-3 sm:p-4 flex items-center justify-center" data-overlay>
+  <div class="w-full max-w-6xl rounded-3xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/20 max-h-[92vh] overflow-y-auto">
+    <div class="sticky top-0 z-10 border-b border-slate-200 bg-gradient-to-r from-slate-900 via-slate-800 to-emerald-900 px-5 py-4 text-white sm:px-6">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-200">Student Re-enrollment</p>
+          <h3 class="mt-1 text-xl font-semibold leading-tight">Select Students to Re-enroll</h3>
+          <p class="mt-1 text-xs text-slate-200/90">Choose a source school year, then review and select the students you want to include.</p>
+        </div>
+        <button data-close="reenrollModal" class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/20 bg-white/10 text-white transition hover:bg-white/20" aria-label="Close re-enrollment modal">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    </div>
+    <div class="p-4 sm:p-6 space-y-4">
+      <div class="grid grid-cols-1 gap-3 lg:grid-cols-12">
+        <div class="rounded-xl border border-slate-200 bg-slate-50 p-3 lg:col-span-4">
+          <label for="reenrollSourceYearSelect" class="text-sm font-semibold text-slate-800">Source School Year</label>
+          <select id="reenrollSourceYearSelect" class="mt-2 h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-700"></select>
+          <p class="mt-2 text-[11px] text-slate-500">Load students from a previous school year and choose who will enroll this year.</p>
+        </div>
+        <div class="rounded-xl border border-slate-200 bg-slate-50 p-3 lg:col-span-4">
+          <label for="reenrollGradeFilter" class="text-sm font-semibold text-slate-800">Source Grade Level</label>
+          <select id="reenrollGradeFilter" class="mt-2 h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-700" disabled>
+            <option value="">Select Grade Level</option>
+          </select>
+          <p class="mt-2 text-[11px] text-slate-500">Choose a grade level first to load its available sections.</p>
+        </div>
+        <div class="rounded-xl border border-slate-200 bg-slate-50 p-3 lg:col-span-4">
+          <label for="reenrollSectionFilter" class="text-sm font-semibold text-slate-800">Source Section</label>
+          <select id="reenrollSectionFilter" class="mt-2 h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-700" disabled>
+            <option value="">Select Section</option>
+          </select>
+          <p class="mt-2 text-[11px] text-slate-500">Only students from the selected section will appear below.</p>
+        </div>
+      </div>
+
+      <div id="reenrollAlert" class="hidden rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700"></div>
+
+      <div class="rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h4 class="text-sm font-semibold text-slate-900">Enrollment Candidates</h4>
+            <p class="mt-1 text-xs text-slate-500">Review the student list below and select the students you want to include.</p>
+          </div>
+          <div class="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
+            <button id="reenrollSelectAll" type="button" class="inline-flex w-full items-center justify-center rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-emerald-700 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto" disabled>
+              Select All
+            </button>
+            <p id="reenrollSelectionSummary" class="text-xs text-slate-500 sm:text-right">No students loaded yet.</p>
+          </div>
+        </div>
+        <div id="reenrollCandidates" class="mt-3 space-y-3">
+          <div class="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-8 text-center text-sm text-slate-500">Choose a source school year and load students to begin re-enrollment.</div>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap justify-end gap-2">
+        <button type="button" data-close="reenrollModal" class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">Cancel</button>
+        <button id="reenrollSubmitBtn" type="button" class="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60" disabled>
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+          Save Enrollment
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="reenrollAssignModal" class="modal modal-backdrop-blur hidden fixed inset-0 z-[93] bg-black/60 p-3 sm:p-4 flex items-center justify-center" data-overlay>
+  <div class="w-full max-w-lg rounded-3xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/25 max-h-[90vh] overflow-y-auto">
+    <div class="sticky top-0 z-10 border-b border-slate-200 bg-gradient-to-r from-slate-900 via-slate-800 to-emerald-900 px-5 py-4 text-white sm:px-6">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-200">Student Re-enrollment</p>
+          <h3 class="mt-1 text-xl font-semibold leading-tight">Assign Enrollment Details</h3>
+          <p class="mt-1 text-xs text-slate-200/90">Choose the target grade level and section for the students you selected.</p>
+        </div>
+        <button data-close="reenrollAssignModal" class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/20 bg-white/10 text-white transition hover:bg-white/20" aria-label="Close assignment modal">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    </div>
+    <div class="p-4 sm:p-6">
+      <form id="reenrollAssignmentForm" class="space-y-4">
+        <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+          <p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Target School Year</p>
+          <p id="reenrollAssignmentTargetYear" class="mt-1 text-lg font-semibold text-slate-900">-</p>
+          <p id="reenrollAssignmentSummary" class="mt-1 text-xs text-slate-500">This will apply to all selected students in this batch.</p>
+        </div>
+
+        <div id="reenrollAssignmentAlert" class="hidden rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700"></div>
+
+        <div>
+          <label for="reenrollAssignmentGrade" class="text-sm font-semibold text-slate-800">Enroll To Grade Level</label>
+          <select id="reenrollAssignmentGrade" class="mt-2 h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-700">
+            <option value="">Select Grade Level</option>
+          </select>
+        </div>
+
+        <div>
+          <label for="reenrollAssignmentSection" class="text-sm font-semibold text-slate-800">Enroll To Section</label>
+          <select id="reenrollAssignmentSection" class="mt-2 h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-700 transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100" disabled>
+            <option value="">Select Section</option>
+          </select>
+          <div id="reenrollAssignmentSectionNewWrap" class="mt-3 hidden">
+            <label for="reenrollAssignmentSectionNew" class="text-xs font-semibold text-slate-600">New Section Name</label>
+            <input
+              id="reenrollAssignmentSectionNew"
+              type="text"
+              autocomplete="off"
+              placeholder="Type a new section name"
+              class="mt-1 h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-700 transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+            >
+          </div>
+          <p id="reenrollAssignmentSectionHint" class="mt-2 text-[11px] text-slate-500">Select an existing section from the dropdown, or choose Add New Section.</p>
+        </div>
+
+        <div class="flex flex-wrap justify-end gap-2 pt-1">
+          <button type="button" data-close="reenrollAssignModal" class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">Cancel</button>
+          <button id="reenrollAssignmentConfirmBtn" type="submit" class="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+            Confirm Enrollment
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div id="addSectionModal" class="modal modal-backdrop-blur hidden fixed inset-0 z-[91] bg-black/55 p-3 sm:p-4 flex items-center justify-center" data-overlay>
+  <div class="w-full max-w-lg rounded-3xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/20 max-h-[90vh] overflow-y-auto">
+    <div class="sticky top-0 z-10 border-b border-slate-200 bg-gradient-to-r from-slate-900 via-slate-800 to-emerald-900 px-5 py-4 text-white sm:px-6">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-200">Section Management</p>
+          <h3 class="mt-1 text-xl font-semibold leading-tight">Add Section</h3>
+          <p class="mt-1 text-xs text-slate-200/90">Create a new section and attach it to the appropriate year level.</p>
+        </div>
+        <button data-close="addSectionModal" class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/20 bg-white/10 text-white transition hover:bg-white/20" aria-label="Close add section modal">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    </div>
+    <div class="p-4 sm:p-6">
+      <form id="addSectionForm" class="space-y-4">
+        <div>
+          <label for="newSectionGrade" class="text-sm font-medium text-slate-700">Year Level <span class="text-rose-600">*</span></label>
+          <select id="newSectionGrade" class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100">
+            <option value="">Select Grade</option>
+            {% for grade in grade_options %}
+            <option value="{{ grade }}">{{ grade }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label for="newSectionName" class="text-sm font-medium text-slate-700">Section Name <span class="text-rose-600">*</span></label>
+          <input id="newSectionName" type="text" maxlength="64" placeholder="e.g. Rizal" class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100">
+          <p class="mt-1 text-[11px] text-slate-500">Use a short formal section name such as Rizal, Mabini, or Avila.</p>
+        </div>
+        <div class="flex flex-wrap justify-end gap-2 pt-1">
+          <button type="button" data-close="addSectionModal" class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">Cancel</button>
+          <button id="addSectionBtn" type="submit" class="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+            Save Section
+          </button>
+        </div>
+      </form>
     </div>
   </div>
 </div>
@@ -569,6 +840,6 @@
 </div>
 
 <script src="{{ url_for('static', filename='download_utils.js', v='20260312d') }}"></script>
-<script src="{{ url_for('static', filename='students.js', v='20260306c') }}"></script>
+<script src="{{ url_for('static', filename='students.js', v='20260319d') }}"></script>
 </body>
 </html>

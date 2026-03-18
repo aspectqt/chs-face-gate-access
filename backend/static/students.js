@@ -6,13 +6,26 @@
     { key: "up", label: "Slight Up", instruction: "Look slightly UP" },
     { key: "down", label: "Slight Down", instruction: "Look slightly DOWN" },
   ];
+  const SECTION_STATS_EMPTY_NOTE = "Select a year level and section to view detailed gender statistics.";
+  const REENROLL_ASSIGNMENT_NEW_SECTION_VALUE = "__new_section__";
 
   const state = {
     students: [],
+    schoolYears: [],
+    schoolYear: {
+      selected: String(document.body?.dataset?.selectedSchoolYear || "").trim(),
+      current: String(document.body?.dataset?.currentSchoolYear || "").trim(),
+      archivedView: String(document.body?.dataset?.archivedView || "") === "1",
+    },
     sectionsByGrade: {},
-    filters: { q: "", grade: "", section: "" },
-    pagination: { page: 1, limit: 10, total: 0, pages: 1 },
+    filters: { q: "", grade: "", section: "", faceStatus: "" },
+    sectionControls: {
+      selectedGradeKey: "",
+      activeSection: "",
+    },
+    pagination: { page: 1, limit: 5, total: 0, pages: 1 },
     activeModal: null,
+    modalStack: [],
     lastFocus: null,
     deleteTarget: { id: "", label: "" },
     face: {
@@ -57,29 +70,80 @@
       male: 0,
       female: 0,
       loading: false,
-      note: "Live counts from MongoDB.",
+      note: SECTION_STATS_EMPTY_NOTE,
       updatedAt: "",
     },
     addModalView: "manual",
+    reenroll: {
+      sourceSchoolYear: "",
+      candidates: [],
+      loading: false,
+      submitting: false,
+      filters: {
+        grade: "",
+        section: "",
+      },
+    },
   };
 
   let sectionStatsRequestToken = 0;
   let centeredSuccessExitTimer = null;
   let centeredSuccessHideTimer = null;
+  let toastHideTimer = null;
 
   const refs = {
     toast: document.getElementById("toast"),
+    toastTitle: document.getElementById("toastTitle"),
+    toastMessage: document.getElementById("toastMessage"),
+    toastDetails: document.getElementById("toastDetails"),
+    toastCloseBtn: document.getElementById("toastCloseBtn"),
     studentsExportBtn: document.getElementById("studentsExportBtn"),
+    schoolYearSelect: document.getElementById("schoolYearSelect"),
+    schoolYearHint: document.getElementById("schoolYearHint"),
+    schoolYearModeBadge: document.getElementById("schoolYearModeBadge"),
+    currentSchoolYearLabel: document.getElementById("currentSchoolYearLabel"),
+    createSchoolYearBtn: document.getElementById("createSchoolYearBtn"),
+    openReenrollBtn: document.getElementById("openReenrollBtn"),
+    schoolYearForm: document.getElementById("schoolYearForm"),
+    schoolYearLabel: document.getElementById("schoolYearLabel"),
+    schoolYearFormAlert: document.getElementById("schoolYearFormAlert"),
+    schoolYearSubmitBtn: document.getElementById("schoolYearSubmitBtn"),
+    reenrollSourceYearSelect: document.getElementById("reenrollSourceYearSelect"),
+    reenrollGradeFilter: document.getElementById("reenrollGradeFilter"),
+    reenrollSectionFilter: document.getElementById("reenrollSectionFilter"),
+    reenrollTargetYearLabel: document.getElementById("reenrollTargetYearLabel"),
+    reenrollTargetYearBadge: document.getElementById("reenrollTargetYearBadge"),
+    reenrollSelectAll: document.getElementById("reenrollSelectAll"),
+    reenrollSelectionSummary: document.getElementById("reenrollSelectionSummary"),
+    reloadReenrollCandidatesBtn: document.getElementById("reloadReenrollCandidatesBtn"),
+    reenrollCandidates: document.getElementById("reenrollCandidates"),
+    reenrollAlert: document.getElementById("reenrollAlert"),
+    reenrollSubmitBtn: document.getElementById("reenrollSubmitBtn"),
+    reenrollAssignmentForm: document.getElementById("reenrollAssignmentForm"),
+    reenrollAssignmentTargetYear: document.getElementById("reenrollAssignmentTargetYear"),
+    reenrollAssignmentSummary: document.getElementById("reenrollAssignmentSummary"),
+    reenrollAssignmentAlert: document.getElementById("reenrollAssignmentAlert"),
+    reenrollAssignmentGrade: document.getElementById("reenrollAssignmentGrade"),
+    reenrollAssignmentSection: document.getElementById("reenrollAssignmentSection"),
+    reenrollAssignmentSectionNewWrap: document.getElementById("reenrollAssignmentSectionNewWrap"),
+    reenrollAssignmentSectionNew: document.getElementById("reenrollAssignmentSectionNew"),
+    reenrollAssignmentSectionHint: document.getElementById("reenrollAssignmentSectionHint"),
+    reenrollAssignmentConfirmBtn: document.getElementById("reenrollAssignmentConfirmBtn"),
     statTotalStudents: document.getElementById("statTotalStudents"),
     statActiveStudents: document.getElementById("statActiveStudents"),
     statInactiveStudents: document.getElementById("statInactiveStudents"),
     statAddedToday: document.getElementById("statAddedToday"),
     searchInput: document.getElementById("searchInput"),
+    faceRegistrationFilter: document.getElementById("faceRegistrationFilter"),
     gradeFilter: document.getElementById("gradeFilter"),
-    clearSectionBtn: document.getElementById("clearSectionBtn"),
+    openAddSectionBtn: document.getElementById("openAddSectionBtn"),
     newSectionGrade: document.getElementById("newSectionGrade"),
     newSectionName: document.getElementById("newSectionName"),
+    addSectionForm: document.getElementById("addSectionForm"),
     addSectionBtn: document.getElementById("addSectionBtn"),
+    sectionsGradeSelect: document.getElementById("sectionsGradeSelect"),
+    sectionsPanelTitle: document.getElementById("sectionsPanelTitle"),
+    sectionsCountBadge: document.getElementById("sectionsCountBadge"),
     sectionsPanel: document.getElementById("sectionsPanel"),
     sectionStatsTitle: document.getElementById("sectionStatsTitle"),
     sectionStatsSubtitle: document.getElementById("sectionStatsSubtitle"),
@@ -137,7 +201,7 @@
     centerSuccessText: document.getElementById("centerSuccessText"),
   };
 
-  if (!refs.studentsTableBody || !refs.searchInput) {
+  if (!refs.studentsTableBody) {
     return;
   }
 
@@ -167,6 +231,130 @@
   const SECTION_ASSIGNMENT_DELIMITER = "||";
   const ADD_MODAL_MANUAL_VIEW = "manual";
   const ADD_MODAL_IMPORT_VIEW = "import";
+  const SCHOOL_YEAR_PATTERN = /^\d{4}-\d{4}$/;
+
+  const getSelectedSchoolYear = () => String(state.schoolYear.selected || state.schoolYear.current || "").trim();
+  const getCurrentSchoolYear = () => String(state.schoolYear.current || "").trim();
+  const isArchivedView = () => Boolean(state.schoolYear.archivedView);
+
+  const applySchoolYearViewState = () => {
+    const archived = isArchivedView();
+    const selectedYear = getSelectedSchoolYear();
+    const currentYear = getCurrentSchoolYear();
+    const hasSourceYears = listSchoolYearOptions().some((item) => item.label && item.label !== selectedYear);
+
+    if (refs.currentSchoolYearLabel) refs.currentSchoolYearLabel.textContent = currentYear || selectedYear || "-";
+    if (refs.schoolYearHint) {
+      refs.schoolYearHint.textContent = archived
+        ? `Viewing archived records for ${selectedYear}. Archived school years are read-only.`
+        : `Managing active enrollment records for ${selectedYear}.`;
+    }
+    if (refs.schoolYearModeBadge) {
+      refs.schoolYearModeBadge.textContent = archived ? "Archived View" : "Current School Year";
+      refs.schoolYearModeBadge.className = `inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${archived ? "border-amber-200 bg-amber-50 text-amber-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`;
+    }
+    if (refs.openAddBtn) refs.openAddBtn.disabled = archived;
+    if (refs.openAddSectionBtn) refs.openAddSectionBtn.disabled = archived;
+    if (refs.openReenrollBtn) refs.openReenrollBtn.disabled = archived || !hasSourceYears;
+    if (refs.reenrollTargetYearLabel) refs.reenrollTargetYearLabel.textContent = selectedYear || "-";
+    if (refs.reenrollTargetYearBadge) refs.reenrollTargetYearBadge.textContent = selectedYear || "-";
+  };
+
+  const buildStudentsPageUrl = (schoolYear) => {
+    const params = new URLSearchParams(window.location.search || "");
+    const normalized = String(schoolYear || "").trim();
+    if (normalized) params.set("school_year", normalized);
+    else params.delete("school_year");
+    const query = params.toString();
+    return query ? `/students?${query}` : "/students";
+  };
+
+  const broadcastSchoolYearSelection = (schoolYear) => {
+    try {
+      window.AppSchoolYear?.broadcastSelection?.(schoolYear);
+    } catch (_error) {
+      // Ignore optional cross-tab sync failures.
+    }
+  };
+
+  const appendSelectedSchoolYearParam = (params, paramName = "school_year") => {
+    const schoolYear = getSelectedSchoolYear();
+    if (schoolYear) params.set(paramName, schoolYear);
+    return params;
+  };
+
+  const suggestNextSchoolYearLabel = (label = "") => {
+    const fallback = String(label || getCurrentSchoolYear() || getSelectedSchoolYear() || "").trim();
+    const match = fallback.match(/^(\d{4})-(\d{4})$/);
+    if (!match) return "";
+    const startYear = Number.parseInt(match[1], 10);
+    const endYear = Number.parseInt(match[2], 10);
+    if (!Number.isFinite(startYear) || !Number.isFinite(endYear)) return "";
+    return `${startYear + 1}-${endYear + 1}`;
+  };
+
+  const validateSchoolYearLabel = (value) => {
+    const normalized = String(value || "").trim().replaceAll("/", "-");
+    if (!SCHOOL_YEAR_PATTERN.test(normalized)) {
+      return { valid: false, message: "Use the school year format YYYY-YYYY." };
+    }
+    const [startText, endText] = normalized.split("-");
+    const startYear = Number.parseInt(startText, 10);
+    const endYear = Number.parseInt(endText, 10);
+    if (!Number.isFinite(startYear) || !Number.isFinite(endYear) || endYear !== startYear + 1) {
+      return { valid: false, message: "The ending year must be exactly one year after the starting year." };
+    }
+    return { valid: true, value: `${startYear}-${endYear}` };
+  };
+
+  const setSchoolYearSubmitting = (isSubmitting) => {
+    if (!refs.schoolYearSubmitBtn) return;
+    refs.schoolYearSubmitBtn.disabled = Boolean(isSubmitting);
+    refs.schoolYearSubmitBtn.innerHTML = isSubmitting
+      ? `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v4m0 8v4m8-8h-4M8 12H4m12.95 4.95-2.83-2.83M9.88 9.88 7.05 7.05m9.9 0-2.83 2.83M9.88 14.12l-2.83 2.83" />
+        </svg>
+        Saving...`
+      : `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+        </svg>
+        Save School Year`;
+  };
+
+  const setReenrollSubmitting = (isSubmitting) => {
+    state.reenroll.submitting = Boolean(isSubmitting);
+    if (refs.reenrollSubmitBtn) refs.reenrollSubmitBtn.disabled = state.reenroll.submitting || collectReenrollSelections().length === 0;
+    if (refs.reenrollSubmitBtn) {
+      refs.reenrollSubmitBtn.innerHTML = state.reenroll.submitting
+        ? `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v4m0 8v4m8-8h-4M8 12H4m12.95 4.95-2.83-2.83M9.88 9.88 7.05 7.05m9.9 0-2.83 2.83M9.88 14.12l-2.83 2.83" />
+          </svg>
+          Saving...`
+        : `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+          Save Enrollment`;
+    }
+    if (refs.reenrollSelectAll) refs.reenrollSelectAll.disabled = state.reenroll.submitting || state.reenroll.loading;
+    if (refs.reloadReenrollCandidatesBtn) refs.reloadReenrollCandidatesBtn.disabled = state.reenroll.submitting || state.reenroll.loading;
+    if (refs.reenrollGradeFilter) refs.reenrollGradeFilter.disabled = state.reenroll.submitting || state.reenroll.loading || refs.reenrollGradeFilter.options.length <= 1;
+    if (refs.reenrollSectionFilter) refs.reenrollSectionFilter.disabled = state.reenroll.submitting || state.reenroll.loading || !state.reenroll.filters.grade || refs.reenrollSectionFilter.options.length <= 1;
+    if (refs.reenrollAssignmentGrade) refs.reenrollAssignmentGrade.disabled = state.reenroll.submitting;
+    if (refs.reenrollAssignmentSection) refs.reenrollAssignmentSection.disabled = state.reenroll.submitting;
+    if (refs.reenrollAssignmentSectionNew) refs.reenrollAssignmentSectionNew.disabled = state.reenroll.submitting;
+    if (refs.reenrollAssignmentConfirmBtn) {
+      refs.reenrollAssignmentConfirmBtn.disabled = state.reenroll.submitting;
+      refs.reenrollAssignmentConfirmBtn.innerHTML = state.reenroll.submitting
+        ? `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v4m0 8v4m8-8h-4M8 12H4m12.95 4.95-2.83-2.83M9.88 9.88 7.05 7.05m9.9 0-2.83 2.83M9.88 14.12l-2.83 2.83" />
+          </svg>
+          Saving...`
+        : `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+          Confirm Enrollment`;
+    }
+  };
 
   const buildSectionAssignmentValue = (grade, section) => `${String(grade || "")}${SECTION_ASSIGNMENT_DELIMITER}${String(section || "")}`;
 
@@ -202,6 +390,46 @@
     return items;
   };
 
+  const getSelectedSectionGradeKey = () => String(state.sectionControls.selectedGradeKey || "").trim();
+
+  const setSelectedSectionGradeKey = (gradeValue) => {
+    state.sectionControls.selectedGradeKey = String(gradeValue || "").trim();
+  };
+
+  const getActiveSectionSelection = () => ({
+    gradeKey: getSelectedSectionGradeKey(),
+    section: String(state.sectionControls.activeSection || "").trim(),
+  });
+
+  const setActiveSectionSelection = (gradeValue, sectionValue) => {
+    setSelectedSectionGradeKey(gradeValue);
+    state.sectionControls.activeSection = String(sectionValue || "").trim();
+  };
+
+  const syncStudentTableFiltersFromSectionSelection = () => {
+    const selectedGrade = getSelectedSectionGradeKey();
+    const activeSection = String(state.sectionControls.activeSection || "").trim();
+    state.filters.grade = selectedGrade ? gradeLabel(selectedGrade) : "";
+    state.filters.section = activeSection;
+  };
+
+  const syncSectionSelectionState = () => {
+    const selectedGrade = getSelectedSectionGradeKey();
+    if (!selectedGrade) {
+      state.sectionControls.activeSection = "";
+      clearSectionStats();
+      syncStudentTableFiltersFromSectionSelection();
+      return;
+    }
+
+    const allowed = Array.isArray(state.sectionsByGrade[selectedGrade]) ? state.sectionsByGrade[selectedGrade] : [];
+    if (state.sectionControls.activeSection && !allowed.includes(state.sectionControls.activeSection)) {
+      state.sectionControls.activeSection = "";
+      clearSectionStats();
+    }
+    syncStudentTableFiltersFromSectionSelection();
+  };
+
   const syncAddSectionAssignment = () => {
     if (!refs.addSectionSelect) return;
     const { gradeKey: selectedGrade, section: selectedSection } = parseSectionAssignmentValue(refs.addSectionSelect.value);
@@ -231,6 +459,415 @@
     syncAddSectionAssignment();
   };
 
+  const listSchoolYearOptions = () => Array.from(refs.schoolYearSelect?.options || []).map((option) => ({
+    label: String(option.value || "").trim(),
+    text: String(option.textContent || "").trim(),
+  })).filter((item) => item.label);
+
+  const renderReenrollSourceOptions = () => {
+    if (!refs.reenrollSourceYearSelect) return;
+    const selectedYear = getSelectedSchoolYear();
+    const options = listSchoolYearOptions().filter((item) => item.label && item.label !== selectedYear);
+    state.schoolYears = listSchoolYearOptions();
+    refs.reenrollSourceYearSelect.innerHTML = `<option value="">Select Source School Year</option>${options.map((item) => `<option value="${esc(item.label)}">${esc(item.text)}</option>`).join("")}`;
+    if (state.reenroll.sourceSchoolYear && options.some((item) => item.label === state.reenroll.sourceSchoolYear)) {
+      refs.reenrollSourceYearSelect.value = state.reenroll.sourceSchoolYear;
+    } else {
+      const newestOption = options[0]?.label || "";
+      state.reenroll.sourceSchoolYear = newestOption;
+      refs.reenrollSourceYearSelect.value = newestOption;
+    }
+    if (refs.openReenrollBtn) refs.openReenrollBtn.disabled = isArchivedView() || options.length === 0;
+  };
+
+  const setSchoolYearFormAlert = (message = "") => {
+    if (!refs.schoolYearFormAlert) return;
+    const text = String(message || "").trim();
+    refs.schoolYearFormAlert.textContent = text;
+    refs.schoolYearFormAlert.classList.toggle("hidden", !text);
+  };
+
+  const setReenrollAlert = (message = "", isError = false) => {
+    if (!refs.reenrollAlert) return;
+    const text = String(message || "").trim();
+    refs.reenrollAlert.textContent = text;
+    refs.reenrollAlert.className = `rounded-xl border px-3 py-2 text-xs font-medium ${isError ? "border-rose-200 bg-rose-50 text-rose-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`;
+    refs.reenrollAlert.classList.toggle("hidden", !text);
+  };
+
+  const setReenrollAssignmentAlert = (message = "", isError = false) => {
+    if (!refs.reenrollAssignmentAlert) return;
+    const text = String(message || "").trim();
+    refs.reenrollAssignmentAlert.textContent = text;
+    refs.reenrollAssignmentAlert.className = `rounded-xl border px-3 py-2 text-xs font-medium ${isError ? "border-rose-200 bg-rose-50 text-rose-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`;
+    refs.reenrollAssignmentAlert.classList.toggle("hidden", !text);
+  };
+
+  const gradeOptionsMarkup = (selectedValue = "") => {
+    const selected = String(selectedValue || "").trim();
+    const options = Array.from(refs.editForm?.elements?.grade_level?.options || []);
+    return options.map((option) => {
+      const value = String(option.value || "").trim();
+      if (!value) return "";
+      const isSelected = value === selected ? " selected" : "";
+      return `<option value="${esc(value)}"${isSelected}>${esc(option.textContent || value)}</option>`;
+    }).join("");
+  };
+
+  const getSelectedReenrollCandidates = () => state.reenroll.candidates
+    .filter((candidate) => candidate.selected && !candidate.already_enrolled);
+
+  const getDefaultReenrollAssignmentGrade = (selectedCandidates = []) => {
+    const values = Array.from(new Set(selectedCandidates
+      .map((candidate) => String(candidate.promoted_grade_level || candidate.grade_level || "").trim())
+      .filter(Boolean)));
+    return values[0] || "";
+  };
+
+  const getDefaultReenrollAssignmentSection = (selectedCandidates = []) => {
+    const values = Array.from(new Set(selectedCandidates
+      .map((candidate) => String(candidate.target_section || "").trim())
+      .filter(Boolean)));
+    return values.length === 1 ? values[0] : "";
+  };
+
+  const toggleReenrollAssignmentNewSectionInput = (showInput, presetValue = "") => {
+    if (refs.reenrollAssignmentSectionNewWrap) refs.reenrollAssignmentSectionNewWrap.classList.toggle("hidden", !showInput);
+    if (refs.reenrollAssignmentSectionNew) {
+      refs.reenrollAssignmentSectionNew.value = showInput ? String(presetValue || "").trim() : "";
+      refs.reenrollAssignmentSectionNew.disabled = state.reenroll.submitting || !showInput;
+    }
+  };
+
+  const getReenrollAssignmentSectionValue = () => {
+    const selectedOption = String(refs.reenrollAssignmentSection?.value || "").trim();
+    if (selectedOption === REENROLL_ASSIGNMENT_NEW_SECTION_VALUE) {
+      return String(refs.reenrollAssignmentSectionNew?.value || "").trim();
+    }
+    return selectedOption;
+  };
+
+  const renderReenrollAssignmentSectionOptions = (preferredSection = "") => {
+    const selectedGradeKey = gradeKey(refs.reenrollAssignmentGrade?.value || "");
+    const sectionOptions = selectedGradeKey
+      ? Array.from(state.sectionsByGrade[selectedGradeKey] || [])
+      : []
+    const sortedSectionOptions = sectionOptions
+      .sort((left, right) => left.localeCompare(right, undefined, { sensitivity: "base" }));
+    const targetSection = String(preferredSection || "").trim();
+
+    if (refs.reenrollAssignmentSection) {
+      const optionMarkup = sortedSectionOptions
+        .map((section) => `<option value="${esc(section)}">${esc(section)}</option>`)
+        .join("");
+      refs.reenrollAssignmentSection.innerHTML = `<option value="">Select Section</option>${optionMarkup}<option value="${REENROLL_ASSIGNMENT_NEW_SECTION_VALUE}">Add New Section</option>`;
+      refs.reenrollAssignmentSection.disabled = !selectedGradeKey || state.reenroll.submitting;
+
+      if (!selectedGradeKey) {
+        refs.reenrollAssignmentSection.value = "";
+        toggleReenrollAssignmentNewSectionInput(false);
+      } else if (targetSection && sortedSectionOptions.includes(targetSection)) {
+        refs.reenrollAssignmentSection.value = targetSection;
+        toggleReenrollAssignmentNewSectionInput(false);
+      } else if (targetSection) {
+        refs.reenrollAssignmentSection.value = REENROLL_ASSIGNMENT_NEW_SECTION_VALUE;
+        toggleReenrollAssignmentNewSectionInput(true, targetSection);
+      } else {
+        refs.reenrollAssignmentSection.value = "";
+        toggleReenrollAssignmentNewSectionInput(false);
+      }
+    }
+
+    if (refs.reenrollAssignmentSectionHint) {
+      if (!selectedGradeKey) {
+        refs.reenrollAssignmentSectionHint.textContent = "Choose the target grade level first, then select a section from the dropdown.";
+      } else if (sortedSectionOptions.length) {
+        refs.reenrollAssignmentSectionHint.textContent = `Available sections for ${gradeLabel(selectedGradeKey)}: ${sortedSectionOptions.join(", ")}.`;
+      } else {
+        refs.reenrollAssignmentSectionHint.textContent = `No sections exist yet for ${gradeLabel(selectedGradeKey)}. Choose Add New Section to create one during enrollment.`;
+      }
+    }
+  };
+
+  const openReenrollAssignmentModal = () => {
+    const selectedCandidates = getSelectedReenrollCandidates();
+    if (!selectedCandidates.length) {
+      setReenrollAlert("Select at least one student to enroll.", true);
+      return;
+    }
+
+    const defaultGrade = getDefaultReenrollAssignmentGrade(selectedCandidates);
+    const defaultSection = getDefaultReenrollAssignmentSection(selectedCandidates);
+
+    if (refs.reenrollAssignmentTargetYear) refs.reenrollAssignmentTargetYear.textContent = getSelectedSchoolYear() || "-";
+    if (refs.reenrollAssignmentSummary) {
+      refs.reenrollAssignmentSummary.textContent = `${selectedCandidates.length} selected student(s) will be enrolled in ${getSelectedSchoolYear() || "the current school year"}.`;
+    }
+    if (refs.reenrollAssignmentGrade) {
+      refs.reenrollAssignmentGrade.innerHTML = `<option value="">Select Grade Level</option>${gradeOptionsMarkup(defaultGrade)}`;
+      refs.reenrollAssignmentGrade.value = defaultGrade;
+    }
+    setReenrollAssignmentAlert("");
+    renderReenrollAssignmentSectionOptions(defaultSection);
+    showModal("reenrollAssignModal");
+  };
+
+  const submitReenrollment = async (selectedStudents) => {
+    const response = await api("/api/students/reenroll", {
+      method: "POST",
+      body: {
+        source_school_year: state.reenroll.sourceSchoolYear,
+        target_school_year: getSelectedSchoolYear(),
+        students: selectedStudents,
+      },
+    });
+    state.sectionsByGrade = response.sections_by_grade || state.sectionsByGrade || {};
+    renderSections();
+    renderAddSectionAssignments();
+    renderReenrollCandidates();
+    state.pagination.page = 1;
+    await loadSections({ silent: true, force: true });
+    await loadStudents({ force: true });
+    await loadStudentStats({ silent: true, force: true });
+    const activeSection = getActiveSectionSelection();
+    if (activeSection.gradeKey && activeSection.section) {
+      await loadSectionStats({ grade: gradeLabel(activeSection.gradeKey), section: activeSection.section, silent: true });
+    }
+    if ((Number.parseInt(response.skipped_count || 0, 10) || 0) > 0 || (response.errors || []).length) {
+      closeModal("reenrollAssignModal");
+      await loadReenrollCandidates({ silent: true, preserveFilters: true });
+      setReenrollAlert(response.message || "Enrollment saved with some warnings.", true);
+      showToast(response.message || "Enrollment saved with some warnings.", true, {
+        title: "Re-enrollment Completed",
+        duration: 10000,
+        details: response.errors || [],
+      });
+      return response;
+    }
+    closeModal("reenrollAssignModal");
+    closeModal("reenrollModal");
+    showCenteredSuccess("Enrollment Saved");
+    showToast(response.message || "Selected students enrolled successfully.");
+    return response;
+  };
+
+  const resetReenrollFilters = () => {
+    state.reenroll.filters.grade = "";
+    state.reenroll.filters.section = "";
+    if (refs.reenrollGradeFilter) refs.reenrollGradeFilter.value = "";
+    if (refs.reenrollSectionFilter) refs.reenrollSectionFilter.value = "";
+  };
+
+  const buildReenrollVisibleEntries = () => {
+    const selectedGradeKey = String(state.reenroll.filters.grade || "").trim();
+    const selectedSection = String(state.reenroll.filters.section || "").trim();
+    return state.reenroll.candidates
+      .map((candidate, index) => ({ candidate, index }))
+      .filter(({ candidate }) => {
+        if (candidate.already_enrolled) return false;
+        if (selectedGradeKey && gradeKey(candidate.grade_level) !== selectedGradeKey) return false;
+        if (selectedSection && String(candidate.section || "").trim() !== selectedSection) return false;
+        return true;
+      });
+  };
+
+  const renderReenrollFilterOptions = () => {
+    if (!refs.reenrollGradeFilter || !refs.reenrollSectionFilter) return;
+
+    const gradeGroups = {};
+    state.reenroll.candidates.forEach((candidate) => {
+      const currentGradeKey = gradeKey(candidate.grade_level);
+      const currentSection = String(candidate.section || "").trim();
+      if (!currentGradeKey || !currentSection) return;
+      if (!gradeGroups[currentGradeKey]) gradeGroups[currentGradeKey] = new Set();
+      gradeGroups[currentGradeKey].add(currentSection);
+    });
+
+    const gradeKeys = Object.keys(gradeGroups).sort((left, right) => {
+      const leftNumeric = Number.parseInt(left, 10);
+      const rightNumeric = Number.parseInt(right, 10);
+      if (Number.isFinite(leftNumeric) && Number.isFinite(rightNumeric)) return leftNumeric - rightNumeric;
+      return left.localeCompare(right, undefined, { numeric: true, sensitivity: "base" });
+    });
+    const selectedGradeKey = String(state.reenroll.filters.grade || "").trim();
+    const validGradeKey = gradeKeys.includes(selectedGradeKey) ? selectedGradeKey : "";
+    state.reenroll.filters.grade = validGradeKey;
+
+    refs.reenrollGradeFilter.innerHTML = `<option value="">Select Grade Level</option>${gradeKeys.map((currentGradeKey) => `<option value="${esc(currentGradeKey)}">${esc(gradeLabel(currentGradeKey))}</option>`).join("")}`;
+    refs.reenrollGradeFilter.value = validGradeKey;
+    refs.reenrollGradeFilter.disabled = gradeKeys.length === 0 || state.reenroll.loading || state.reenroll.submitting;
+
+    const sectionOptions = validGradeKey
+      ? Array.from(gradeGroups[validGradeKey] || []).sort((left, right) => left.localeCompare(right, undefined, { sensitivity: "base" }))
+      : [];
+    const selectedSection = String(state.reenroll.filters.section || "").trim();
+    const validSection = sectionOptions.includes(selectedSection) ? selectedSection : "";
+    state.reenroll.filters.section = validSection;
+
+    refs.reenrollSectionFilter.innerHTML = `<option value="">Select Section</option>${sectionOptions.map((section) => `<option value="${esc(section)}">${esc(section)}</option>`).join("")}`;
+    refs.reenrollSectionFilter.value = validSection;
+    refs.reenrollSectionFilter.disabled = !validGradeKey || sectionOptions.length === 0 || state.reenroll.loading || state.reenroll.submitting;
+  };
+
+  const updateReenrollSelectionSummary = () => {
+    const totalEligible = state.reenroll.candidates.filter((item) => !item.already_enrolled).length;
+    const totalSelected = state.reenroll.candidates.filter((item) => item.selected && !item.already_enrolled).length;
+    const visibleEntries = buildReenrollVisibleEntries();
+    const visibleCandidates = visibleEntries.map((entry) => entry.candidate);
+    const selectedGradeKey = String(state.reenroll.filters.grade || "").trim();
+    const selectedSection = String(state.reenroll.filters.section || "").trim();
+    const visibleSelectable = visibleCandidates.filter((item) => !item.already_enrolled).length;
+    const visibleSelected = visibleCandidates.filter((item) => item.selected && !item.already_enrolled).length;
+    if (refs.reenrollSelectionSummary) {
+      if (!state.reenroll.candidates.length) {
+        refs.reenrollSelectionSummary.textContent = "No students loaded yet.";
+      } else if (totalEligible === 0) {
+        refs.reenrollSelectionSummary.textContent = "All students in this source school year are already enrolled.";
+      } else if (!selectedGradeKey) {
+        refs.reenrollSelectionSummary.textContent = "Choose a grade level to display students.";
+      } else if (!selectedSection) {
+        refs.reenrollSelectionSummary.textContent = "Choose a section to display students.";
+      } else {
+        refs.reenrollSelectionSummary.textContent = `${visibleSelected} of ${visibleSelectable} visible student(s) selected. Total queued: ${totalSelected}.`;
+      }
+    }
+    if (refs.reenrollSelectAll) {
+      const allVisibleSelected = visibleSelectable > 0 && visibleSelected === visibleSelectable;
+      const canToggleVisible = !state.reenroll.loading && !state.reenroll.submitting && Boolean(selectedGradeKey) && Boolean(selectedSection) && visibleSelectable > 0;
+      refs.reenrollSelectAll.disabled = !canToggleVisible;
+      refs.reenrollSelectAll.textContent = allVisibleSelected ? "Unselect All" : "Select All";
+      refs.reenrollSelectAll.setAttribute("aria-pressed", allVisibleSelected ? "true" : "false");
+      refs.reenrollSelectAll.className = `inline-flex w-full items-center justify-center rounded-xl border px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto ${
+        allVisibleSelected
+          ? "border-slate-300 bg-slate-900 text-white hover:bg-slate-800"
+          : "border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50"
+      }`;
+    }
+    if (refs.reenrollSubmitBtn) refs.reenrollSubmitBtn.disabled = totalSelected === 0 || state.reenroll.submitting;
+  };
+
+  const renderReenrollCandidates = () => {
+    if (!refs.reenrollCandidates) return;
+    renderReenrollFilterOptions();
+    if (state.reenroll.loading) {
+      refs.reenrollCandidates.innerHTML = '<div class="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-8 text-center text-sm text-slate-500">Loading source year students...</div>';
+      updateReenrollSelectionSummary();
+      return;
+    }
+    if (!state.reenroll.candidates.length) {
+      refs.reenrollCandidates.innerHTML = '<div class="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-8 text-center text-sm text-slate-500">No students were found for the selected source school year.</div>';
+      updateReenrollSelectionSummary();
+      return;
+    }
+    if (!state.reenroll.filters.grade) {
+      refs.reenrollCandidates.innerHTML = '<div class="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-8 text-center text-sm text-slate-500">Select a grade level to display its sections and students.</div>';
+      updateReenrollSelectionSummary();
+      return;
+    }
+    if (!state.reenroll.filters.section) {
+      refs.reenrollCandidates.innerHTML = '<div class="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-8 text-center text-sm text-slate-500">Select a section to display the students assigned to it.</div>';
+      updateReenrollSelectionSummary();
+      return;
+    }
+
+    const visibleEntries = buildReenrollVisibleEntries();
+    if (!visibleEntries.length) {
+      refs.reenrollCandidates.innerHTML = '<div class="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-8 text-center text-sm text-slate-500">No eligible students were found for the selected grade level and section.</div>';
+      updateReenrollSelectionSummary();
+      return;
+    }
+
+    refs.reenrollCandidates.innerHTML = `
+      <div class="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+        <table class="min-w-full divide-y divide-slate-200">
+          <thead class="bg-slate-100 text-slate-700">
+            <tr class="text-xs uppercase tracking-[0.12em]">
+              <th class="px-4 py-3 text-left">Select</th>
+              <th class="px-4 py-3 text-left">LRN</th>
+              <th class="px-4 py-3 text-left">Student Name</th>
+              <th class="px-4 py-3 text-left">Grade</th>
+              <th class="px-4 py-3 text-left">Section</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            ${visibleEntries.map(({ candidate, index }) => {
+              const checkedAttr = candidate.selected ? " checked" : "";
+              return `<tr class="hover:bg-slate-50" data-reenroll-index="${index}">
+                <td class="px-4 py-3">
+                  <input type="checkbox" class="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 reenroll-row-check" data-index="${index}"${checkedAttr}>
+                </td>
+                <td class="px-4 py-3 text-sm text-slate-700">${esc(candidate.lrn || candidate.student_id || "-")}</td>
+                <td class="px-4 py-3 text-sm font-medium text-slate-900">${esc(candidate.name || "Unknown Student")}</td>
+                <td class="px-4 py-3 text-sm text-slate-700">${esc(candidate.grade_level || "-")}</td>
+                <td class="px-4 py-3 text-sm text-slate-700">${esc(candidate.section || "-")}</td>
+              </tr>`;
+            }).join("")}
+          </tbody>
+        </table>
+      </div>`;
+    updateReenrollSelectionSummary();
+  };
+
+  const loadReenrollCandidates = async ({ silent = false, preserveFilters = false } = {}) => {
+    if (!refs.reenrollSourceYearSelect) return;
+    const sourceSchoolYear = String(refs.reenrollSourceYearSelect.value || "").trim();
+    state.reenroll.sourceSchoolYear = sourceSchoolYear;
+    if (!sourceSchoolYear) {
+      state.reenroll.candidates = [];
+      resetReenrollFilters();
+      renderReenrollCandidates();
+      setReenrollAlert("Select a source school year first.", true);
+      return;
+    }
+
+    state.reenroll.loading = true;
+    if (refs.reloadReenrollCandidatesBtn) refs.reloadReenrollCandidatesBtn.disabled = true;
+    setReenrollAlert("");
+    renderReenrollCandidates();
+
+    try {
+      const params = new URLSearchParams();
+      params.set("source_school_year", sourceSchoolYear);
+      params.set("target_school_year", getSelectedSchoolYear());
+      const data = await api(`/api/students/reenrollment-candidates?${params.toString()}`);
+      state.sectionsByGrade = data.sections_by_grade || state.sectionsByGrade || {};
+      renderSections();
+      renderAddSectionAssignments();
+      state.reenroll.candidates = Array.isArray(data.candidates)
+        ? data.candidates.map((candidate) => ({
+          ...candidate,
+          selected: false,
+          promoted_grade_level: candidate.promoted_grade_level || candidate.grade_level || "",
+          target_section: "",
+        }))
+        : [];
+      if (!preserveFilters) resetReenrollFilters();
+      renderReenrollCandidates();
+      if (!silent) {
+        setReenrollAlert(`Loaded ${state.reenroll.candidates.length} student(s) from ${sourceSchoolYear}.`);
+      }
+    } catch (error) {
+      state.reenroll.candidates = [];
+      renderReenrollCandidates();
+      setReenrollAlert(error.message, true);
+      if (!silent) showToast(error.message, true);
+    } finally {
+      state.reenroll.loading = false;
+      if (refs.reloadReenrollCandidatesBtn) refs.reloadReenrollCandidatesBtn.disabled = state.reenroll.submitting;
+      renderReenrollCandidates();
+    }
+  };
+
+  const collectReenrollSelections = () => state.reenroll.candidates
+    .filter((candidate) => candidate.selected && !candidate.already_enrolled)
+    .map((candidate) => ({
+      record_id: candidate._id,
+      selected: true,
+      grade_level: String(candidate.promoted_grade_level || candidate.grade_level || "").trim(),
+      section: String(candidate.target_section || "").trim(),
+      status: "Active",
+    }));
+
   const normalizeParentContactInput = (rawValue, keepPrefix = true) => {
     const raw = String(rawValue || "").trim();
     if (!raw) return keepPrefix ? PH_CONTACT_PREFIX : "";
@@ -259,19 +896,67 @@
     return !contact || /^\+639\d{9}$/.test(contact);
   };
 
-  const showToast = (message, isError = false) => {
-    if (!refs.toast) return;
-    refs.toast.textContent = message;
-    refs.toast.className = `fixed top-5 right-5 z-[100] rounded-xl px-4 py-3 text-sm shadow-lg border ${isError ? "bg-red-50 border-red-200 text-red-700" : "bg-emerald-50 border-emerald-200 text-emerald-700"}`;
-    refs.toast.classList.remove("hidden");
-    setTimeout(() => refs.toast.classList.add("hidden"), 2800);
+  const limitDetailMessages = (details, maxVisible = 6) => {
+    const items = Array.isArray(details)
+      ? details.map((item) => String(item || "").trim()).filter(Boolean)
+      : [];
+    if (items.length <= maxVisible) return items;
+    const remaining = items.length - maxVisible;
+    return [...items.slice(0, maxVisible), `And ${remaining} more row issue(s).`];
   };
 
-  const setAddImportSummary = (message, isError = false) => {
+  const hideToast = () => {
+    if (!refs.toast) return;
+    if (toastHideTimer) {
+      clearTimeout(toastHideTimer);
+      toastHideTimer = null;
+    }
+    refs.toast.classList.add("hidden");
+  };
+
+  const showToast = (message, isError = false, options = {}) => {
+    if (!refs.toast) return;
+
+    const text = String(message || "").trim();
+    const title = String(options.title || (isError ? "Error" : "Success")).trim();
+    const detailItems = limitDetailMessages(options.details, options.maxDetails || 6);
+    const parsedDuration = Number.parseInt(options.duration, 10);
+    const duration = Number.isFinite(parsedDuration) && parsedDuration > 0
+      ? parsedDuration
+      : (isError ? 10000 : 2800);
+
+    if (refs.toastTitle) refs.toastTitle.textContent = title;
+    if (refs.toastMessage) refs.toastMessage.textContent = text;
+
+    if (refs.toastDetails) {
+      refs.toastDetails.innerHTML = detailItems.map((item) => `<li>${esc(item)}</li>`).join("");
+      refs.toastDetails.classList.toggle("hidden", detailItems.length === 0);
+    }
+
+    refs.toast.setAttribute("role", isError ? "alert" : "status");
+    refs.toast.setAttribute("aria-live", isError ? "assertive" : "polite");
+    refs.toast.className = `fixed top-5 right-5 z-[100] w-full max-w-lg rounded-2xl border shadow-xl ${isError ? "border-rose-200 bg-rose-50 text-rose-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`;
+    refs.toast.classList.remove("hidden");
+
+    if (toastHideTimer) clearTimeout(toastHideTimer);
+    toastHideTimer = setTimeout(() => {
+      toastHideTimer = null;
+      hideToast();
+    }, duration);
+  };
+
+  const setAddImportSummary = (message, isError = false, details = []) => {
     if (!refs.addImportSummary) return;
-    refs.addImportSummary.textContent = String(message || "").trim();
+    const text = String(message || "").trim();
+    const detailItems = limitDetailMessages(details, 8);
+    const detailsMarkup = detailItems.length
+      ? `<ul class="mt-2 list-disc space-y-1 pl-5 text-[11px] leading-5">${detailItems.map((item) => `<li>${esc(item)}</li>`).join("")}</ul>`
+      : "";
+    refs.addImportSummary.innerHTML = text
+      ? `<p class="leading-5">${esc(text)}</p>${detailsMarkup}`
+      : "";
     refs.addImportSummary.className = `mt-3 rounded-xl border px-3 py-2 text-xs ${isError ? "border-rose-200 bg-rose-50 text-rose-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`;
-    refs.addImportSummary.classList.toggle("hidden", !String(message || "").trim());
+    refs.addImportSummary.classList.toggle("hidden", !text);
   };
 
   const addFormFieldElements = () => ({
@@ -511,11 +1196,11 @@
 
     if (!hasSelection) {
       refs.sectionStatsTitle.textContent = "No section selected";
-      refs.sectionStatsSubtitle.textContent = "Click a section chip to view detailed gender statistics.";
+      refs.sectionStatsSubtitle.textContent = SECTION_STATS_EMPTY_NOTE;
       refs.sectionStatsTotal.textContent = "0";
       refs.sectionStatsMale.textContent = "0";
       refs.sectionStatsFemale.textContent = "0";
-      refs.sectionStatsNote.textContent = state.sectionStats.note || "Live counts from MongoDB.";
+      refs.sectionStatsNote.textContent = state.sectionStats.note || SECTION_STATS_EMPTY_NOTE;
       if (refs.sectionStatsUpdated) refs.sectionStatsUpdated.textContent = "Last updated: -";
       return;
     }
@@ -533,7 +1218,7 @@
     }
   };
 
-  const clearSectionStats = (note = "Live counts from MongoDB.") => {
+  const clearSectionStats = (note = SECTION_STATS_EMPTY_NOTE) => {
     sectionStatsRequestToken += 1;
     state.sectionStats = {
       grade: "",
@@ -565,11 +1250,13 @@
   const updateStudentsExportLink = () => {
     if (!refs.studentsExportBtn) return;
     const params = new URLSearchParams();
+    appendSelectedSchoolYearParam(params);
     if (state.filters.q) params.set("q", state.filters.q);
     if (state.filters.grade) params.set("grade", state.filters.grade);
     if (state.filters.section) params.set("section", state.filters.section);
+    if (state.filters.faceStatus) params.set("face_status", state.filters.faceStatus);
     const query = params.toString();
-    const url = query ? `/students/export?${query}` : "/students/export";
+    const url = query ? `/students/export_pdf?${query}` : "/students/export_pdf";
     if (refs.studentsExportBtn.dataset) {
       refs.studentsExportBtn.dataset.downloadUrl = url;
     }
@@ -589,7 +1276,10 @@
   const showModal = (id) => {
     const modal = document.getElementById(id);
     if (!modal) return;
-    state.lastFocus = document.activeElement;
+    const lastFocus = document.activeElement;
+    state.lastFocus = lastFocus;
+    state.modalStack = state.modalStack.filter((entry) => entry.id !== id);
+    state.modalStack.push({ id, lastFocus });
     state.activeModal = id;
     modal.classList.remove("hidden");
     document.body.classList.add("overflow-hidden");
@@ -601,17 +1291,38 @@
     const modal = document.getElementById(id);
     if (!modal) return;
     modal.classList.add("hidden");
-    if (state.activeModal === id) {
-      state.activeModal = null;
+    const stackIndex = state.modalStack.findIndex((entry) => entry.id === id);
+    const [closedEntry] = stackIndex >= 0 ? state.modalStack.splice(stackIndex, 1) : [];
+    const nextActiveModal = state.modalStack[state.modalStack.length - 1] || null;
+    state.activeModal = nextActiveModal?.id || null;
+    if (!nextActiveModal) {
       document.body.classList.remove("overflow-hidden");
-      if (state.lastFocus && typeof state.lastFocus.focus === "function") state.lastFocus.focus();
+    } else {
+      document.body.classList.add("overflow-hidden");
     }
+    const restoreTarget = closedEntry?.lastFocus || state.lastFocus;
+    if (restoreTarget && typeof restoreTarget.focus === "function") restoreTarget.focus();
     if (id === "faceModal") stopFaceCapture();
     if (id === "deleteModal") state.deleteTarget = { id: "", label: "" };
     if (id === "addModal") {
       clearAddFormValidation();
       setAddFormSubmitting(false);
       switchAddModalView(ADD_MODAL_MANUAL_VIEW);
+    }
+    if (id === "schoolYearModal") {
+      refs.schoolYearForm?.reset();
+      setSchoolYearFormAlert("");
+      setSchoolYearSubmitting(false);
+    }
+    if (id === "reenrollModal") {
+      setReenrollAlert("");
+      setReenrollSubmitting(false);
+    }
+    if (id === "reenrollAssignModal") {
+      setReenrollAssignmentAlert("");
+      if (refs.reenrollAssignmentForm) refs.reenrollAssignmentForm.reset();
+      toggleReenrollAssignmentNewSectionInput(false);
+      renderReenrollAssignmentSectionOptions();
     }
   };
 
@@ -637,6 +1348,7 @@
     }
 
     refs.studentsTableBody.innerHTML = state.students.map((student) => {
+      const archivedView = isArchivedView();
       const statusText = student.face_registered ? "Registered" : "Not Registered";
       const statusClass = student.face_registered ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700";
       const faceActionText = student.face_registered ? "Update Face" : "Register Face";
@@ -648,17 +1360,9 @@
         : '<div class="h-10 w-10 rounded-lg border border-dashed border-slate-300 text-[10px] text-slate-400 flex items-center justify-center">No Photo</div>';
 
       const studentLrn = student.lrn || student.student_id || "";
-
-      return `<tr class="hover:bg-slate-50" data-id="${esc(student._id)}">
-        <td class="px-4 py-3">${photo}</td>
-        <td class="px-4 py-3 text-sm font-medium">${esc(studentLrn)}</td>
-        <td class="px-4 py-3 text-sm">${esc(student.name)}</td>
-        <td class="px-4 py-3 text-sm">${esc(student.grade_level || "-")}</td>
-        <td class="px-4 py-3 text-sm">${esc(student.section || "-")}</td>
-        <td class="px-4 py-3 text-sm">${esc(student.parent_contact || "-")}</td>
-        <td class="px-4 py-3"><span class="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusClass}">${statusText}</span></td>
-        <td class="px-4 py-3">
-          <div class="flex items-center justify-end gap-2">
+      const actionsMarkup = archivedView
+        ? '<span class="inline-flex rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-500">Read Only Archive</span>'
+        : `<div class="flex items-center justify-end gap-2">
             <div class="relative group">
               <button type="button" data-act="edit" data-id="${esc(student._id)}" class="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-100" aria-label="Edit Student">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -678,7 +1382,18 @@
             </div>
 
             <button type="button" data-act="face" data-id="${esc(student._id)}" data-mode="${faceMode}" class="rounded-lg ${faceActionClass} px-2.5 py-1.5 text-xs font-semibold text-white">${faceActionText}</button>
-          </div>
+          </div>`;
+
+      return `<tr class="hover:bg-slate-50" data-id="${esc(student._id)}">
+        <td class="px-4 py-3">${photo}</td>
+        <td class="px-4 py-3 text-sm font-medium">${esc(studentLrn)}</td>
+        <td class="px-4 py-3 text-sm">${esc(student.name)}</td>
+        <td class="px-4 py-3 text-sm">${esc(student.grade_level || "-")}</td>
+        <td class="px-4 py-3 text-sm">${esc(student.section || "-")}</td>
+        <td class="px-4 py-3 text-sm">${esc(student.parent_contact || "-")}</td>
+        <td class="px-4 py-3"><span class="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusClass}">${statusText}</span></td>
+        <td class="px-4 py-3">
+          ${actionsMarkup}
         </td>
       </tr>`;
     }).join("");
@@ -711,48 +1426,46 @@
   };
 
   const renderSections = () => {
-    const keys = Object.keys(state.sectionsByGrade).sort((a, b) => {
-      const an = Number.parseInt(a, 10);
-      const bn = Number.parseInt(b, 10);
-      if (!Number.isNaN(an) && !Number.isNaN(bn)) return an - bn;
-      return String(a).localeCompare(String(b));
-    });
+    const selectedGrade = getSelectedSectionGradeKey();
+    const active = getActiveSectionSelection();
 
-    if (!keys.length) {
-      refs.sectionsPanel.innerHTML = '<p class="text-sm text-slate-500">No sections available.</p>';
-      refs.clearSectionBtn.classList.toggle("hidden", !state.filters.section);
+    if (refs.sectionsGradeSelect) {
+      refs.sectionsGradeSelect.value = selectedGrade ? gradeLabel(selectedGrade) : "";
+    }
+
+    if (!selectedGrade) {
+      if (refs.sectionsPanelTitle) refs.sectionsPanelTitle.textContent = "Select a year level";
+      if (refs.sectionsCountBadge) refs.sectionsCountBadge.textContent = "0 Sections";
+      refs.sectionsPanel.innerHTML = '<div class="w-full rounded-xl border border-dashed border-slate-300 bg-white px-3 py-4 text-center text-xs text-slate-500">Choose a year level to load its sections.</div>';
       return;
     }
 
-    const chip = (grade, section) => {
-      const selected = gradeKey(state.filters.grade) === grade && state.filters.section === section;
-      const cls = selected ? "bg-emerald-600 border-emerald-600 text-white" : "bg-white border-slate-300 text-slate-700 hover:border-emerald-300 hover:text-emerald-700";
-      return `<div class="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-1 py-1">
-        <button type="button" class="section-chip rounded-full border px-3 py-1.5 text-xs font-semibold ${cls}" data-grade="${esc(grade)}" data-section="${esc(section)}">Grade ${esc(grade)} - ${esc(section)}</button>
-        <button type="button" class="section-clear-btn inline-flex h-7 w-7 items-center justify-center rounded-full border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100" title="Remove all students from this section" data-grade="${esc(grade)}" data-section="${esc(section)}" aria-label="Remove students from Grade ${esc(grade)} - ${esc(section)}">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M6 7h12M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2m-7 0l.75 12a1 1 0 001 .94h4.5a1 1 0 001-.94L17 7" />
-          </svg>
-        </button>
-      </div>`;
-    };
+    const sections = Array.isArray(state.sectionsByGrade[selectedGrade]) ? state.sectionsByGrade[selectedGrade] : [];
+    if (refs.sectionsPanelTitle) refs.sectionsPanelTitle.textContent = `${gradeLabel(selectedGrade)} Sections`;
+    if (refs.sectionsCountBadge) refs.sectionsCountBadge.textContent = `${sections.length} ${sections.length === 1 ? "Section" : "Sections"}`;
 
-    if (state.filters.grade) {
-      const only = gradeKey(state.filters.grade);
-      const sections = state.sectionsByGrade[only] || [];
-      refs.sectionsPanel.innerHTML = `<div><p class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">${esc(gradeLabel(only))}</p><div class="flex flex-wrap gap-2">${sections.map((section) => chip(only, section)).join("")}</div></div>`;
-    } else {
-      refs.sectionsPanel.innerHTML = keys.map((grade) => `<div><p class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">${esc(gradeLabel(grade))}</p><div class="flex flex-wrap gap-2">${(state.sectionsByGrade[grade] || []).map((section) => chip(grade, section)).join("")}</div></div>`).join("");
+    if (!sections.length) {
+      refs.sectionsPanel.innerHTML = `<div class="w-full rounded-xl border border-dashed border-slate-300 bg-white px-3 py-4 text-center text-xs text-slate-500">No sections available for ${esc(gradeLabel(selectedGrade))} yet.</div>`;
+      return;
     }
 
-    refs.clearSectionBtn.classList.toggle("hidden", !state.filters.section);
+    refs.sectionsPanel.innerHTML = sections.map((section) => {
+      const isActiveSelection = active.gradeKey === selectedGrade && active.section === section;
+      const buttonClass = isActiveSelection
+        ? "border-emerald-600 bg-emerald-600 text-white shadow-sm"
+        : "border-slate-300 bg-white text-slate-700 hover:border-emerald-300 hover:text-emerald-700";
+      return `<button type="button" class="section-chip inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition ${buttonClass}" data-grade="${esc(selectedGrade)}" data-section="${esc(section)}" aria-pressed="${isActiveSelection ? "true" : "false"}">
+        <span>${esc(section)}</span>
+        <span class="text-[11px] font-medium ${isActiveSelection ? "text-emerald-100" : "text-slate-400"}">${esc(gradeLabel(selectedGrade))}</span>
+      </button>`;
+    }).join("");
   };
 
   const loadSectionStats = async ({ grade = "", section = "", silent = false } = {}) => {
     const gradeValue = String(grade || "").trim();
     const sectionValue = String(section || "").trim();
     if (!gradeValue || !sectionValue) {
-      clearSectionStats("Live counts from MongoDB.");
+      clearSectionStats();
       return;
     }
 
@@ -774,6 +1487,7 @@
       const params = new URLSearchParams();
       params.set("grade", gradeValue);
       params.set("section", sectionValue);
+      appendSelectedSchoolYearParam(params);
       const data = await api(`/api/sections/stats?${params.toString()}`);
       if (requestToken !== sectionStatsRequestToken) return;
       const stats = data.stats || {};
@@ -806,10 +1520,13 @@
 
     state.requests.sections = (async () => {
       try {
-        const data = await api("/api/sections");
+        const params = appendSelectedSchoolYearParam(new URLSearchParams());
+        const data = await api(`/api/sections?${params.toString()}`);
         state.sectionsByGrade = data.sections_by_grade || {};
+        syncSectionSelectionState();
         renderSections();
         renderAddSectionAssignments();
+        renderReenrollCandidates();
       } catch (error) {
         if (!silent) {
           showToast(error.message, true);
@@ -844,8 +1561,10 @@
       if (state.filters.q) params.set("q", state.filters.q);
       if (state.filters.grade) params.set("grade", state.filters.grade);
       if (state.filters.section) params.set("section", state.filters.section);
+      if (state.filters.faceStatus) params.set("face_status", state.filters.faceStatus);
       params.set("page", String(state.pagination.page));
       params.set("limit", String(state.pagination.limit));
+      appendSelectedSchoolYearParam(params);
 
       if (!silent) {
         refs.studentsTableBody.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-slate-500 text-sm">Loading students...</td></tr>';
@@ -854,10 +1573,15 @@
       try {
         const data = await api(`/api/students?${params.toString()}`);
         state.students = Array.isArray(data.students) ? data.students : [];
+        state.schoolYear.selected = String(data.school_year || getSelectedSchoolYear()).trim();
+        state.schoolYear.archivedView = Boolean(data.archived_view);
         state.pagination.page = Number.parseInt(data.page || state.pagination.page, 10);
         state.pagination.limit = Number.parseInt(data.limit || state.pagination.limit, 10);
         state.pagination.total = Number.parseInt(data.total || 0, 10);
         state.pagination.pages = Number.parseInt(data.pages || 1, 10);
+        renderReenrollSourceOptions();
+        applySchoolYearViewState();
+        updateStudentsExportLink();
         renderRows();
         renderPagination();
       } catch (error) {
@@ -894,7 +1618,8 @@
 
     state.requests.stats = (async () => {
       try {
-        const data = await api("/api/students/stats");
+        const params = appendSelectedSchoolYearParam(new URLSearchParams());
+        const data = await api(`/api/students/stats?${params.toString()}`);
         const stats = data.stats || {};
         setStatValue(refs.statTotalStudents, stats.total);
         setStatValue(refs.statActiveStudents, stats.active);
@@ -936,8 +1661,9 @@
       if (shouldReloadSections) await loadSections({ silent: true });
       if (shouldReloadStudents) await loadStudents({ silent: true });
       if (shouldReloadStudents) await loadStudentStats({ silent: true });
-      if (shouldReloadStudents && state.filters.grade && state.filters.section) {
-        await loadSectionStats({ grade: state.filters.grade, section: state.filters.section, silent: true });
+      const activeSection = getActiveSectionSelection();
+      if (shouldReloadStudents && activeSection.gradeKey && activeSection.section) {
+        await loadSectionStats({ grade: gradeLabel(activeSection.gradeKey), section: activeSection.section, silent: true });
       }
 
       if (state.realtime.pending.students || state.realtime.pending.sections) {
@@ -1028,6 +1754,10 @@
   };
 
   const openEditModal = async (studentId) => {
+    if (isArchivedView()) {
+      showToast("Archived school years are read-only.", true);
+      return;
+    }
     try {
       const data = await api(`/api/students/${studentId}`);
       fillEditForm(data.student || {});
@@ -1038,12 +1768,20 @@
   };
 
   const openDeleteModal = (studentId, studentName) => {
+    if (isArchivedView()) {
+      showToast("Archived school years are read-only.", true);
+      return;
+    }
     state.deleteTarget = { id: studentId, label: studentName || "Selected student" };
     refs.deleteStudentLabel.textContent = state.deleteTarget.label;
     showModal("deleteModal");
   };
 
   const confirmDelete = async () => {
+    if (isArchivedView()) {
+      showToast("Archived school years are read-only.", true);
+      return;
+    }
     if (!state.deleteTarget.id) return;
     try {
       await api(`/api/students/${state.deleteTarget.id}`, { method: "DELETE" });
@@ -1053,43 +1791,15 @@
       await loadSections();
       await loadStudents();
       await loadStudentStats({ silent: true });
-      if (state.filters.grade && state.filters.section) {
-        await loadSectionStats({ grade: state.filters.grade, section: state.filters.section, silent: true });
+      const activeSection = getActiveSectionSelection();
+      if (activeSection.gradeKey && activeSection.section) {
+        await loadSectionStats({ grade: gradeLabel(activeSection.gradeKey), section: activeSection.section, silent: true });
       }
     } catch (error) {
       showToast(error.message, true);
     }
   };
 
-  const clearSectionStudents = async (gradeKeyValue, sectionValue) => {
-    const grade = gradeLabel(gradeKeyValue);
-    const section = String(sectionValue || "").trim();
-    if (!grade || !section) return;
-
-    const confirmed = window.confirm(`Remove all students from ${grade} - ${section}? This cannot be undone.`);
-    if (!confirmed) return;
-
-    try {
-      const response = await api("/api/sections/clear-students", {
-        method: "POST",
-        body: { grade, section },
-      });
-      showToast(response.message || "Section students removed.");
-      if (state.filters.section === section && gradeKey(state.filters.grade) === gradeKeyValue) {
-        state.filters.section = "";
-        clearSectionStats("Select a section to view updated counts.");
-      }
-      state.pagination.page = 1;
-      await loadSections();
-      await loadStudents();
-      await loadStudentStats({ silent: true });
-      if (state.filters.grade && state.filters.section) {
-        await loadSectionStats({ grade: state.filters.grade, section: state.filters.section, silent: true });
-      }
-    } catch (error) {
-      showToast(error.message, true);
-    }
-  };
   const evaluateStep = (stepKey, yaw, pitch) => {
     if (stepKey === "front") return Math.abs(yaw) < 0.035 && Math.abs(pitch) < 0.035;
     if (stepKey === "left") return yaw > 0.035 && Math.abs(pitch) < 0.08;
@@ -1298,10 +2008,18 @@
   };
 
   const openFaceModal = async (studentId, mode) => {
+    if (isArchivedView()) {
+      showToast("Archived school years are read-only.", true);
+      return;
+    }
     try {
       const data = await api(`/api/students/${studentId}`);
       const student = data.student || {};
-      state.face.studentId = student._id || studentId;
+      state.face.studentId = student.student_ref_id || studentId;
+      if (!state.face.studentId) {
+        showToast("Student profile was not found for face registration.", true);
+        return;
+      }
       state.face.mode = mode === "update" ? "update" : "register";
       state.face.captures = [];
       state.face.alignFrames = 0;
@@ -1351,58 +2069,247 @@
       loadStudents();
     }, 320);
 
-    refs.searchInput.addEventListener("input", () => {
+    refs.schoolYearSelect?.addEventListener("change", () => {
+      const selectedSchoolYear = String(refs.schoolYearSelect.value || "").trim();
+      if (!selectedSchoolYear || selectedSchoolYear === getSelectedSchoolYear()) return;
+      broadcastSchoolYearSelection(selectedSchoolYear);
+      window.location.href = buildStudentsPageUrl(selectedSchoolYear);
+    });
+
+    refs.createSchoolYearBtn?.addEventListener("click", () => {
+      setSchoolYearFormAlert("");
+      refs.schoolYearForm?.reset();
+      if (refs.schoolYearLabel) refs.schoolYearLabel.value = suggestNextSchoolYearLabel();
+      setSchoolYearSubmitting(false);
+      showModal("schoolYearModal");
+      refs.schoolYearLabel?.focus();
+    });
+
+    refs.schoolYearForm?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const validation = validateSchoolYearLabel(refs.schoolYearLabel?.value || "");
+      if (!validation.valid) {
+        setSchoolYearFormAlert(validation.message);
+        refs.schoolYearLabel?.focus();
+        return;
+      }
+
+      setSchoolYearFormAlert("");
+      setSchoolYearSubmitting(true);
+      try {
+        const response = await api("/api/school-years", {
+          method: "POST",
+          body: { school_year: validation.value },
+        });
+        closeModal("schoolYearModal");
+        showToast(response.message || `School Year ${validation.value} created successfully.`);
+        const nextSchoolYear = response.selected_school_year || validation.value;
+        broadcastSchoolYearSelection(nextSchoolYear);
+        window.location.href = buildStudentsPageUrl(nextSchoolYear);
+      } catch (error) {
+        setSchoolYearFormAlert(error.message);
+      } finally {
+        setSchoolYearSubmitting(false);
+      }
+    });
+
+    refs.openReenrollBtn?.addEventListener("click", async () => {
+      if (isArchivedView()) {
+        showToast("Archived school years are read-only.", true);
+        return;
+      }
+      renderReenrollSourceOptions();
+      state.reenroll.candidates = [];
+      resetReenrollFilters();
+      renderReenrollCandidates();
+      setReenrollAlert("");
+      setReenrollSubmitting(false);
+      showModal("reenrollModal");
+      if (!state.reenroll.sourceSchoolYear) {
+        setReenrollAlert("Create or select a previous school year first.", true);
+        return;
+      }
+      await loadReenrollCandidates({ silent: true });
+    });
+
+    refs.reloadReenrollCandidatesBtn?.addEventListener("click", () => {
+      loadReenrollCandidates();
+    });
+
+    refs.reenrollSourceYearSelect?.addEventListener("change", () => {
+      resetReenrollFilters();
+      loadReenrollCandidates();
+    });
+
+    refs.reenrollGradeFilter?.addEventListener("change", () => {
+      state.reenroll.filters.grade = gradeKey(refs.reenrollGradeFilter.value);
+      state.reenroll.filters.section = "";
+      renderReenrollCandidates();
+    });
+
+    refs.reenrollSectionFilter?.addEventListener("change", () => {
+      state.reenroll.filters.section = String(refs.reenrollSectionFilter.value || "").trim();
+      renderReenrollCandidates();
+    });
+
+    refs.reenrollAssignmentGrade?.addEventListener("change", () => {
+      setReenrollAssignmentAlert("");
+      renderReenrollAssignmentSectionOptions("");
+    });
+
+    refs.reenrollAssignmentSection?.addEventListener("change", () => {
+      const selectedValue = String(refs.reenrollAssignmentSection?.value || "").trim();
+      toggleReenrollAssignmentNewSectionInput(selectedValue === REENROLL_ASSIGNMENT_NEW_SECTION_VALUE);
+      setReenrollAssignmentAlert("");
+    });
+
+    refs.reenrollAssignmentSectionNew?.addEventListener("input", () => {
+      setReenrollAssignmentAlert("");
+    });
+
+    refs.reenrollSelectAll?.addEventListener("click", () => {
+      const visibleEntries = buildReenrollVisibleEntries();
+      const visibleIndexes = new Set(visibleEntries.map((entry) => entry.index));
+      const visibleSelectable = visibleEntries.filter((entry) => !entry.candidate.already_enrolled);
+      if (!visibleSelectable.length) return;
+      const shouldSelect = visibleSelectable.some((entry) => !entry.candidate.selected);
+      state.reenroll.candidates = state.reenroll.candidates.map((candidate, index) => {
+        if (!visibleIndexes.has(index) || candidate.already_enrolled) return candidate;
+        return { ...candidate, selected: shouldSelect };
+      });
+      renderReenrollCandidates();
+    });
+
+    refs.reenrollCandidates?.addEventListener("change", (event) => {
+      const index = Number.parseInt(event.target?.dataset?.index || "-1", 10);
+      if (!Number.isInteger(index) || index < 0 || index >= state.reenroll.candidates.length) return;
+      const currentCandidate = state.reenroll.candidates[index];
+      if (!currentCandidate || currentCandidate.already_enrolled) return;
+
+      if (event.target.classList.contains("reenroll-row-check")) {
+        state.reenroll.candidates[index] = { ...currentCandidate, selected: Boolean(event.target.checked) };
+        updateReenrollSelectionSummary();
+        return;
+      }
+    });
+
+    refs.reenrollSubmitBtn?.addEventListener("click", async () => {
+      if (isArchivedView()) {
+        showToast("Archived school years are read-only.", true);
+        return;
+      }
+      if (!getSelectedReenrollCandidates().length) {
+        setReenrollAlert("Select at least one student to enroll.", true);
+        return;
+      }
+      setReenrollAlert("");
+      openReenrollAssignmentModal();
+    });
+
+    refs.reenrollAssignmentForm?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (isArchivedView()) {
+        showToast("Archived school years are read-only.", true);
+        return;
+      }
+
+      const selectedCandidates = getSelectedReenrollCandidates();
+      if (!selectedCandidates.length) {
+        setReenrollAssignmentAlert("Select at least one student to enroll.", true);
+        return;
+      }
+
+      const targetGrade = String(refs.reenrollAssignmentGrade?.value || "").trim();
+      const targetSection = getReenrollAssignmentSectionValue();
+      if (!targetGrade) {
+        setReenrollAssignmentAlert("Please select the target grade level.", true);
+        refs.reenrollAssignmentGrade?.focus();
+        return;
+      }
+      if (!targetSection) {
+        setReenrollAssignmentAlert("Please select or enter the target section.", true);
+        if (String(refs.reenrollAssignmentSection?.value || "").trim() === REENROLL_ASSIGNMENT_NEW_SECTION_VALUE) {
+          refs.reenrollAssignmentSectionNew?.focus();
+        } else {
+          refs.reenrollAssignmentSection?.focus();
+        }
+        return;
+      }
+
+      state.reenroll.candidates = state.reenroll.candidates.map((candidate) => {
+        if (!candidate.selected || candidate.already_enrolled) return candidate;
+        return {
+          ...candidate,
+          promoted_grade_level: targetGrade,
+          target_section: targetSection,
+        };
+      });
+
+      const selectedStudents = collectReenrollSelections();
+      setReenrollAlert("");
+      setReenrollAssignmentAlert("");
+      setReenrollSubmitting(true);
+      try {
+        await submitReenrollment(selectedStudents);
+      } catch (error) {
+        setReenrollAlert(error.message, true);
+        setReenrollAssignmentAlert(error.message, true);
+        showToast(error.message, true);
+      } finally {
+        setReenrollSubmitting(false);
+      }
+    });
+
+    refs.searchInput?.addEventListener("input", () => {
       state.filters.q = refs.searchInput.value.trim();
       state.pagination.page = 1;
       updateStudentsExportLink();
       triggerStudentSearch();
     });
 
-    refs.gradeFilter.addEventListener("change", () => {
-      state.filters.grade = refs.gradeFilter.value;
+    refs.faceRegistrationFilter?.addEventListener("change", () => {
+      state.filters.faceStatus = String(refs.faceRegistrationFilter.value || "").trim();
       state.pagination.page = 1;
-      if (state.filters.section) {
-        const allowed = state.sectionsByGrade[gradeKey(state.filters.grade)] || [];
-        if (state.filters.grade && !allowed.includes(state.filters.section)) {
-          state.filters.section = "";
-          clearSectionStats("Select a section to view updated counts.");
-        }
-      }
-      renderSections();
+      updateStudentsExportLink();
       loadStudents();
-      if (state.filters.grade && state.filters.section) {
-        loadSectionStats({ grade: state.filters.grade, section: state.filters.section, silent: true });
-      } else {
-        clearSectionStats("Click a section chip to view detailed gender statistics.");
-      }
     });
 
-    refs.clearSectionBtn.addEventListener("click", () => {
-      state.filters.section = "";
+    refs.gradeFilter?.addEventListener("change", () => {
+      state.filters.grade = refs.gradeFilter.value;
+      state.pagination.page = 1;
+      loadStudents();
+    });
+
+    refs.sectionsGradeSelect?.addEventListener("change", () => {
+      const selectedGrade = gradeKey(refs.sectionsGradeSelect.value);
+      setSelectedSectionGradeKey(selectedGrade);
+      state.sectionControls.activeSection = "";
+      syncStudentTableFiltersFromSectionSelection();
       state.pagination.page = 1;
       renderSections();
+      clearSectionStats();
       loadStudents();
-      clearSectionStats("Select a section chip to view detailed gender statistics.");
     });
 
     refs.sectionsPanel.addEventListener("click", (event) => {
-      const clearBtn = event.target.closest(".section-clear-btn");
-      if (clearBtn) {
-        clearSectionStudents(clearBtn.dataset.grade, clearBtn.dataset.section);
-        return;
-      }
       const chip = event.target.closest(".section-chip");
       if (!chip) return;
-      state.filters.grade = gradeLabel(chip.dataset.grade);
-      state.filters.section = chip.dataset.section || "";
+      const grade = String(chip.dataset.grade || "").trim();
+      const section = String(chip.dataset.section || "").trim();
+      if (!grade || !section) return;
+      setActiveSectionSelection(grade, section);
+      syncStudentTableFiltersFromSectionSelection();
       state.pagination.page = 1;
-      refs.gradeFilter.value = state.filters.grade;
       renderSections();
       loadStudents();
-      loadSectionStats({ grade: state.filters.grade, section: state.filters.section });
+      loadSectionStats({ grade: gradeLabel(grade), section });
     });
 
     refs.openAddBtn.addEventListener("click", () => {
+      if (isArchivedView()) {
+        showToast("Archived school years are read-only.", true);
+        return;
+      }
       refs.addForm.reset();
       if (refs.addForm?.elements?.parent_contact) {
         refs.addForm.elements.parent_contact.value = PH_CONTACT_PREFIX;
@@ -1426,7 +2333,22 @@
       switchAddModalView(ADD_MODAL_IMPORT_VIEW);
     });
 
-    refs.addSectionBtn?.addEventListener("click", async () => {
+    refs.openAddSectionBtn?.addEventListener("click", () => {
+      if (isArchivedView()) {
+        showToast("Archived school years are read-only.", true);
+        return;
+      }
+      refs.addSectionForm?.reset();
+      showModal("addSectionModal");
+      refs.newSectionGrade?.focus();
+    });
+
+    refs.addSectionForm?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (isArchivedView()) {
+        showToast("Archived school years are read-only.", true);
+        return;
+      }
       const grade = String(refs.newSectionGrade?.value || "").trim();
       const section = String(refs.newSectionName?.value || "").trim();
       if (!grade) {
@@ -1441,19 +2363,16 @@
       }
 
       try {
-        await api("/api/sections", { method: "POST", body: { grade, section } });
-        refs.newSectionName.value = "";
+        await api("/api/sections", {
+          method: "POST",
+          body: { grade, section, school_year: getSelectedSchoolYear() },
+        });
+        refs.addSectionForm?.reset();
+        closeModal("addSectionModal");
         showToast("Section saved successfully.");
         await loadSections();
       } catch (error) {
         showToast(error.message, true);
-      }
-    });
-
-    refs.newSectionName?.addEventListener("keydown", (event) => {
-      if (event.key === "Enter") {
-        event.preventDefault();
-        refs.addSectionBtn?.click();
       }
     });
 
@@ -1491,15 +2410,19 @@
 
     refs.addImportForm?.addEventListener("submit", async (event) => {
       event.preventDefault();
+      if (isArchivedView()) {
+        showToast("Archived school years are read-only.", true, { title: "Import Error" });
+        return;
+      }
       const selectedFile = refs.addImportFile?.files?.[0];
       if (!selectedFile) {
-        showToast("Please select an Excel (.xlsx) file first.", true);
+        showToast("Please select an Excel (.xlsx) file first.", true, { title: "Import Error" });
         refs.addImportFile?.focus();
         return;
       }
 
       if (!/\.xlsx$/i.test(selectedFile.name || "")) {
-        showToast("Only .xlsx files are supported.", true);
+        showToast("Only .xlsx files are supported.", true, { title: "Import Error" });
         refs.addImportFile.value = "";
         refs.addImportFile?.focus();
         return;
@@ -1507,6 +2430,7 @@
 
       const formData = new FormData(refs.addImportForm);
       formData.set("file", selectedFile);
+      formData.set("school_year", getSelectedSchoolYear());
       if (refs.addImportSubmitBtn) refs.addImportSubmitBtn.disabled = true;
       setAddImportSummary("Import in progress...");
 
@@ -1521,6 +2445,10 @@
         const duplicates = Number.parseInt(response.duplicate_count || 0, 10) || 0;
         const invalid = Number.parseInt(response.invalid_count || 0, 10) || 0;
         const summarySkipped = Number.parseInt(response.summary_skipped_count || 0, 10) || 0;
+        const errorDetails = Array.isArray(response.errors)
+          ? response.errors.map((item) => String(item || "").trim()).filter(Boolean)
+          : [];
+        const hasImportIssues = duplicates > 0 || invalid > 0 || errorDetails.length > 0;
 
         const summary = [
           rowsRead > 0 ? `Rows read: ${rowsRead}.` : "",
@@ -1531,28 +2459,42 @@
           summarySkipped > 0 ? `${summarySkipped} summary row(s) skipped.` : "",
         ].filter(Boolean).join(" ");
 
-        const hasOnlySkippedRows = imported === 0 && skipped > 0;
-        showToast(response.message || summary, hasOnlySkippedRows);
-        const importNotice = imported > 0 ? "Import Successful" : "Import Completed";
-        closeModal("addModal");
-        showCenteredSuccess(importNotice);
-        refs.addForm?.reset();
-        if (refs.addForm?.elements?.parent_contact) {
-          refs.addForm.elements.parent_contact.value = PH_CONTACT_PREFIX;
+        if (hasImportIssues) {
+          const importErrorMessage = imported > 0
+            ? "Some student rows were not imported. Review the duplicate or invalid entries below."
+            : "The import could not be completed. Review the duplicate or invalid entries below.";
+          showToast(importErrorMessage, true, {
+            title: "Import Error",
+            duration: 10000,
+            details: errorDetails,
+            maxDetails: 6,
+          });
+          setAddImportSummary(summary, true, errorDetails);
+          switchAddModalView(ADD_MODAL_IMPORT_VIEW);
+        } else {
+          showToast(response.message || summary, false, { title: "Import Successful" });
+          closeModal("addModal");
+          showCenteredSuccess("Import Successful");
+          refs.addForm?.reset();
+          if (refs.addForm?.elements?.parent_contact) {
+            refs.addForm.elements.parent_contact.value = PH_CONTACT_PREFIX;
+          }
+          if (refs.addSectionSelect) refs.addSectionSelect.value = "";
+          syncAddSectionAssignment();
+          refs.addImportForm?.reset();
+          setAddImportSummary("");
         }
-        if (refs.addSectionSelect) refs.addSectionSelect.value = "";
-        syncAddSectionAssignment();
-        refs.addImportForm?.reset();
-        setAddImportSummary("");
+
         state.pagination.page = 1;
         await loadSections();
         await loadStudents();
         await loadStudentStats({ silent: true });
-        if (state.filters.grade && state.filters.section) {
-          await loadSectionStats({ grade: state.filters.grade, section: state.filters.section, silent: true });
+        const activeSection = getActiveSectionSelection();
+        if (activeSection.gradeKey && activeSection.section) {
+          await loadSectionStats({ grade: gradeLabel(activeSection.gradeKey), section: activeSection.section, silent: true });
         }
       } catch (error) {
-        showToast(error.message, true);
+        showToast(error.message, true, { title: "Import Error" });
         setAddImportSummary(error.message, true);
       } finally {
         if (refs.addImportSubmitBtn) refs.addImportSubmitBtn.disabled = false;
@@ -1561,13 +2503,20 @@
 
     refs.addForm.addEventListener("submit", async (event) => {
       event.preventDefault();
+      if (isArchivedView()) {
+        showToast("Archived school years are read-only.", true);
+        return;
+      }
       const validation = validateAddForm({ focusFirst: true, showAlert: true });
       if (!validation.valid) {
         const firstIssue = Object.values(validation.issues || {}).find(Boolean) || "Please complete all required fields.";
         showToast(firstIssue, true);
         return;
       }
-      const payload = validation.payload;
+      const payload = {
+        ...validation.payload,
+        school_year: getSelectedSchoolYear(),
+      };
       setAddFormSubmitting(true);
       try {
         await api("/api/students", { method: "POST", body: payload });
@@ -1584,8 +2533,9 @@
         await loadSections();
         await loadStudents();
         await loadStudentStats({ silent: true });
-        if (state.filters.grade && state.filters.section) {
-          await loadSectionStats({ grade: state.filters.grade, section: state.filters.section, silent: true });
+        const activeSection = getActiveSectionSelection();
+        if (activeSection.gradeKey && activeSection.section) {
+          await loadSectionStats({ grade: gradeLabel(activeSection.gradeKey), section: activeSection.section, silent: true });
         }
       } catch (error) {
         showToast(error.message, true);
@@ -1596,10 +2546,15 @@
 
     refs.editForm.addEventListener("submit", async (event) => {
       event.preventDefault();
+      if (isArchivedView()) {
+        showToast("Archived school years are read-only.", true);
+        return;
+      }
       const studentId = refs.editForm.elements._id.value;
       if (!studentId) return;
       const payload = formPayload(refs.editForm);
       payload.parent_contact = normalizeParentContactInput(payload.parent_contact, false);
+      payload.school_year = getSelectedSchoolYear();
       if (!isValidParentContact(payload.parent_contact)) {
         showToast("Parent contact must be in +639XXXXXXXXX format.", true);
         refs.editForm.elements.parent_contact?.focus();
@@ -1612,8 +2567,9 @@
         await loadSections();
         await loadStudents();
         await loadStudentStats({ silent: true });
-        if (state.filters.grade && state.filters.section) {
-          await loadSectionStats({ grade: state.filters.grade, section: state.filters.section, silent: true });
+        const activeSection = getActiveSectionSelection();
+        if (activeSection.gradeKey && activeSection.section) {
+          await loadSectionStats({ grade: gradeLabel(activeSection.gradeKey), section: activeSection.section, silent: true });
         }
       } catch (error) {
         showToast(error.message, true);
@@ -1633,6 +2589,7 @@
     });
 
     refs.confirmDeleteBtn.addEventListener("click", confirmDelete);
+    refs.toastCloseBtn?.addEventListener("click", hideToast);
 
     refs.paginationControls.addEventListener("click", (event) => {
       const button = event.target.closest("button[data-page]");
@@ -1666,13 +2623,19 @@
   };
 
   initEvents();
+  applySchoolYearViewState();
+  renderReenrollSourceOptions();
   renderFaceState();
   renderSectionStats();
   switchAddModalView(ADD_MODAL_MANUAL_VIEW);
   clearAddFormValidation();
   setAddFormSubmitting(false);
+  setSchoolYearSubmitting(false);
+  setReenrollSubmitting(false);
   renderAddSectionAssignments();
+  renderReenrollCandidates();
   syncAddSectionAssignment();
+  updateStudentsExportLink();
   startRealtimeUpdates();
   loadSections();
   loadStudents();

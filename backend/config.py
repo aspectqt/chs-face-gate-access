@@ -16,6 +16,8 @@ DB_NAME = os.getenv("MONGODB_DB_NAME", uri_path_db or "face_gate_db")
 
 client = MongoClient(MONGO_URI)
 db = client[DB_NAME]
+STUDENT_ENROLLMENT_COLLECTION_PREFIX = "student_"
+LEGACY_STUDENT_ENROLLMENTS_COLLECTION_NAME = "student_enrollments"
 
 # Core collections
 students = db["students"]
@@ -30,6 +32,8 @@ alerts = db["alerts"]
 login_history = db["login_history"]
 failed_scans = db["failed_scans"]
 sections = db["sections"]
+school_years = db["school_years"]
+student_enrollments = db[LEGACY_STUDENT_ENROLLMENTS_COLLECTION_NAME]
 audit_logs = db["audit_logs"]
 login_attempts = db["login_attempts"]
 attendance_corrections = db["attendance_corrections"]
@@ -44,6 +48,43 @@ def _safe_create_index(collection, keys, **kwargs):
         collection.create_index(keys, **kwargs)
     except Exception as exc:
         print(f"[WARNING] Could not create index on {collection.name}: {exc}")
+
+
+def student_enrollment_collection_name(school_year):
+    label = str(school_year or "").strip()
+    if not label:
+        return STUDENT_ENROLLMENT_COLLECTION_PREFIX.rstrip("_")
+    return f"{STUDENT_ENROLLMENT_COLLECTION_PREFIX}{label}"
+
+
+def is_student_enrollment_collection_name(name):
+    raw = str(name or "").strip()
+    return raw.startswith(STUDENT_ENROLLMENT_COLLECTION_PREFIX) and raw != "students"
+
+
+def list_student_enrollment_collection_names():
+    return sorted(
+        name
+        for name in db.list_collection_names()
+        if is_student_enrollment_collection_name(name)
+    )
+
+
+def ensure_student_enrollment_collection_indexes(collection):
+    _safe_create_index(collection, [("student_id", ASCENDING)], unique=True, sparse=True)
+    _safe_create_index(collection, [("grade_level", ASCENDING), ("section", ASCENDING)])
+    _safe_create_index(collection, [("status", ASCENDING)])
+    _safe_create_index(collection, [("face_registered", ASCENDING)])
+    _safe_create_index(collection, [("name", ASCENDING)])
+    _safe_create_index(collection, [("student_ref_id", ASCENDING)])
+    _safe_create_index(collection, [("section", ASCENDING)])
+    _safe_create_index(collection, [("created_at", DESCENDING)])
+
+
+def get_student_enrollment_collection(school_year):
+    collection = db[student_enrollment_collection_name(school_year)]
+    ensure_student_enrollment_collection_indexes(collection)
+    return collection
 
 
 def ensure_indexes():
@@ -62,6 +103,7 @@ def ensure_indexes():
     _safe_create_index(students, [("gender", ASCENDING), ("grade_level", ASCENDING), ("section", ASCENDING), ("status", ASCENDING), ("created_at", DESCENDING)])
 
     _safe_create_index(attendance_logs, [("timestamp", DESCENDING)])
+    _safe_create_index(attendance_logs, [("school_year", ASCENDING), ("date", DESCENDING)])
     _safe_create_index(attendance_logs, [("date", ASCENDING)])
     _safe_create_index(attendance_logs, [("student_id", ASCENDING), ("date", ASCENDING)])
     _safe_create_index(attendance_logs, [("student_id", ASCENDING), ("status", ASCENDING), ("date", DESCENDING)])
@@ -74,6 +116,7 @@ def ensure_indexes():
     _safe_create_index(attendance_logs, [("legacy_id", ASCENDING)], unique=True, sparse=True)
 
     _safe_create_index(sms_logs, [("timestamp", DESCENDING)])
+    _safe_create_index(sms_logs, [("school_year", ASCENDING), ("date", DESCENDING)])
     _safe_create_index(sms_logs, [("createdAt", DESCENDING)])
     _safe_create_index(sms_logs, [("updatedAt", DESCENDING)])
     _safe_create_index(sms_logs, [("status", ASCENDING), ("date", ASCENDING)])
@@ -99,6 +142,7 @@ def ensure_indexes():
     _safe_create_index(users, [("updatedAt", DESCENDING)])
 
     _safe_create_index(alerts, [("is_read", ASCENDING), ("created_at", DESCENDING)])
+    _safe_create_index(alerts, [("school_year", ASCENDING), ("timestamp", DESCENDING)])
     _safe_create_index(alerts, [("category", ASCENDING), ("created_at", DESCENDING)])
     _safe_create_index(alerts, [("status", ASCENDING), ("timestamp", DESCENDING)])
     _safe_create_index(alerts, [("type", ASCENDING), ("timestamp", DESCENDING)])
@@ -112,6 +156,7 @@ def ensure_indexes():
     _safe_create_index(audit_logs, [("actor.username", ASCENDING), ("createdAt", DESCENDING)])
     _safe_create_index(audit_logs, [("target_type", ASCENDING), ("target_id", ASCENDING), ("createdAt", DESCENDING)])
     _safe_create_index(attendance_corrections, [("status", ASCENDING), ("requestedAt", DESCENDING)])
+    _safe_create_index(attendance_corrections, [("school_year", ASCENDING), ("requestedAt", DESCENDING)])
     _safe_create_index(attendance_corrections, [("attendance_log_id", ASCENDING), ("status", ASCENDING)])
     _safe_create_index(attendance_corrections, [("requested_by", ASCENDING), ("requestedAt", DESCENDING)])
     _safe_create_index(attendance_corrections, [("reviewed_by", ASCENDING), ("reviewedAt", DESCENDING)])
@@ -128,9 +173,27 @@ def ensure_indexes():
     _safe_create_index(failed_scans, [("date", ASCENDING), ("reason", ASCENDING)])
     _safe_create_index(failed_scans, [("student_id", ASCENDING), ("reason", ASCENDING), ("date", DESCENDING)])
 
-    _safe_create_index(sections, [("grade_key", ASCENDING), ("section_normalized", ASCENDING)], unique=True)
-    _safe_create_index(sections, [("grade_key", ASCENDING), ("section", ASCENDING)])
-    _safe_create_index(sections, [("updated_at", DESCENDING)])
+    try:
+        sections.drop_index("grade_key_1_section_normalized_1")
+    except Exception:
+        pass
+    _safe_create_index(sections, [("school_year", ASCENDING), ("grade_key", ASCENDING), ("section_normalized", ASCENDING)], unique=True)
+    _safe_create_index(sections, [("school_year", ASCENDING), ("grade_key", ASCENDING), ("section", ASCENDING)])
+    _safe_create_index(sections, [("school_year", ASCENDING), ("updated_at", DESCENDING)])
+
+    _safe_create_index(school_years, [("label", ASCENDING)], unique=True)
+    _safe_create_index(school_years, [("is_current", ASCENDING), ("updated_at", DESCENDING)])
+    _safe_create_index(school_years, [("start_year", DESCENDING)])
+
+    _safe_create_index(student_enrollments, [("school_year", ASCENDING), ("student_id", ASCENDING)], unique=True)
+    _safe_create_index(student_enrollments, [("school_year", ASCENDING), ("grade_level", ASCENDING), ("section", ASCENDING)])
+    _safe_create_index(student_enrollments, [("school_year", ASCENDING), ("status", ASCENDING)])
+    _safe_create_index(student_enrollments, [("school_year", ASCENDING), ("face_registered", ASCENDING)])
+    _safe_create_index(student_enrollments, [("school_year", ASCENDING), ("name", ASCENDING)])
+    _safe_create_index(student_enrollments, [("student_ref_id", ASCENDING)])
+    _safe_create_index(student_enrollments, [("created_at", DESCENDING)])
+    for collection_name in list_student_enrollment_collection_names():
+        ensure_student_enrollment_collection_indexes(db[collection_name])
 
 
 ensure_indexes()

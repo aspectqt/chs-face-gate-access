@@ -1,6 +1,7 @@
 (function () {
   const STORAGE_KEY = "chs_theme_preference";
   const FULLSCREEN_PREF_KEY = "chs_fullscreen_preference";
+  const SCHOOL_YEAR_SYNC_KEY = "chs_selected_school_year_sync";
   const VALID_THEMES = new Set(["light", "dark"]);
 
   const docEl = document.documentElement;
@@ -12,6 +13,7 @@
   let fullscreenResumeHandler = null;
   let logoutModalEl = null;
   let logoutPendingHref = "/logout";
+  let schoolYearSyncBound = false;
 
   const DROPDOWN_OPEN_KEYS = new Set([
     "Enter",
@@ -54,6 +56,41 @@
     return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
       ? "dark"
       : "light";
+  }
+
+  function broadcastSchoolYearSelection(label) {
+    try {
+      const normalized = String(label || "").trim();
+      if (!normalized) return;
+      window.localStorage.setItem(SCHOOL_YEAR_SYNC_KEY, JSON.stringify({
+        label: normalized,
+        updatedAt: Date.now(),
+      }));
+    } catch (_err) {
+      // Ignore storage failures.
+    }
+  }
+
+  function bindSchoolYearSync() {
+    if (schoolYearSyncBound) return;
+    schoolYearSyncBound = true;
+    window.addEventListener("storage", (event) => {
+      if (event.key !== SCHOOL_YEAR_SYNC_KEY || !event.newValue || !isAuthenticatedPage()) return;
+      try {
+        const payload = JSON.parse(event.newValue || "{}");
+        const nextLabel = String(payload.label || "").trim();
+        if (!nextLabel) return;
+        const url = new URL(window.location.href);
+        if (url.searchParams.get("school_year") === nextLabel) {
+          window.location.reload();
+          return;
+        }
+        url.searchParams.set("school_year", nextLabel);
+        window.location.assign(url.toString());
+      } catch (_err) {
+        window.location.reload();
+      }
+    });
   }
 
   function chooseInitialTheme() {
@@ -507,6 +544,7 @@
         href.startsWith("javascript:") ||
         link.target === "_blank" ||
         link.hasAttribute("data-no-transition") ||
+        link.hasAttribute("data-file-download") ||
         isLogoutHref(href)
       ) {
         return;
@@ -703,6 +741,66 @@
     }
   }
 
+  let devReloadIntervalId = 0;
+  let devReloadBusy = false;
+  let devReloadToken = "";
+  let devReloadDisabled = false;
+
+  async function pollDevReloadToken() {
+    if (devReloadDisabled || devReloadBusy || typeof window.fetch !== "function") return;
+    if (document.visibilityState === "hidden") return;
+
+    devReloadBusy = true;
+    try {
+      const res = await fetch("/api/dev/reload-token", {
+        method: "GET",
+        credentials: "same-origin",
+        cache: "no-store",
+        headers: { Accept: "application/json" },
+      });
+
+      if (res.status === 404 || res.status === 403) {
+        devReloadDisabled = true;
+        if (devReloadIntervalId) {
+          window.clearInterval(devReloadIntervalId);
+          devReloadIntervalId = 0;
+        }
+        return;
+      }
+      if (!res.ok) return;
+
+      const payload = await res.json().catch(() => ({}));
+      const nextToken = String(payload?.token || "").trim();
+      if (!nextToken) return;
+
+      if (!devReloadToken) {
+        devReloadToken = nextToken;
+        return;
+      }
+
+      if (nextToken !== devReloadToken) {
+        window.location.reload();
+      }
+    } catch (_err) {
+      // Ignore transient errors while the dev server is restarting.
+    } finally {
+      devReloadBusy = false;
+    }
+  }
+
+  function initDevAutoReload() {
+    if (devReloadIntervalId || typeof window.fetch !== "function") return;
+
+    devReloadIntervalId = window.setInterval(pollDevReloadToken, 1200);
+    window.addEventListener("focus", pollDevReloadToken);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") {
+        pollDevReloadToken();
+      }
+    });
+    pollDevReloadToken();
+  }
+
   function initTheme() {
     if (initialized) return;
     initialized = true;
@@ -715,6 +813,8 @@
     ensureLogoutModal();
     observeSelectInsertions();
     syncThemeFromServerIfNeeded();
+    initDevAutoReload();
+    bindSchoolYearSync();
     emitThemeEvent(currentTheme);
     window.requestAnimationFrame(() => docEl.classList.add("theme-ready"));
   }
@@ -736,6 +836,10 @@
     toggleTheme,
     toggleFullscreen,
     enhanceSelects: enhanceSelectElements,
+  };
+
+  window.AppSchoolYear = {
+    broadcastSelection: broadcastSchoolYearSelection,
   };
 
   window.AppDropdown = {

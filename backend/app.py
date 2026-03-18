@@ -3,15 +3,36 @@ from bson.objectid import ObjectId
 from pymongo.errors import DuplicateKeyError
 from datetime import datetime, timedelta, time as dtime
 from decimal import Decimal, InvalidOperation
-import csv
 import os
 import cv2
 import face_recognition
 import numpy as np
+from flask import send_file
+from io import BytesIO
+from reportlab.lib.pagesizes import letter, landscape
+from reportlab.platypus import (
+    SimpleDocTemplate,
+    Table,
+    TableStyle,
+    Paragraph,
+    Spacer,
+    Image as RLImage,
+    LongTable,
+    KeepTogether,
+    HRFlowable,
+)
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
+from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from dotenv import load_dotenv
 from config import (
     DB_NAME,
     client,
+    ensure_indexes,
+    get_student_enrollment_collection,
+    list_student_enrollment_collection_names,
+    student_enrollment_collection_name,
     students,
     attendance_logs,
     sms_logs,
@@ -21,6 +42,8 @@ from config import (
     login_history,
     failed_scans,
     sections,
+    school_years,
+    student_enrollments,
     audit_logs,
     login_attempts,
     attendance_corrections,
@@ -30,7 +53,6 @@ from config import (
     anomaly_events,
 )
 import json
-from io import BytesIO, StringIO
 from PIL import Image
 import base64
 import threading
@@ -49,19 +71,10 @@ import secrets
 import hashlib
 import smtplib
 import socket
+from xml.sax.saxutils import escape as xml_escape
 from email.message import EmailMessage
 from services.sms_provider import SmsProvider, create_sms_provider_from_env
 from services.otp_service import generate_otp_code, hash_otp_code, verify_otp_code
-from services.ai_analytics import (
-    SUPPORTED_CHANGE_MODES,
-    SUPPORTED_INSIGHT_RANGES,
-    SUPPORTED_RISK_TARGETS,
-    get_ai_insights,
-    get_change_explanations,
-    get_next_best_actions,
-    get_risk_predictions,
-    run_nlq_query,
-)
 try:
     from openpyxl import Workbook, load_workbook
     from openpyxl.styles import Alignment, Border, Font, Side
@@ -80,6 +93,7 @@ except Exception:
 # =====================================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(BASE_DIR, ".env"))
+db = client[DB_NAME]
 
 
 def env_int(name, default, minimum=None, maximum=None):
@@ -104,10 +118,13 @@ def env_bool(name, default=False):
 HTTPS_ENABLED = env_bool("HTTPS_ENABLED", False)
 FORCE_HTTPS = env_bool("FORCE_HTTPS", HTTPS_ENABLED)
 TRUST_PROXY_HEADERS = env_bool("TRUST_PROXY_HEADERS", False)
+FLASK_DEBUG_MODE = env_bool("FLASK_DEBUG", True)
+DEV_AUTO_RELOAD = env_bool("DEV_AUTO_RELOAD", False)
 SSL_CERT_FILE = os.getenv("SSL_CERT_FILE", "").strip()
 SSL_KEY_FILE = os.getenv("SSL_KEY_FILE", "").strip()
 FLASK_HOST = os.getenv("FLASK_HOST", "0.0.0.0").strip() or "0.0.0.0"
 FLASK_PORT = env_int("FLASK_PORT", 5000, minimum=1, maximum=65535)
+DEV_RELOAD_POLL_INTERVAL_MS = env_int("DEV_RELOAD_POLL_INTERVAL_MS", 1200, minimum=500, maximum=10000)
 PREFERRED_URL_SCHEME = (
     os.getenv("PREFERRED_URL_SCHEME", "https" if HTTPS_ENABLED else "http").strip().lower()
     or ("https" if HTTPS_ENABLED else "http")
@@ -189,6 +206,8 @@ AFTERNOON_END_START = dtime(hour=17, minute=0)
 MORNING_LATE_THRESHOLD = dtime(hour=8, minute=15)
 AFTERNOON_LATE_THRESHOLD = dtime(hour=13, minute=15)
 GRADE_LEVEL_OPTIONS = ["Grade 7", "Grade 8", "Grade 9", "Grade 10", "Grade 11", "Grade 12"]
+SCHOOL_YEAR_START_MONTH = env_int("SCHOOL_YEAR_START_MONTH", 6, minimum=1, maximum=12)
+SCHOOL_YEAR_SESSION_KEY = "selected_school_year"
 STUDENT_IMPORT_ALLOWED_EXTENSIONS = {"xlsx"}
 STUDENT_IMPORT_MAX_ROWS = env_int("STUDENT_IMPORT_MAX_ROWS", 0, minimum=0, maximum=200000)
 REQUIRED_STUDENT_IMPORT_FIELDS = {"lrn", "name", "gender"}
@@ -223,7 +242,6 @@ OTP_EXPIRES_MINUTES = env_int("OTP_EXPIRES_MINUTES", 5, minimum=1, maximum=30)
 OTP_MAX_ATTEMPTS = env_int("OTP_MAX_ATTEMPTS", 5, minimum=1, maximum=10)
 OTP_THROTTLE_SECONDS = env_int("OTP_THROTTLE_SECONDS", 60, minimum=0, maximum=3600)
 OTP_MAX_PER_HOUR = env_int("OTP_MAX_PER_HOUR", 5, minimum=1, maximum=100)
-AI_NLQ_LLM_ENABLED = os.getenv("AI_NLQ_LLM_ENABLED", "").strip().lower() in {"1", "true", "yes", "on"}
 ENABLE_SECURITY_HEADERS = env_bool("ENABLE_SECURITY_HEADERS", True)
 CSP_ENFORCE = env_bool("CSP_ENFORCE", False)
 VALID_SCAN_SESSION_MODES = {"auto", "manual_in", "manual_out"}
@@ -271,6 +289,11 @@ background_jobs_started = False
 background_jobs_lock = threading.Lock()
 SCAN_RECOGNITION_SCALE = SCAN_RECOGNITION_SCALE_PERCENT / 100.0
 last_scanned = {}
+dev_reload_lock = threading.Lock()
+dev_reload_cache = {
+    "checked_at": 0.0,
+    "token": "",
+}
 
 scan_lock = threading.Lock()
 scan_state = {
@@ -611,6 +634,16 @@ def normalize_parent_contact_value(value):
     if re.match(r"^\+639\d{9}$", normalized) is None:
         raise ValueError("Parent contact must be in +639XXXXXXXXX format.")
     return normalized
+
+
+def normalize_parent_contact_display(value):
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    try:
+        return normalize_parent_contact_value(raw)
+    except ValueError:
+        return raw
 
 
 def normalize_section_value(value):
@@ -976,6 +1009,15 @@ def inject_global_theme():
     return {"current_theme": ""}
 
 
+@app.context_processor
+def inject_dev_runtime_flags():
+    return {
+        "dev_auto_reload": DEV_AUTO_RELOAD,
+        "dev_reload_poll_interval_ms": DEV_RELOAD_POLL_INTERVAL_MS,
+        "dev_reload_token": compute_dev_reload_token() if DEV_AUTO_RELOAD else "",
+    }
+
+
 def current_role():
     return session.get("role", "Limited Access")
 
@@ -1090,12 +1132,472 @@ def apply_security_headers(response):
     return response
 
 
+@app.route("/api/dev/reload-token", methods=["GET"])
+def api_dev_reload_token():
+    if not DEV_AUTO_RELOAD:
+        return jsonify({"status": "error", "message": "Dev auto reload is disabled."}), 404
+
+    response = jsonify({"status": "ok", "token": compute_dev_reload_token()})
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
+
+
 def now_local():
     return datetime.now()
 
 
 def now_iso():
     return now_local().isoformat(timespec="seconds")
+
+
+def build_school_year_label(start_year):
+    try:
+        start = int(start_year)
+    except (TypeError, ValueError):
+        return ""
+    return f"{start}-{start + 1}"
+
+
+def normalize_school_year_value(value):
+    text = str(value or "").strip().replace("–", "-").replace("/", "-")
+    if not text:
+        return ""
+    match = re.fullmatch(r"(\d{4})\s*-\s*(\d{4})", text)
+    if not match:
+        return ""
+    start_year = int(match.group(1))
+    end_year = int(match.group(2))
+    if end_year != start_year + 1:
+        return ""
+    return f"{start_year}-{end_year}"
+
+
+def derive_default_school_year_label(today_date=None):
+    date_value = today_date or now_local().date()
+    start_year = date_value.year if date_value.month >= SCHOOL_YEAR_START_MONTH else date_value.year - 1
+    return build_school_year_label(start_year)
+
+
+def school_year_sort_key(label):
+    normalized = normalize_school_year_value(label)
+    if not normalized:
+        return (1, str(label or ""))
+    return (0, -int(normalized.split("-", 1)[0]))
+
+
+def ensure_school_year_exists(label, set_current=False, created_by="system"):
+    normalized = normalize_school_year_value(label)
+    if not normalized:
+        raise ValueError("Invalid school year format. Use YYYY-YYYY.")
+
+    start_year, end_year = [int(part) for part in normalized.split("-", 1)]
+    now_value = now_iso()
+    school_years.update_one(
+        {"label": normalized},
+        {
+            "$set": {
+                "label": normalized,
+                "start_year": start_year,
+                "end_year": end_year,
+                "updated_at": now_value,
+            },
+            "$setOnInsert": {
+                "created_at": now_value,
+                "created_by": str(created_by or "").strip(),
+                "is_current": False,
+            },
+        },
+        upsert=True,
+    )
+    if set_current:
+        school_years.update_many(
+            {"label": {"$ne": normalized}, "is_current": True},
+            {"$set": {"is_current": False, "updated_at": now_value}},
+        )
+        school_years.update_one(
+            {"label": normalized},
+            {"$set": {"is_current": True, "updated_at": now_value}},
+        )
+    get_student_enrollment_collection(normalized)
+    return school_years.find_one({"label": normalized}) or {
+        "label": normalized,
+        "start_year": start_year,
+        "end_year": end_year,
+        "is_current": bool(set_current),
+    }
+
+
+def ensure_default_school_year():
+    current_doc = school_years.find_one({"is_current": True})
+    if current_doc:
+        return normalize_school_year_value(current_doc.get("label")) or derive_default_school_year_label()
+    label = derive_default_school_year_label()
+    ensure_school_year_exists(label, set_current=True, created_by="system")
+    return label
+
+
+def list_school_year_docs():
+    docs = list(school_years.find().sort("start_year", -1))
+    if not docs:
+        ensure_default_school_year()
+        docs = list(school_years.find().sort("start_year", -1))
+    normalized_docs = []
+    for doc in docs:
+        label = normalize_school_year_value(doc.get("label"))
+        if not label:
+            continue
+        normalized_docs.append({
+            "_id": str(doc.get("_id") or ""),
+            "label": label,
+            "start_year": int(doc.get("start_year") or int(label.split("-", 1)[0])),
+            "end_year": int(doc.get("end_year") or int(label.split("-", 1)[1])),
+            "is_current": bool(doc.get("is_current")),
+            "created_at": str(doc.get("created_at") or ""),
+            "updated_at": str(doc.get("updated_at") or ""),
+        })
+    normalized_docs.sort(key=lambda row: school_year_sort_key(row.get("label")))
+    return normalized_docs
+
+
+def get_current_school_year_doc():
+    label = ensure_default_school_year()
+    return school_years.find_one({"label": label}) or {"label": label, "is_current": True}
+
+
+def get_current_school_year_label():
+    return normalize_school_year_value((get_current_school_year_doc() or {}).get("label")) or derive_default_school_year_label()
+
+
+def school_year_date_bounds(school_year=""):
+    school_year_label = normalize_school_year_value(school_year)
+    if not school_year_label:
+        return None, None
+    start_year, end_year = [int(part) for part in school_year_label.split("-", 1)]
+    return datetime(start_year, 6, 1).date(), datetime(end_year, 5, 31).date()
+
+
+def school_year_date_strings(school_year=""):
+    start_date, end_date = school_year_date_bounds(school_year)
+    if not start_date or not end_date:
+        return "", ""
+    return start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d")
+
+
+def school_year_contains_date(school_year="", value=None):
+    start_date, end_date = school_year_date_bounds(school_year)
+    if not start_date or not end_date or value is None:
+        return False
+    if isinstance(value, datetime):
+        target_date = value.date()
+    else:
+        target_date = value
+    return start_date <= target_date <= end_date
+
+
+def derive_school_year_label_from_value(value, fallback=""):
+    normalized_fallback = normalize_school_year_value(fallback)
+    if value in (None, ""):
+        return normalized_fallback
+
+    parsed_date = None
+    if isinstance(value, datetime):
+        parsed_date = value.date()
+    else:
+        raw = str(value).strip()
+        if not raw:
+            return normalized_fallback
+
+        parsed_date = parse_date_or_none(raw[:10])
+        if parsed_date is None:
+            normalized = raw.replace("Z", "+00:00")
+            try:
+                parsed_date = datetime.fromisoformat(normalized).date()
+            except Exception:
+                for pattern in ("%Y-%m-%d %H:%M:%S", "%m/%d/%Y", "%m/%d/%Y %H:%M:%S"):
+                    try:
+                        parsed_date = datetime.strptime(raw[:19], pattern).date()
+                        break
+                    except Exception:
+                        continue
+
+    if parsed_date is None:
+        return normalized_fallback
+
+    start_year = parsed_date.year if parsed_date.month >= 6 else parsed_date.year - 1
+    return build_school_year_label(start_year)
+
+
+def infer_document_school_year(doc, date_keys=None, timestamp_keys=None, fallback=""):
+    if not isinstance(doc, dict):
+        return normalize_school_year_value(fallback)
+
+    normalized = normalize_school_year_value(doc.get("school_year"))
+    if normalized:
+        return normalized
+
+    meta = doc.get("meta") if isinstance(doc.get("meta"), dict) else {}
+    normalized_meta = normalize_school_year_value(meta.get("school_year"))
+    if normalized_meta:
+        return normalized_meta
+
+    detail_keys = list(date_keys or []) + list(timestamp_keys or [])
+    for key in detail_keys:
+        label = derive_school_year_label_from_value(doc.get(key), fallback)
+        if label:
+            return label
+
+    return normalize_school_year_value(fallback)
+
+
+def backfill_collection_school_year(collection, date_keys=None, timestamp_keys=None, patch_meta=False):
+    updated = 0
+    query = {"$or": [{"school_year": {"$exists": False}}, {"school_year": ""}, {"school_year": None}]}
+    projection = {"school_year": 1, "meta": 1}
+    for key in set(list(date_keys or []) + list(timestamp_keys or [])):
+        projection[key] = 1
+
+    for row in collection.find(query, projection):
+        school_year_label = infer_document_school_year(row, date_keys=date_keys, timestamp_keys=timestamp_keys)
+        if not school_year_label:
+            continue
+
+        ensure_school_year_exists(
+            school_year_label,
+            set_current=is_current_school_year(school_year_label),
+            created_by="system",
+        )
+
+        update_doc = {"school_year": school_year_label}
+        if patch_meta:
+            meta = row.get("meta") if isinstance(row.get("meta"), dict) else {}
+            if not normalize_school_year_value(meta.get("school_year")):
+                update_doc["meta.school_year"] = school_year_label
+
+        result = collection.update_one({"_id": row["_id"]}, {"$set": update_doc})
+        updated += int(result.modified_count or 0)
+
+    return updated
+
+
+def ensure_school_year_scope_defaults():
+    attendance_updated = backfill_collection_school_year(
+        attendance_logs,
+        date_keys=["date"],
+        timestamp_keys=["timestamp"],
+    )
+    sms_updated = backfill_collection_school_year(
+        sms_logs,
+        date_keys=["date"],
+        timestamp_keys=["timestamp", "createdAt", "updatedAt"],
+    )
+    alerts_updated = backfill_collection_school_year(
+        alerts,
+        timestamp_keys=["timestamp", "created_at"],
+        patch_meta=True,
+    )
+    corrections_updated = backfill_collection_school_year(
+        attendance_corrections,
+        timestamp_keys=["log_timestamp", "requested_at", "requestedAt", "reviewed_at", "reviewedAt"],
+    )
+    total_updated = attendance_updated + sms_updated + alerts_updated + corrections_updated
+    if total_updated:
+        print(
+            "[INFO] Backfilled school_year fields. "
+            f"Attendance: {attendance_updated}. SMS: {sms_updated}. "
+            f"Alerts: {alerts_updated}. Corrections: {corrections_updated}."
+        )
+
+
+def get_school_year_enrollment_collection(school_year=""):
+    school_year_label = normalize_school_year_value(school_year) or get_current_school_year_label()
+    ensure_school_year_exists(school_year_label, set_current=is_current_school_year(school_year_label), created_by="system")
+    return get_student_enrollment_collection(school_year_label)
+
+
+def list_student_enrollment_school_year_labels(include_legacy=False):
+    labels = set()
+    for row in list_school_year_docs():
+        label = normalize_school_year_value(row.get("label"))
+        if label:
+            labels.add(label)
+    current_label = normalize_school_year_value(get_current_school_year_label())
+    if current_label:
+        labels.add(current_label)
+    for collection_name in list_student_enrollment_collection_names():
+        suffix = collection_name[len("student_"):] if collection_name.startswith("student_") else collection_name
+        label = normalize_school_year_value(suffix)
+        if label:
+            labels.add(label)
+    if include_legacy and student_enrollments.count_documents({}, limit=1) > 0:
+        for label in student_enrollments.distinct("school_year"):
+            normalized = normalize_school_year_value(label)
+            if normalized:
+                labels.add(normalized)
+    return sorted(labels, key=school_year_sort_key)
+
+
+def update_student_base_fields_across_enrollments(student_id, update_fields):
+    normalized_student_id = normalize_lrn_value(student_id)
+    if not normalized_student_id or not isinstance(update_fields, dict) or not update_fields:
+        return 0
+    modified_count = 0
+    for school_year_label in list_student_enrollment_school_year_labels():
+        collection = get_school_year_enrollment_collection(school_year_label)
+        result = collection.update_many({"student_id": normalized_student_id}, {"$set": dict(update_fields)})
+        modified_count += int(result.modified_count or 0)
+    return modified_count
+
+
+def find_student_enrollment_record(enrollment_oid, school_year=""):
+    if not enrollment_oid:
+        return None, ""
+    normalized_school_year = normalize_school_year_value(school_year)
+    if normalized_school_year:
+        collection = get_school_year_enrollment_collection(normalized_school_year)
+        return collection.find_one({"_id": enrollment_oid}), normalized_school_year
+    for school_year_label in list_student_enrollment_school_year_labels():
+        collection = get_school_year_enrollment_collection(school_year_label)
+        document = collection.find_one({"_id": enrollment_oid})
+        if document:
+            return document, school_year_label
+    return None, ""
+
+
+def count_school_year_enrollments(school_year, query=None):
+    school_year_label = normalize_school_year_value(school_year) or get_current_school_year_label()
+    collection = get_school_year_enrollment_collection(school_year_label)
+    return int(collection.count_documents(query or {}))
+
+
+def migrate_legacy_student_enrollments():
+    if student_enrollments.count_documents({}, limit=1) == 0:
+        return {"migrated": 0, "updated": 0, "skipped": 0, "archived": False}
+
+    migrated = 0
+    updated = 0
+    skipped = 0
+    for row in student_enrollments.find({}):
+        school_year_label = normalize_school_year_value(row.get("school_year"))
+        student_id = normalize_lrn_value(row.get("student_id") or row.get("lrn"))
+        if not school_year_label or not student_id:
+            skipped += 1
+            continue
+
+        ensure_school_year_exists(school_year_label, set_current=is_current_school_year(school_year_label), created_by="system")
+        collection = get_school_year_enrollment_collection(school_year_label)
+        enrollment_doc = dict(row)
+        enrollment_doc["school_year"] = school_year_label
+        enrollment_doc["student_id"] = student_id
+        enrollment_doc["lrn"] = normalize_lrn_value(enrollment_doc.get("lrn") or student_id) or student_id
+
+        existing = collection.find_one({"student_id": student_id}, {"_id": 1})
+        if existing:
+            updated += 1
+            continue
+
+        collection.insert_one(enrollment_doc)
+        migrated += 1
+
+    unresolved = 0
+    for row in student_enrollments.find({}, {"school_year": 1, "student_id": 1, "lrn": 1}):
+        school_year_label = normalize_school_year_value(row.get("school_year"))
+        student_id = normalize_lrn_value(row.get("student_id") or row.get("lrn"))
+        if not school_year_label or not student_id:
+            continue
+        collection = get_school_year_enrollment_collection(school_year_label)
+        if collection.count_documents({"student_id": student_id}, limit=1) == 0:
+            unresolved += 1
+            break
+
+    archived = False
+    if unresolved == 0:
+        backup_collection_name = "student_enrollments_legacy"
+        if backup_collection_name not in db.list_collection_names():
+            try:
+                student_enrollments.rename(backup_collection_name)
+                archived = True
+            except Exception as exc:
+                print(f"[WARNING] Could not archive legacy student_enrollments collection: {exc}")
+
+    if migrated or updated or skipped:
+        print(
+            "[INFO] Enrollment migration to per-school-year collections completed. "
+            f"Migrated: {migrated}. Updated: {updated}. Skipped: {skipped}. Archived legacy: {archived}."
+        )
+
+    return {"migrated": migrated, "updated": updated, "skipped": skipped, "archived": archived}
+
+
+def is_current_school_year(label):
+    normalized = normalize_school_year_value(label)
+    return bool(normalized) and normalized == get_current_school_year_label()
+
+
+def remember_selected_school_year(label):
+    normalized = normalize_school_year_value(label)
+    if has_request_context() and normalized:
+        session[SCHOOL_YEAR_SESSION_KEY] = normalized
+    return normalized
+
+
+def resolve_selected_school_year(explicit_value=""):
+    requested = normalize_school_year_value(explicit_value)
+    if not requested and has_request_context():
+        requested = normalize_school_year_value(request.args.get("school_year", ""))
+    if not requested and has_request_context():
+        requested = normalize_school_year_value(request.form.get("school_year", ""))
+    if not requested and has_request_context():
+        payload = request.get_json(silent=True) if request.is_json else {}
+        if isinstance(payload, dict):
+            requested = normalize_school_year_value(payload.get("school_year", ""))
+    if not requested and has_request_context():
+        requested = normalize_school_year_value(session.get(SCHOOL_YEAR_SESSION_KEY, ""))
+    if not requested:
+        requested = get_current_school_year_label()
+    ensure_school_year_exists(requested, set_current=is_current_school_year(requested), created_by="system")
+    return remember_selected_school_year(requested)
+
+
+def compute_dev_reload_token():
+    if not DEV_AUTO_RELOAD:
+        return ""
+
+    now_ts = time.time()
+    with dev_reload_lock:
+        last_checked = float(dev_reload_cache.get("checked_at", 0.0) or 0.0)
+        if now_ts - last_checked < 0.75:
+            return dev_reload_cache.get("token", "")
+
+        latest_mtime_ns = 0
+        file_count = 0
+        watched_extensions = {".py", ".html", ".js", ".css"}
+        ignored_dirs = {"venv", "__pycache__", ".git", "certs"}
+
+        for root, dirs, files in os.walk(BASE_DIR):
+            dirs[:] = [d for d in dirs if d not in ignored_dirs]
+            for filename in files:
+                if os.path.splitext(filename)[1].lower() not in watched_extensions:
+                    continue
+                file_path = os.path.join(root, filename)
+                try:
+                    stat = os.stat(file_path)
+                except OSError:
+                    continue
+                file_count += 1
+                latest_mtime_ns = max(
+                    latest_mtime_ns,
+                    int(getattr(stat, "st_mtime_ns", int(stat.st_mtime * 1_000_000_000))),
+                )
+
+        if latest_mtime_ns <= 0:
+            latest_mtime_ns = int(APP_START_TS * 1_000_000_000)
+
+        token = f"{latest_mtime_ns}:{file_count}"
+        dev_reload_cache["checked_at"] = now_ts
+        dev_reload_cache["token"] = token
+        return token
 
 
 def _now_utc():
@@ -1235,33 +1737,6 @@ def contains_regex_filter(value):
     return {"$regex": re.escape(term), "$options": "i"}
 
 
-def build_daily_count_series(collection, start_date, end_date, extra_match=None):
-    labels = []
-    cursor = start_date
-    while cursor <= end_date:
-        labels.append(cursor.strftime("%Y-%m-%d"))
-        cursor += timedelta(days=1)
-
-    match_stage = {
-        "date": {
-            "$gte": start_date.strftime("%Y-%m-%d"),
-            "$lte": end_date.strftime("%Y-%m-%d"),
-        }
-    }
-    if isinstance(extra_match, dict):
-        match_stage.update(extra_match)
-
-    counts = {
-        row.get("_id"): int(row.get("count", 0) or 0)
-        for row in collection.aggregate([
-            {"$match": match_stage},
-            {"$group": {"_id": "$date", "count": {"$sum": 1}}},
-        ])
-    }
-    series = [counts.get(day, 0) for day in labels]
-    return labels, series
-
-
 def normalize_student_doc(student_doc):
     if not student_doc:
         return {}
@@ -1288,6 +1763,31 @@ def normalize_student_doc(student_doc):
     has_face_payload = bool(doc.get("faces")) or bool(doc.get("face_encodings")) or bool(doc.get("face_embeddings"))
     doc["face_registered"] = bool(doc.get("face_registered")) or has_face_payload
     doc["face_updated_at"] = normalize_timestamp_value(doc.get("face_updated_at"))
+    return doc
+
+
+def normalize_enrollment_doc(enrollment_doc):
+    if not enrollment_doc:
+        return {}
+    doc = dict(enrollment_doc)
+    doc["_id"] = str(doc.get("_id", ""))
+    doc["student_ref_id"] = str(doc.get("student_ref_id") or "")
+    lrn_value = normalize_lrn_value(doc.get("lrn") or doc.get("student_id"))
+    doc["lrn"] = lrn_value
+    doc["student_id"] = lrn_value
+    doc["name"] = normalize_student_name_value(doc.get("name"))
+    doc["status"] = doc.get("status", "Active") or "Active"
+    doc["gender"] = normalize_gender_value(doc.get("gender") or doc.get("sex"))
+    doc["sex"] = doc["gender"]
+    doc["grade_level"] = normalize_grade_level(doc.get("grade_level") or doc.get("grade"))
+    doc["grade"] = doc["grade_level"]
+    doc["section"] = normalize_section_value(doc.get("section"))
+    doc["school_year"] = normalize_school_year_value(doc.get("school_year"))
+    doc["parent_contact"] = normalize_parent_contact_display(doc.get("parent_contact"))
+    doc["created_at"] = normalize_timestamp_value(doc.get("created_at"))
+    doc["updated_at"] = normalize_timestamp_value(doc.get("updated_at"))
+    doc["profile_photo"] = doc.get("profile_photo") or ""
+    doc["face_registered"] = bool(doc.get("face_registered"))
     return doc
 
 
@@ -1532,6 +2032,13 @@ def create_alert(level, message, category="system", meta=None):
     normalized_level = str(level or "info").strip().lower() or "info"
     normalized_category = str(category or "system").strip().lower() or "system"
     timestamp = now_iso()
+    normalized_meta = dict(meta) if isinstance(meta, dict) else {}
+    school_year_label = (
+        normalize_school_year_value(normalized_meta.get("school_year"))
+        or derive_school_year_label_from_value(timestamp)
+    )
+    if school_year_label:
+        normalized_meta.setdefault("school_year", school_year_label)
     payload = {
         "title": f"{normalized_level.title()} Alert",
         "level": normalized_level,
@@ -1539,10 +2046,11 @@ def create_alert(level, message, category="system", meta=None):
         "category": normalized_category,
         "type": normalized_category,
         "source": "System",
-        "meta": meta or {},
-        "details": meta or {},
+        "meta": normalized_meta,
+        "details": normalized_meta,
         "status": "unread",
         "is_read": False,
+        "school_year": school_year_label,
         "timestamp": timestamp,
         "created_at": timestamp,
     }
@@ -1554,13 +2062,17 @@ def create_alert(level, message, category="system", meta=None):
         print(f"[ERROR] Failed to insert alert: {exc}")
 
 
-def unread_notifications_query():
-    return {
+def unread_notifications_query(school_year=""):
+    query = {
         "$or": [
             {"status": "unread"},
             {"is_read": False},
         ]
     }
+    school_year_label = normalize_school_year_value(school_year)
+    if school_year_label:
+        query["school_year"] = school_year_label
+    return query
 
 
 def normalize_notification_details(raw_details):
@@ -1622,6 +2134,7 @@ def normalize_notification_doc(doc):
         "title": title,
         "message": str(doc.get("message") or "").strip(),
         "timestamp": timestamp,
+        "school_year": normalize_school_year_value(doc.get("school_year") or (doc.get("meta") or {}).get("school_year")),
         "status": "read" if is_read else "unread",
         "type": str(doc.get("type") or category).strip().lower() or "system",
         "level": level,
@@ -1632,15 +2145,17 @@ def normalize_notification_doc(doc):
     }
 
 
-def notification_summary(limit=12):
+def notification_summary(limit=12, school_year=""):
     try:
         safe_limit = int(limit or 12)
     except (TypeError, ValueError):
         safe_limit = 12
     safe_limit = max(1, min(safe_limit, 50))
-    docs = list(alerts.find().sort([("timestamp", -1), ("created_at", -1)]).limit(safe_limit))
+    school_year_label = normalize_school_year_value(school_year)
+    base_query = {"school_year": school_year_label} if school_year_label else {}
+    docs = list(alerts.find(base_query).sort([("timestamp", -1), ("created_at", -1)]).limit(safe_limit))
     notifications = [normalize_notification_doc(doc) for doc in docs]
-    unread_count = alerts.count_documents(unread_notifications_query())
+    unread_count = alerts.count_documents(unread_notifications_query(school_year_label))
     return {"notifications": notifications, "unread": unread_count}
 
 
@@ -1674,11 +2189,12 @@ def signal_data_change(*domains):
         }
 
 
-def sidebar_context(current_page):
+def sidebar_context(current_page, school_year=""):
     unread = 0
     theme = "light"
+    selected_school_year = resolve_selected_school_year(school_year)
     try:
-        unread = alerts.count_documents(unread_notifications_query())
+        unread = alerts.count_documents(unread_notifications_query(selected_school_year))
     except Exception:
         unread = 0
 
@@ -1697,6 +2213,9 @@ def sidebar_context(current_page):
         "current_role": session.get("role", "Limited Access"),
         "alerts_unread": unread,
         "current_theme": theme,
+        "selected_school_year": selected_school_year,
+        "current_school_year": get_current_school_year_label(),
+        "school_year_query": urlencode({"school_year": selected_school_year}) if selected_school_year else "",
     }
 
 
@@ -2716,6 +3235,11 @@ def log_skipped_sms(student_id="", student_name="", parent_contact="", message="
     timestamp = now_iso()
     date_str = now.strftime("%Y-%m-%d")
     time_str = now.strftime("%H:%M:%S")
+    metadata_payload = metadata if isinstance(metadata, dict) else {}
+    school_year_label = (
+        normalize_school_year_value(metadata_payload.get("school_year"))
+        or derive_school_year_label_from_value(date_str)
+    )
     raw_to = str(parent_contact or "").strip()
     normalized_to = ""
     if raw_to:
@@ -2734,7 +3258,7 @@ def log_skipped_sms(student_id="", student_name="", parent_contact="", message="
         "providerResponse": {
             "phase": "skipped",
             "reason": str(reason or "skipped"),
-            "meta": metadata if isinstance(metadata, dict) else {},
+            "meta": metadata_payload,
         },
         "error": "",
         "httpStatus": None,
@@ -2742,6 +3266,7 @@ def log_skipped_sms(student_id="", student_name="", parent_contact="", message="
         "errorMessage": str(reason or "skipped"),
         "createdAt": timestamp,
         "updatedAt": timestamp,
+        "school_year": school_year_label,
         # Legacy compatibility fields
         "student_id": (student_id or "").strip(),
         "name": (student_name or "").strip(),
@@ -2776,6 +3301,10 @@ def send_sms(to_number, message, sms_type="transactional", metadata=None, studen
     msg = str(message or "").strip()
     raw_to = str(to_number or "").strip()
     metadata_payload = metadata if isinstance(metadata, dict) else {}
+    school_year_label = (
+        normalize_school_year_value(metadata_payload.get("school_year"))
+        or derive_school_year_label_from_value(date_str)
+    )
     try:
         retry_count = max(int(metadata_payload.get("retry_count", 0) or 0), 0)
     except Exception:
@@ -2807,6 +3336,7 @@ def send_sms(to_number, message, sms_type="transactional", metadata=None, studen
                 "errorMessage": error_message,
                 "createdAt": timestamp,
                 "updatedAt": timestamp,
+                "school_year": school_year_label,
                 # Legacy compatibility fields
                 "student_id": (student_id or "").strip(),
                 "name": (student_name or "").strip(),
@@ -2853,6 +3383,7 @@ def send_sms(to_number, message, sms_type="transactional", metadata=None, studen
             "errorMessage": None,
             "createdAt": timestamp,
             "updatedAt": timestamp,
+            "school_year": school_year_label,
             # Legacy compatibility fields
             "student_id": (student_id or "").strip(),
             "name": (student_name or "").strip(),
@@ -3067,6 +3598,7 @@ def ensure_user_profile_defaults():
 
 def maybe_create_absence_alerts():
     today = now_local().date()
+    school_year_label = derive_school_year_label_from_value(today.isoformat()) or get_current_school_year_label()
     school_days = []
     cursor = today
     while len(school_days) < 7:
@@ -3076,14 +3608,21 @@ def maybe_create_absence_alerts():
 
     attendance_map = {}
     for row in attendance_logs.aggregate([
-        {"$match": {"date": {"$in": school_days}, "student_id": {"$nin": ["", None]}}},
+        {
+            "$match": {
+                "school_year": school_year_label,
+                "date": {"$in": school_days},
+                "student_id": {"$nin": ["", None]},
+            }
+        },
         {"$group": {"_id": "$student_id", "present_days": {"$addToSet": "$date"}}},
     ]):
         sid = (row.get("_id") or "").strip()
         if sid:
             attendance_map[sid] = set(row.get("present_days") or [])
 
-    for student in students.find({}, {"student_id": 1, "name": 1}):
+    enrollment_collection = get_school_year_enrollment_collection(school_year_label)
+    for student in enrollment_collection.find({"school_year": school_year_label}, {"student_id": 1, "name": 1}):
         sid = (student.get("student_id") or "").strip()
         if not sid:
             continue
@@ -3092,14 +3631,19 @@ def maybe_create_absence_alerts():
 
         absences = len(school_days) - len(present_days)
         if absences >= 3:
-            alert_key = f"absence-{sid}-{today.isoformat()}"
-            exists = alerts.count_documents({"meta.alert_key": alert_key})
+            alert_key = f"absence-{school_year_label}-{sid}-{today.isoformat()}"
+            exists = alerts.count_documents({"school_year": school_year_label, "meta.alert_key": alert_key})
             if exists == 0:
                 create_alert(
                     level="warning",
                     message=f"{student.get('name', sid)} reached {absences} absences in the last 7 school days.",
                     category="attendance",
-                    meta={"student_id": sid, "alert_key": alert_key, "absences": absences},
+                    meta={
+                        "student_id": sid,
+                        "alert_key": alert_key,
+                        "absences": absences,
+                        "school_year": school_year_label,
+                    },
                 )
 
 
@@ -3119,6 +3663,7 @@ def log_attendance_and_sms(student):
     timestamp = now_iso()
     date_str = now.strftime("%Y-%m-%d")
     time_str = now.strftime("%H:%M:%S")
+    school_year_label = derive_school_year_label_from_value(date_str) or get_current_school_year_label()
     session_info = resolve_gate_session(now)
     status = session_info["status"]
     gate_action = session_info["gate_action"]
@@ -3153,6 +3698,7 @@ def log_attendance_and_sms(student):
     attendance_doc = {
         "student_id": student_id,
         "student_name": student_name,
+        "school_year": school_year_label,
         "status": status,
         "session": session_name,
         "source": "gate_scan",
@@ -3212,6 +3758,7 @@ def log_attendance_and_sms(student):
             metadata={
                 "context": "attendance_gate_scan",
                 "session": session_name,
+                "school_year": school_year_label,
                 "template_id": ATTENDANCE_SMS_TEMPLATE_DOC_ID,
                 "template_updated_at": template_payload.get("updated_at", ""),
             },
@@ -3227,7 +3774,7 @@ def log_attendance_and_sms(student):
                 level="high",
                 message=f"Failed SMS notification for {student_name}.",
                 category="sms",
-                meta={"student_id": student_id, "error": sms_error},
+                meta={"student_id": student_id, "error": sms_error, "school_year": school_year_label},
             )
     else:
         log_skipped_sms(
@@ -3237,7 +3784,7 @@ def log_attendance_and_sms(student):
             message=f"No parent contact configured for {student_name}. SMS not sent.",
             reason="missing_parent_contact",
             sms_type="transactional",
-            metadata={"context": "attendance_gate_scan", "session": session_name},
+            metadata={"context": "attendance_gate_scan", "session": session_name, "school_year": school_year_label},
         )
 
     return {
@@ -3510,42 +4057,43 @@ def generate_frames():
     stop_scan_capture()
 
 
-def compute_dashboard_data(args):
+def compute_dashboard_data(args, school_year=""):
+    school_year_label = resolve_selected_school_year(school_year or args.get("school_year", ""))
+    enrollment_collection = get_school_year_enrollment_collection(school_year_label)
     today_date = now_local().date()
     today = today_date.strftime("%Y-%m-%d")
-    total_students = students.count_documents({})
-    total_male_students = students.count_documents({"$or": [{"gender": "Male"}, {"sex": "Male"}]})
-    total_female_students = students.count_documents({"$or": [{"gender": "Female"}, {"sex": "Female"}]})
-    present_today_ids = attendance_logs.distinct("student_id", {"date": today})
+    total_students = enrollment_collection.count_documents({"school_year": school_year_label})
+    total_male_students = enrollment_collection.count_documents({
+        "school_year": school_year_label,
+        "$or": [{"gender": "Male"}, {"sex": "Male"}],
+    })
+    total_female_students = enrollment_collection.count_documents({
+        "school_year": school_year_label,
+        "$or": [{"gender": "Female"}, {"sex": "Female"}],
+    })
+    attendance_today_query = {"school_year": school_year_label, "date": today}
+    present_today_ids = attendance_logs.distinct("student_id", attendance_today_query)
     present_today = len([sid for sid in present_today_ids if sid])
-    sms_sent_today = sms_logs.count_documents({"date": today, "status": sms_status_mongo_filter("sent")})
-    late_today = attendance_logs.count_documents({"date": today, "status": "Late"})
+    sms_sent_today = sms_logs.count_documents({
+        "school_year": school_year_label,
+        "date": today,
+        "status": sms_status_mongo_filter("sent"),
+    })
+    late_today = attendance_logs.count_documents({**attendance_today_query, "status": "Late"})
     session_counts = {"Morning In": 0, "Noon Out": 0, "Afternoon In": 0, "Afternoon Out": 0}
     for row in attendance_logs.aggregate([
-        {"$match": {"date": today}},
+        {"$match": attendance_today_query},
         {"$group": {"_id": "$session", "count": {"$sum": 1}}},
     ]):
         session_name = row.get("_id")
         if session_name in session_counts:
             session_counts[session_name] = row.get("count", 0)
 
-    start_date = today_date - timedelta(days=29)
-    labels, gate_series = build_daily_count_series(attendance_logs, start_date, today_date)
-    _sms_labels, sms_series = build_daily_count_series(
-        sms_logs,
-        start_date,
-        today_date,
-        {"status": sms_status_mongo_filter("sent")},
-    )
-
-    attendance_distribution = {
-        "present": present_today,
-        "absent": max(total_students - present_today, 0),
-        "late": late_today,
-    }
-
-    unread_alerts = alerts.count_documents(unread_notifications_query())
-    alert_docs = [normalize_notification_doc(doc) for doc in alerts.find().sort([("timestamp", -1), ("created_at", -1)]).limit(25)]
+    unread_alerts = alerts.count_documents(unread_notifications_query(school_year_label))
+    alert_docs = [
+        normalize_notification_doc(doc)
+        for doc in alerts.find({"school_year": school_year_label}).sort([("timestamp", -1), ("created_at", -1)]).limit(25)
+    ]
 
     users_list = list(users.find({}, {"password": 0, "password_hash": 0}).sort("username", 1))
     for u in users_list:
@@ -3580,9 +4128,13 @@ def compute_dashboard_data(args):
         })
     student_query = {"$and": student_filters} if student_filters else {}
 
-    students_result = [normalize_student_doc(s) for s in students.find(student_query).limit(15)]
+    if student_query:
+        student_query = {"$and": [{"school_year": school_year_label}, student_query]}
+    else:
+        student_query = {"school_year": school_year_label}
+    students_result = [normalize_student_doc(s) for s in enrollment_collection.find(student_query).limit(15)]
 
-    gate_query = {}
+    gate_query = {"school_year": school_year_label}
     if q_regex:
         gate_query["$or"] = [
             {"student_name": q_regex},
@@ -3593,7 +4145,7 @@ def compute_dashboard_data(args):
     if status_filter:
         gate_query["status"] = status_filter
 
-    sms_query = {}
+    sms_query = {"school_year": school_year_label}
     if q_regex:
         sms_query["$or"] = [
             {"name": q_regex},
@@ -3616,6 +4168,7 @@ def compute_dashboard_data(args):
             s["_id"] = str(s["_id"])
 
     return {
+        "selected_school_year": school_year_label,
         "total_students": total_students,
         "total_male_students": total_male_students,
         "total_female_students": total_female_students,
@@ -3623,10 +4176,6 @@ def compute_dashboard_data(args):
         "sms_sent_today": sms_sent_today,
         "late_today": late_today,
         "session_counts": session_counts,
-        "chart_labels": labels,
-        "gate_series": gate_series,
-        "sms_series": sms_series,
-        "attendance_distribution": attendance_distribution,
         "alerts_unread": unread_alerts,
         "alert_rows": alert_docs,
         "users_list": users_list,
@@ -3936,8 +4485,9 @@ def logout():
 @require_permission("dashboard")
 def dashboard():
     maybe_create_absence_alerts()
-    payload = compute_dashboard_data(request.args)
-    payload.update(sidebar_context("dashboard"))
+    selected_school_year = resolve_selected_school_year(request.args.get("school_year", ""))
+    payload = compute_dashboard_data(request.args, selected_school_year)
+    payload.update(sidebar_context("dashboard", selected_school_year))
     return render_template("dashboard.html", **payload)
 
 
@@ -4025,16 +4575,29 @@ def developers_page():
 @app.route("/api/dashboard/stats")
 @require_permission("dashboard", api=True)
 def dashboard_stats_api():
+    school_year_label = resolve_selected_school_year(request.args.get("school_year", ""))
     today = now_local().strftime("%Y-%m-%d")
-    total_students = students.count_documents({})
-    total_male_students = students.count_documents({"$or": [{"gender": "Male"}, {"sex": "Male"}]})
-    total_female_students = students.count_documents({"$or": [{"gender": "Female"}, {"sex": "Female"}]})
-    present_today_ids = attendance_logs.distinct("student_id", {"date": today})
+    enrollment_collection = get_school_year_enrollment_collection(school_year_label)
+    total_students = enrollment_collection.count_documents({"school_year": school_year_label})
+    total_male_students = enrollment_collection.count_documents({
+        "school_year": school_year_label,
+        "$or": [{"gender": "Male"}, {"sex": "Male"}],
+    })
+    total_female_students = enrollment_collection.count_documents({
+        "school_year": school_year_label,
+        "$or": [{"gender": "Female"}, {"sex": "Female"}],
+    })
+    present_today_ids = attendance_logs.distinct("student_id", {"school_year": school_year_label, "date": today})
     present_today = len([sid for sid in present_today_ids if sid])
-    sms_sent_today = sms_logs.count_documents({"date": today, "status": sms_status_mongo_filter("sent")})
+    sms_sent_today = sms_logs.count_documents({
+        "school_year": school_year_label,
+        "date": today,
+        "status": sms_status_mongo_filter("sent"),
+    })
 
     return jsonify({
         "status": "ok",
+        "school_year": school_year_label,
         "total_students": total_students,
         "present_today": present_today,
         "sms_sent_today": sms_sent_today,
@@ -4889,8 +5452,9 @@ def api_scan_session_mode():
 # =====================================
 # NOTIFICATION ROUTES
 # =====================================
-def mark_notifications_read_in_db(object_ids=None, mark_all=False):
+def mark_notifications_read_in_db(object_ids=None, mark_all=False, school_year=""):
     global alert_revision
+    school_year_label = normalize_school_year_value(school_year)
 
     update_payload = {
         "$set": {
@@ -4901,17 +5465,20 @@ def mark_notifications_read_in_db(object_ids=None, mark_all=False):
     }
     modified = 0
     if mark_all:
-        result = alerts.update_many(unread_notifications_query(), update_payload)
+        result = alerts.update_many(unread_notifications_query(school_year_label), update_payload)
         modified = int(result.modified_count or 0)
     elif object_ids:
+        update_query = {
+            "_id": {"$in": object_ids},
+            "$or": [
+                {"status": {"$ne": "read"}},
+                {"is_read": {"$ne": True}},
+            ],
+        }
+        if school_year_label:
+            update_query["school_year"] = school_year_label
         result = alerts.update_many(
-            {
-                "_id": {"$in": object_ids},
-                "$or": [
-                    {"status": {"$ne": "read"}},
-                    {"is_read": {"$ne": True}},
-                ],
-            },
+            update_query,
             update_payload,
         )
         modified = int(result.modified_count or 0)
@@ -4926,22 +5493,24 @@ def mark_notifications_read_in_db(object_ids=None, mark_all=False):
 @require_permission("alerts_manage", api=True)
 def notifications_list_api():
     limit = request.args.get("limit", 12)
+    school_year_label = resolve_selected_school_year(request.args.get("school_year", ""))
     try:
-        payload = notification_summary(limit=limit)
+        payload = notification_summary(limit=limit, school_year=school_year_label)
     except Exception as exc:
         return jsonify({"status": "error", "message": f"Failed to load notifications: {exc}"}), 500
-    return jsonify({"status": "ok", **payload})
+    return jsonify({"status": "ok", "school_year": school_year_label, **payload})
 
 
 @app.route("/api/notifications/<notification_id>", methods=["GET"])
 @require_permission("alerts_manage", api=True)
 def notification_detail_api(notification_id):
+    school_year_label = resolve_selected_school_year(request.args.get("school_year", ""))
     try:
         object_id = ObjectId(notification_id)
     except Exception:
         return jsonify({"status": "error", "message": "Notification not found."}), 404
 
-    doc = alerts.find_one({"_id": object_id})
+    doc = alerts.find_one({"_id": object_id, "school_year": school_year_label})
     if not doc:
         return jsonify({"status": "error", "message": "Notification not found."}), 404
     return jsonify({"status": "ok", "notification": normalize_notification_doc(doc)})
@@ -4951,9 +5520,16 @@ def notification_detail_api(notification_id):
 @require_permission("alerts_manage", api=True)
 def notifications_mark_read_api():
     data = request.get_json(silent=True) or {}
+    school_year_label = resolve_selected_school_year(
+        request.args.get("school_year", "") or data.get("school_year", "")
+    )
     if data.get("all"):
-        mark_notifications_read_in_db(mark_all=True)
-        return jsonify({"status": "ok", "unread": alerts.count_documents(unread_notifications_query())})
+        mark_notifications_read_in_db(mark_all=True, school_year=school_year_label)
+        return jsonify({
+            "status": "ok",
+            "school_year": school_year_label,
+            "unread": alerts.count_documents(unread_notifications_query(school_year_label)),
+        })
 
     ids = data.get("ids", [])
     object_ids = []
@@ -4966,8 +5542,12 @@ def notifications_mark_read_api():
     if not object_ids:
         return jsonify({"status": "error", "message": "No valid notification IDs provided."}), 400
 
-    mark_notifications_read_in_db(object_ids=object_ids)
-    return jsonify({"status": "ok", "unread": alerts.count_documents(unread_notifications_query())})
+    mark_notifications_read_in_db(object_ids=object_ids, school_year=school_year_label)
+    return jsonify({
+        "status": "ok",
+        "school_year": school_year_label,
+        "unread": alerts.count_documents(unread_notifications_query(school_year_label)),
+    })
 
 
 @app.route("/alerts/mark-read", methods=["POST"])
@@ -4980,14 +5560,16 @@ def mark_alerts_read():
 @app.route("/api/notifications/unread-count")
 @require_permission("alerts_manage", api=True)
 def unread_alert_count():
-    unread = alerts.count_documents(unread_notifications_query())
-    return jsonify({"unread": unread})
+    school_year_label = resolve_selected_school_year(request.args.get("school_year", ""))
+    unread = alerts.count_documents(unread_notifications_query(school_year_label))
+    return jsonify({"unread": unread, "school_year": school_year_label})
 
 
 @app.route("/alerts/stream")
 @app.route("/api/notifications/stream")
 @require_permission("alerts_manage", api=True)
 def alerts_stream():
+    school_year_label = resolve_selected_school_year(request.args.get("school_year", ""))
     def generate():
         last_seen = -1
         while True:
@@ -4996,8 +5578,12 @@ def alerts_stream():
                     current_rev = alert_revision
 
                 if current_rev != last_seen:
-                    unread = alerts.count_documents(unread_notifications_query())
-                    payload = json.dumps({"revision": current_rev, "unread": unread})
+                    unread = alerts.count_documents(unread_notifications_query(school_year_label))
+                    payload = json.dumps({
+                        "revision": current_rev,
+                        "unread": unread,
+                        "school_year": school_year_label,
+                    })
                     yield f"event: alerts\ndata: {payload}\n\n"
                     last_seen = current_rev
                 else:
@@ -5183,21 +5769,35 @@ def extract_grade_number(value):
     return match.group(0) if match else grade_label
 
 
-def resolve_student_grade_and_section(grade_value, section_value):
+def promote_grade_level(value):
+    grade_label = normalize_grade_level(value)
+    grade_number = extract_grade_number(grade_label)
+    if not grade_number.isdigit():
+        return grade_label
+    next_grade = min(int(grade_number) + 1, 12)
+    return f"Grade {next_grade}"
+
+
+def resolve_student_grade_and_section(grade_value, section_value, require_existing_section=False, school_year=""):
     section_clean = normalize_section_value(section_value)
     if not section_clean:
         return "", "", "Section is required.", "section"
 
+    school_year_label = normalize_school_year_value(school_year) or get_current_school_year_label()
+    requested_grade_level = normalize_grade_level(grade_value)
     predefined = PREDEFINED_SECTION_LOOKUP.get(section_clean.lower())
     if predefined:
-        return predefined["grade_level"], predefined["section"], "", ""
+        predefined_grade_level = normalize_grade_level(predefined.get("grade_level"))
+        if require_existing_section and requested_grade_level and predefined_grade_level and requested_grade_level != predefined_grade_level:
+            return "", "", f"Section '{predefined['section']}' is registered under {predefined_grade_level}, not {requested_grade_level}.", "section"
+        return predefined_grade_level, predefined["section"], "", ""
 
-    grade_level = normalize_grade_level(grade_value)
+    grade_level = requested_grade_level
     section_normalized = section_clean.lower()
 
     if not grade_level:
         matches = list(sections.find(
-            {"section_normalized": section_normalized},
+            {"school_year": school_year_label, "section_normalized": section_normalized},
             {"grade_level": 1, "grade_key": 1, "section": 1},
         ).limit(2))
         if len(matches) == 1:
@@ -5207,6 +5807,8 @@ def resolve_student_grade_and_section(grade_value, section_value):
                 inferred_section = normalize_section_value(matches[0].get("section"))
                 if inferred_section:
                     section_clean = inferred_section
+        elif require_existing_section and len(matches) > 1:
+            return "", "", f"Grade level is required for section '{section_clean}'.", "grade_level"
 
     if not grade_level:
         return "", "", "Grade level is required.", "grade_level"
@@ -5214,12 +5816,15 @@ def resolve_student_grade_and_section(grade_value, section_value):
     grade_key = extract_grade_number(grade_level)
     if grade_key:
         existing = sections.find_one(
-            {"grade_key": str(grade_key), "section_normalized": section_normalized},
+            {"school_year": school_year_label, "grade_key": str(grade_key), "section_normalized": section_normalized},
             {"section": 1},
         )
         existing_section = normalize_section_value(existing.get("section")) if existing else ""
         if existing_section:
-            section_clean = existing_section
+            return grade_level, existing_section, "", ""
+
+    if require_existing_section:
+        return "", "", f"Section '{section_clean}' is not registered under {grade_level}. Please use an existing section name.", "section"
 
     return grade_level, section_clean, "", ""
 
@@ -5246,11 +5851,325 @@ def build_grade_filter(grade_value):
     }, grade_level
 
 
-def build_students_query(q_value="", grade_value="", section_value=""):
+def normalize_face_status_filter(value=""):
+    raw = str(value or "").strip().lower()
+    if raw in {"registered", "yes", "true", "1"}:
+        return "registered"
+    if raw in {"unregistered", "not_registered", "no", "false", "0"}:
+        return "unregistered"
+    return ""
+
+
+def build_student_enrollment_document(student_doc, school_year, grade_level="", section="", status="", source_school_year=""):
+    normalized_student = normalize_student_doc(student_doc)
+    school_year_label = normalize_school_year_value(school_year) or get_current_school_year_label()
+    grade_label = normalize_grade_level(grade_level or normalized_student.get("grade_level") or normalized_student.get("grade"))
+    section_value = normalize_section_value(section or normalized_student.get("section"))
+    status_value = normalize_student_status(status or normalized_student.get("status", "Active"), default=normalized_student.get("status", "Active"))
+    now_value = now_iso()
+    return {
+        "student_ref_id": str(normalized_student.get("_id") or ""),
+        "student_id": normalized_student.get("student_id") or normalized_student.get("lrn") or "",
+        "lrn": normalized_student.get("lrn") or normalized_student.get("student_id") or "",
+        "name": normalized_student.get("name") or "",
+        "gender": normalized_student.get("gender") or "",
+        "sex": normalized_student.get("gender") or "",
+        "parent_contact": normalized_student.get("parent_contact") or "",
+        "profile_photo": normalized_student.get("profile_photo") or "",
+        "face_registered": bool(normalized_student.get("face_registered")),
+        "school_year": school_year_label,
+        "grade_level": grade_label,
+        "grade": grade_label,
+        "section": section_value,
+        "status": status_value,
+        "source_school_year": normalize_school_year_value(source_school_year),
+        "created_at": now_value,
+        "updated_at": now_value,
+    }
+
+
+def sync_student_base_fields_to_enrollments(student_doc):
+    normalized_student = normalize_student_doc(student_doc)
+    student_id = normalized_student.get("student_id") or normalized_student.get("lrn") or ""
+    if not student_id:
+        return
+    update_student_base_fields_across_enrollments(
+        student_id,
+        {
+            "student_ref_id": str(normalized_student.get("_id") or ""),
+            "lrn": normalized_student.get("lrn") or student_id,
+            "name": normalized_student.get("name") or "",
+            "gender": normalized_student.get("gender") or "",
+            "sex": normalized_student.get("gender") or "",
+            "parent_contact": normalized_student.get("parent_contact") or "",
+            "profile_photo": normalized_student.get("profile_photo") or "",
+            "face_registered": bool(normalized_student.get("face_registered")),
+            "updated_at": now_iso(),
+        },
+    )
+
+
+def upsert_student_enrollment(student_doc, school_year, grade_level="", section="", status="Active", source_school_year="", update_existing=False):
+    school_year_label = normalize_school_year_value(school_year) or get_current_school_year_label()
+    collection = get_school_year_enrollment_collection(school_year_label)
+    enrollment_doc = build_student_enrollment_document(
+        student_doc,
+        school_year_label,
+        grade_level=grade_level,
+        section=section,
+        status=status,
+        source_school_year=source_school_year,
+    )
+    student_id = enrollment_doc.get("student_id")
+    if not student_id:
+        raise ValueError("Student id is required for enrollment.")
+    query = {"student_id": student_id}
+    existing = collection.find_one(query)
+    if existing and not update_existing:
+        raise ValueError(f"Student is already enrolled for School Year {school_year_label}.")
+
+    if existing:
+        update_fields = dict(enrollment_doc)
+        update_fields.pop("created_at", None)
+        collection.update_one({"_id": existing["_id"]}, {"$set": update_fields})
+        return collection.find_one({"_id": existing["_id"]})
+
+    collection.insert_one(enrollment_doc)
+    return collection.find_one(query)
+
+
+def build_section_canonical_fields(section_doc, default_school_year=""):
+    default_label = normalize_school_year_value(default_school_year) or get_current_school_year_label()
+    school_year_label = normalize_school_year_value(section_doc.get("school_year")) or default_label
+    grade_level = normalize_grade_level(section_doc.get("grade_level") or section_doc.get("grade_key"))
+    grade_key = str(section_doc.get("grade_key") or extract_grade_number(grade_level) or "").strip()
+    section_value = normalize_section_value(section_doc.get("section"))
+    if not school_year_label or not grade_key or not section_value:
+        return {}
+    return {
+        "school_year": school_year_label,
+        "grade_key": grade_key,
+        "grade_level": grade_level or f"Grade {grade_key}",
+        "section": section_value,
+        "section_normalized": section_value.lower(),
+    }
+
+
+def deduplicate_sections_for_school_year(default_school_year=""):
+    default_label = normalize_school_year_value(default_school_year) or get_current_school_year_label()
+    projection = {
+        "school_year": 1,
+        "grade_key": 1,
+        "grade_level": 1,
+        "section": 1,
+        "section_normalized": 1,
+        "created_at": 1,
+        "updated_at": 1,
+    }
+    grouped_rows = {}
+    for row in sections.find({}, projection):
+        canonical = build_section_canonical_fields(row, default_label)
+        if not canonical:
+            continue
+        key = (
+            canonical.get("school_year", ""),
+            canonical.get("grade_key", ""),
+            canonical.get("section_normalized", ""),
+        )
+        grouped_rows.setdefault(key, []).append((row, canonical))
+
+    removed_count = 0
+    for items in grouped_rows.values():
+        if len(items) < 2:
+            continue
+        items.sort(
+            key=lambda item: (
+                1 if normalize_school_year_value(item[0].get("school_year")) else 0,
+                str(item[0].get("updated_at") or ""),
+                str(item[0].get("created_at") or ""),
+                str(item[0].get("_id") or ""),
+            ),
+            reverse=True,
+        )
+        keeper_row, keeper_fields = items[0]
+        duplicate_ids = [entry[0].get("_id") for entry in items[1:] if entry[0].get("_id") is not None]
+        if duplicate_ids:
+            sections.delete_many({"_id": {"$in": duplicate_ids}})
+            removed_count += len(duplicate_ids)
+        sections.update_one(
+            {"_id": keeper_row["_id"]},
+            {"$set": {**keeper_fields, "updated_at": now_iso()}},
+        )
+
+    for row in sections.find({}, projection):
+        canonical = build_section_canonical_fields(row, default_label)
+        if not canonical:
+            continue
+        updates = {}
+        for key, value in canonical.items():
+            if row.get(key) != value:
+                updates[key] = value
+        if updates:
+            updates["updated_at"] = now_iso()
+            sections.update_one({"_id": row["_id"]}, {"$set": updates})
+
+    return removed_count
+
+
+def ensure_sections_school_year_defaults():
+    school_year_label = get_current_school_year_label()
+    removed_count = deduplicate_sections_for_school_year(school_year_label)
+    if removed_count > 0:
+        print(f"[INFO] Removed {removed_count} duplicate section record(s) during school year migration.")
+
+
+def cleanup_empty_school_year_section_mismatches(school_year=""):
+    school_year_label = normalize_school_year_value(school_year) or get_current_school_year_label()
+    if not school_year_label:
+        return 0
+    if count_school_year_enrollments(school_year_label) > 0:
+        return 0
+
+    mismatched_ids = []
+    projection = {"grade_level": 1, "grade_key": 1, "section": 1}
+    for row in sections.find({"school_year": school_year_label}, projection):
+        section_value = normalize_section_value(row.get("section"))
+        if not section_value:
+            continue
+        canonical = PREDEFINED_SECTION_LOOKUP.get(section_value.lower())
+        if not canonical:
+            continue
+        current_grade = normalize_grade_level(row.get("grade_level") or row.get("grade_key"))
+        canonical_grade = normalize_grade_level(canonical.get("grade_level"))
+        if canonical_grade and current_grade and canonical_grade != current_grade:
+            mismatched_ids.append(row.get("_id"))
+
+    mismatched_ids = [section_id for section_id in mismatched_ids if section_id is not None]
+    if not mismatched_ids:
+        return 0
+
+    delete_result = sections.delete_many({"_id": {"$in": mismatched_ids}})
+    removed_count = int(delete_result.deleted_count or 0)
+    if removed_count > 0:
+        print(
+            f"[INFO] Removed {removed_count} cross-grade section record(s) from {school_year_label} "
+            "because the school year has no enrollments yet."
+        )
+        signal_data_change("sections")
+    return removed_count
+
+
+def ensure_student_enrollment_defaults():
+    if any(count_school_year_enrollments(label) > 0 for label in list_student_enrollment_school_year_labels()):
+        return
+    school_year_label = get_current_school_year_label()
+    collection = get_school_year_enrollment_collection(school_year_label)
+    projection = {
+        "student_id": 1,
+        "lrn": 1,
+        "name": 1,
+        "grade_level": 1,
+        "grade": 1,
+        "section": 1,
+        "status": 1,
+        "gender": 1,
+        "sex": 1,
+        "parent_contact": 1,
+        "profile_photo": 1,
+        "face_registered": 1,
+    }
+    for row in students.find({}, projection):
+        student_id = normalize_lrn_value(row.get("student_id") or row.get("lrn"))
+        if not student_id:
+            continue
+        if collection.count_documents({"student_id": student_id}, limit=1):
+            continue
+        enrollment_doc = build_student_enrollment_document(row, school_year_label)
+        collection.insert_one(enrollment_doc)
+
+
+def previous_school_year_label(reference_school_year=""):
+    current_label = normalize_school_year_value(reference_school_year) or get_current_school_year_label()
+    rows = sorted(
+        [row for row in list_school_year_docs() if normalize_school_year_value(row.get("label"))],
+        key=lambda row: int(str(row.get("label")).split("-", 1)[0]),
+        reverse=True,
+    )
+    for index, row in enumerate(rows):
+        if row.get("label") == current_label and index + 1 < len(rows):
+            return normalize_school_year_value(rows[index + 1].get("label"))
+    return ""
+
+
+def cleanup_accidental_current_school_year_seed():
+    current_school_year = get_current_school_year_label()
+    previous_school_year = previous_school_year_label(current_school_year)
+    if not current_school_year or not previous_school_year:
+        return 0
+
+    current_collection = get_school_year_enrollment_collection(current_school_year)
+    previous_collection = get_school_year_enrollment_collection(previous_school_year)
+
+    current_count = int(current_collection.count_documents({}))
+    previous_count = int(previous_collection.count_documents({}))
+    if current_count == 0 or previous_count == 0 or current_count != previous_count:
+        return 0
+
+    blank_source_count = int(current_collection.count_documents({
+        "$or": [
+            {"source_school_year": {"$exists": False}},
+            {"source_school_year": ""},
+        ],
+    }))
+    if blank_source_count != current_count:
+        return 0
+
+    projection = {"student_id": 1, "grade_level": 1, "grade": 1, "section": 1, "status": 1}
+    previous_map = {}
+    for row in previous_collection.find({}, projection):
+        student_id = normalize_lrn_value(row.get("student_id") or row.get("lrn"))
+        if not student_id:
+            continue
+        previous_map[student_id] = (
+            normalize_grade_level(row.get("grade_level") or row.get("grade")),
+            normalize_section_value(row.get("section")),
+            normalize_student_status(row.get("status", "Active"), default="Active"),
+        )
+
+    identical_count = 0
+    for row in current_collection.find({}, projection):
+        student_id = normalize_lrn_value(row.get("student_id") or row.get("lrn"))
+        if not student_id or student_id not in previous_map:
+            return 0
+        current_signature = (
+            normalize_grade_level(row.get("grade_level") or row.get("grade")),
+            normalize_section_value(row.get("section")),
+            normalize_student_status(row.get("status", "Active"), default="Active"),
+        )
+        if current_signature != previous_map[student_id]:
+            return 0
+        identical_count += 1
+
+    if identical_count != current_count:
+        return 0
+
+    delete_result = current_collection.delete_many({})
+    deleted_count = int(delete_result.deleted_count or 0)
+    if deleted_count > 0:
+        print(
+            f"[INFO] Removed {deleted_count} accidental auto-created enrollment(s) from {current_school_year}. "
+            f"Students remain archived in {previous_school_year} until manual re-enrollment."
+        )
+    return deleted_count
+
+
+def build_students_query(q_value="", grade_value="", section_value="", face_status_value="", school_year=""):
+    school_year_label = normalize_school_year_value(school_year) or get_current_school_year_label()
     q_text = (q_value or "").strip()
     section_text = (section_value or "").strip()
+    face_status = normalize_face_status_filter(face_status_value)
 
-    clauses = []
+    clauses = [{"school_year": school_year_label}]
     if q_text:
         q_regex = contains_regex_filter(q_text)
         clauses.append({
@@ -5271,8 +6190,18 @@ def build_students_query(q_value="", grade_value="", section_value=""):
     if section_text:
         clauses.append({"section": section_text})
 
+    if face_status == "registered":
+        clauses.append({"face_registered": True})
+    elif face_status == "unregistered":
+        clauses.append({
+            "$or": [
+                {"face_registered": False},
+                {"face_registered": {"$exists": False}},
+            ]
+        })
+
     query = {"$and": clauses} if clauses else {}
-    return query, q_text, grade_level, section_text
+    return query, q_text, grade_level, section_text, face_status, school_year_label
 
 
 def grade_sort_key(raw_key):
@@ -5280,13 +6209,17 @@ def grade_sort_key(raw_key):
     return (0, int(key)) if key.isdigit() else (1, key.lower())
 
 
-def build_sections_by_grade(grade_filter=""):
+def build_sections_by_grade(grade_filter="", school_year=""):
+    school_year_label = normalize_school_year_value(school_year) or get_current_school_year_label()
+    collection = get_school_year_enrollment_collection(school_year_label)
     grade_clause, _normalized_grade = build_grade_filter(grade_filter)
-    query = grade_clause if grade_clause else {}
+    query = {"school_year": school_year_label}
+    if grade_clause:
+        query.update(grade_clause)
 
     sections_by_grade = {}
     projection = {"grade_level": 1, "grade": 1, "section": 1}
-    for row in students.find(query, projection):
+    for row in collection.find(query, projection):
         grade_label = normalize_grade_level(row.get("grade_level") or row.get("grade"))
         grade_key = extract_grade_number(grade_label)
         section_value = normalize_section_value(row.get("section"))
@@ -5296,7 +6229,7 @@ def build_sections_by_grade(grade_filter=""):
             sections_by_grade[grade_key] = set()
         sections_by_grade[grade_key].add(section_value)
 
-    manual_query = {}
+    manual_query = {"school_year": school_year_label}
     manual_grade = extract_grade_number(grade_filter)
     if manual_grade:
         manual_query["grade_key"] = str(manual_grade)
@@ -5316,7 +6249,7 @@ def build_sections_by_grade(grade_filter=""):
     return ordered
 
 
-def upsert_manual_section(grade_value, section_value, created_by=""):
+def upsert_manual_section(grade_value, section_value, created_by="", school_year=""):
     grade_level = normalize_grade_level(grade_value)
     if not grade_level:
         raise ValueError("Grade level is required.")
@@ -5329,8 +6262,9 @@ def upsert_manual_section(grade_value, section_value, created_by=""):
     if not section_clean:
         raise ValueError("Section is required.")
 
+    school_year_label = normalize_school_year_value(school_year) or get_current_school_year_label()
     section_normalized = section_clean.lower()
-    query = {"grade_key": str(grade_key), "section_normalized": section_normalized}
+    query = {"school_year": school_year_label, "grade_key": str(grade_key), "section_normalized": section_normalized}
     existing = sections.find_one(query, {"_id": 1, "grade_level": 1, "section": 1})
 
     if existing:
@@ -5343,6 +6277,7 @@ def upsert_manual_section(grade_value, section_value, created_by=""):
             )
             signal_data_change("sections")
         return {
+            "school_year": school_year_label,
             "grade_key": str(grade_key),
             "grade_level": grade_level,
             "section": section_clean,
@@ -5350,6 +6285,7 @@ def upsert_manual_section(grade_value, section_value, created_by=""):
 
     now_value = now_iso()
     sections.insert_one({
+        "school_year": school_year_label,
         "grade_key": str(grade_key),
         "grade_level": grade_level,
         "section": section_clean,
@@ -5360,19 +6296,21 @@ def upsert_manual_section(grade_value, section_value, created_by=""):
     })
     signal_data_change("sections")
     return {
+        "school_year": school_year_label,
         "grade_key": str(grade_key),
         "grade_level": grade_level,
         "section": section_clean,
     }
 
 
-def ensure_predefined_sections():
+def ensure_predefined_sections(school_year=""):
+    school_year_label = normalize_school_year_value(school_year) or get_current_school_year_label()
     for grade_level, section_values in PREDEFINED_SECTIONS_BY_GRADE.items():
         for section_name in section_values:
             try:
-                upsert_manual_section(grade_level, section_name, created_by="system")
+                upsert_manual_section(grade_level, section_name, created_by="system", school_year=school_year_label)
             except Exception as exc:
-                print(f"[WARNING] Could not upsert predefined section {grade_level} - {section_name}: {exc}")
+                print(f"[WARNING] Could not upsert predefined section {school_year_label} {grade_level} - {section_name}: {exc}")
 
 
 def build_lrn_duplicate_query(lrn_value, exclude_oid=None):
@@ -5397,7 +6335,7 @@ def normalize_student_status(value, default="Active"):
     return "Inactive" if status_value == "Inactive" else "Active"
 
 
-def sanitize_personal_student_payload(data, existing_doc=None):
+def sanitize_personal_student_payload(data, existing_doc=None, require_existing_section=False, school_year=""):
     current = existing_doc or {}
     lrn_input = data.get("lrn", data.get("student_id", current.get("lrn", current.get("student_id", ""))))
     lrn, lrn_error = validate_lrn_value(lrn_input)
@@ -5405,6 +6343,8 @@ def sanitize_personal_student_payload(data, existing_doc=None):
     resolved_grade, resolved_section, grade_section_error, grade_section_field = resolve_student_grade_and_section(
         data.get("grade_level") or data.get("grade") or current.get("grade_level") or current.get("grade"),
         data.get("section", current.get("section", "")),
+        require_existing_section=require_existing_section,
+        school_year=school_year,
     )
     parent_contact_raw = str(data.get("parent_contact", current.get("parent_contact", "")) or "").strip()
     gender = normalize_gender_value(data.get("gender") or data.get("sex") or current.get("gender") or current.get("sex"))
@@ -5554,29 +6494,44 @@ def ensure_student_face_defaults():
         print(f"[WARNING] Could not ensure face_registered defaults: {exc}")
 
 
+ensure_default_school_year()
+ensure_sections_school_year_defaults()
+ensure_indexes()
 ensure_predefined_sections()
 ensure_student_lrn_defaults()
 ensure_student_face_defaults()
+migrate_legacy_student_enrollments()
+ensure_student_enrollment_defaults()
+cleanup_accidental_current_school_year_seed()
+for _school_year_row in list_school_year_docs():
+    cleanup_empty_school_year_section_mismatches(_school_year_row.get("label"))
+ensure_school_year_scope_defaults()
 
 
-def build_students_stats_payload():
-    active_count = students.count_documents({
+def build_students_stats_payload(school_year=""):
+    school_year_label = normalize_school_year_value(school_year) or resolve_selected_school_year(school_year)
+    collection = get_school_year_enrollment_collection(school_year_label)
+    base_query = {"school_year": school_year_label}
+    active_count = collection.count_documents({
+        **base_query,
         "$or": [
             {"status": "Active"},
             {"status": {"$exists": False}},
             {"status": ""},
         ]
     })
-    inactive_count = students.count_documents({"status": "Inactive"})
+    inactive_count = collection.count_documents({**base_query, "status": "Inactive"})
     today_prefix = now_local().strftime("%Y-%m-%d")
-    new_today_count = students.count_documents({
+    new_today_count = collection.count_documents({
+        **base_query,
         "created_at": {
             "$gte": f"{today_prefix}T00:00:00",
             "$lte": f"{today_prefix}T23:59:59",
         }
     })
     return {
-        "total": students.count_documents({}),
+        "school_year": school_year_label,
+        "total": collection.count_documents(base_query),
         "active": active_count,
         "inactive": inactive_count,
         "new_today": new_today_count,
@@ -5586,133 +6541,1032 @@ def build_students_stats_payload():
 @app.route("/students", methods=["GET"])
 @require_permission("students_read")
 def students_page():
-    stats_payload = build_students_stats_payload()
+    selected_school_year = resolve_selected_school_year(request.args.get("school_year", ""))
+    stats_payload = build_students_stats_payload(selected_school_year)
+    template_context = {
+        **sidebar_context("students", selected_school_year),
+        "message": request.args.get("message", "").strip(),
+        "message_type": request.args.get("message_type", "success").strip() or "success",
+        "stats": stats_payload,
+        "grade_options": list(GRADE_LEVEL_OPTIONS),
+        "selected_school_year": selected_school_year,
+        "current_school_year": get_current_school_year_label(),
+        "school_year_options": list_school_year_docs(),
+        "archived_view": selected_school_year != get_current_school_year_label(),
+    }
 
-    return render_template(
-        "students.html",
-        message=request.args.get("message", "").strip(),
-        message_type=request.args.get("message_type", "success").strip() or "success",
-        stats=stats_payload,
-        grade_options=list(GRADE_LEVEL_OPTIONS),
-        **sidebar_context("students"),
+    return render_template("students.html", **template_context)
+
+
+def next_school_year_label(label):
+    normalized = normalize_school_year_value(label)
+    if not normalized:
+        return derive_default_school_year_label()
+    start_year = int(normalized.split("-", 1)[0]) + 1
+    return build_school_year_label(start_year)
+
+
+@app.route("/api/school-years", methods=["GET", "POST"])
+@require_permission("students_read", api=True)
+def api_school_years():
+    if request.method == "GET":
+        selected_school_year = resolve_selected_school_year(request.args.get("school_year", ""))
+        rows = []
+        for doc in list_school_year_docs():
+            label = doc.get("label") or ""
+            rows.append({
+                **doc,
+                "is_selected": label == selected_school_year,
+                "student_count": count_school_year_enrollments(label, {"school_year": label}),
+            })
+        return api_success({
+            "school_years": rows,
+            "selected_school_year": selected_school_year,
+            "current_school_year": get_current_school_year_label(),
+            "next_school_year": next_school_year_label(get_current_school_year_label()),
+        })
+
+    if not has_permission("students_write"):
+        return api_error("Forbidden", 403)
+
+    payload = request_payload()
+    label = normalize_school_year_value(payload.get("label") or payload.get("school_year"))
+    if not label:
+        return api_error("Invalid school year format. Use YYYY-YYYY.", 400, "school_year")
+
+    created = ensure_school_year_exists(label, set_current=True, created_by=session.get("admin", ""))
+    ensure_predefined_sections(label)
+    remember_selected_school_year(label)
+    signal_data_change("students", "sections")
+    return api_success({
+        "message": f"School Year {label} is ready for enrollment.",
+        "school_year": {
+            "_id": str(created.get("_id") or ""),
+            "label": label,
+            "is_current": True,
+        },
+        "selected_school_year": label,
+        "current_school_year": label,
+        "next_school_year": next_school_year_label(label),
+    }, 201)
+
+
+@app.route("/api/students/reenrollment-candidates", methods=["GET"])
+@require_permission("students_read", api=True)
+def api_students_reenrollment_candidates():
+    source_school_year = normalize_school_year_value(request.args.get("source_school_year", ""))
+    target_school_year = resolve_selected_school_year(request.args.get("target_school_year", ""))
+    if not source_school_year:
+        return api_error("Source school year is required.", 400, "source_school_year")
+    if source_school_year == target_school_year:
+        return api_error("Source and target school years must be different.", 400, "target_school_year")
+
+    source_collection = get_school_year_enrollment_collection(source_school_year)
+    target_collection = get_school_year_enrollment_collection(target_school_year)
+    rows = list(source_collection.find({"school_year": source_school_year}).sort([("grade_level", 1), ("section", 1), ("name", 1)]))
+    candidates = []
+    for row in rows:
+        normalized = normalize_enrollment_doc(row)
+        next_grade = promote_grade_level(normalized.get("grade_level"))
+        already_enrolled = target_collection.count_documents(
+            {"school_year": target_school_year, "student_id": normalized.get("student_id")},
+            limit=1,
+        ) > 0
+        candidates.append({
+            **normalized,
+            "source_school_year": source_school_year,
+            "target_school_year": target_school_year,
+            "promoted_grade_level": next_grade,
+            "already_enrolled": already_enrolled,
+        })
+
+    return api_success({
+        "source_school_year": source_school_year,
+        "target_school_year": target_school_year,
+        "candidates": candidates,
+        "sections_by_grade": build_sections_by_grade(school_year=target_school_year),
+    })
+
+
+@app.route("/api/students/reenroll", methods=["POST"])
+@require_permission("students_write", api=True)
+def api_students_reenroll():
+    payload = request_payload()
+    source_school_year = normalize_school_year_value(payload.get("source_school_year", ""))
+    target_school_year = resolve_selected_school_year(payload.get("target_school_year", ""))
+    if not source_school_year:
+        return api_error("Source school year is required.", 400, "source_school_year")
+    if not target_school_year:
+        return api_error("Target school year is required.", 400, "target_school_year")
+    if source_school_year == target_school_year:
+        return api_error("Source and target school years must be different.", 400, "target_school_year")
+    if target_school_year != get_current_school_year_label():
+        return api_error("Only the current school year can accept new enrollments.", 403, "target_school_year")
+
+    selections = payload.get("students")
+    if not isinstance(selections, list) or not selections:
+        return api_error("Select at least one student to enroll.", 400, "students")
+
+    enrolled_count = 0
+    skipped_count = 0
+    errors = []
+    source_collection = get_school_year_enrollment_collection(source_school_year)
+
+    for item in selections:
+        if not isinstance(item, dict):
+            continue
+        source_record_id = str(item.get("record_id") or item.get("_id") or "").strip()
+        selected = parse_bool_value(item.get("selected"), default=True)
+        if not selected or not source_record_id:
+            continue
+
+        source_oid = parse_student_oid(source_record_id)
+        if not source_oid:
+            skipped_count += 1
+            errors.append(f"Invalid source record id: {source_record_id}.")
+            continue
+
+        source_doc = source_collection.find_one({"_id": source_oid, "school_year": source_school_year})
+        if not source_doc:
+            skipped_count += 1
+            errors.append(f"Source record {source_record_id} was not found in {source_school_year}.")
+            continue
+
+        grade_level = normalize_grade_level(item.get("grade_level") or item.get("promoted_grade_level") or source_doc.get("grade_level"))
+        section_value = normalize_section_value(item.get("section") or "")
+        status_value = normalize_student_status(item.get("status", "Active"), default="Active")
+        if not grade_level:
+            skipped_count += 1
+            errors.append(f"{source_doc.get('name') or source_doc.get('student_id')}: Grade level is required.")
+            continue
+        if not section_value:
+            skipped_count += 1
+            errors.append(f"{source_doc.get('name') or source_doc.get('student_id')}: Section is required.")
+            continue
+
+        student_ref_id = parse_student_oid(source_doc.get("student_ref_id"))
+        student_doc = students.find_one({"_id": student_ref_id}) if student_ref_id else students.find_one(build_lrn_duplicate_query(source_doc.get("student_id")))
+        if not student_doc:
+            skipped_count += 1
+            errors.append(f"{source_doc.get('name') or source_doc.get('student_id')}: Student profile was not found.")
+            continue
+
+        try:
+            upsert_manual_section(
+                grade_level,
+                section_value,
+                created_by=session.get("admin", ""),
+                school_year=target_school_year,
+            )
+            upsert_student_enrollment(
+                student_doc,
+                target_school_year,
+                grade_level=grade_level,
+                section=section_value,
+                status=status_value,
+                source_school_year=source_school_year,
+                update_existing=False,
+            )
+            sync_student_base_fields_to_enrollments(student_doc)
+            enrolled_count += 1
+        except ValueError as exc:
+            skipped_count += 1
+            errors.append(f"{source_doc.get('name') or source_doc.get('student_id')}: {exc}")
+
+    if enrolled_count > 0:
+        signal_data_change("students", "sections")
+
+    return api_success({
+        "message": f"Enrollment completed for School Year {target_school_year}. Enrolled: {enrolled_count}. Skipped: {skipped_count}.",
+        "source_school_year": source_school_year,
+        "target_school_year": target_school_year,
+        "enrolled_count": enrolled_count,
+        "skipped_count": skipped_count,
+        "errors": errors[:100],
+        "sections_by_grade": build_sections_by_grade(school_year=target_school_year),
+    })
+
+
+def resolve_students_export_logo_path():
+    candidate_paths = [
+        os.path.join(app.root_path, "static", "logo.png"),
+        os.path.join(app.root_path, "static", "deped-logo.png"),
+        os.path.join(app.root_path, "static", "favicon-32x32.png"),
+    ]
+    for path in candidate_paths:
+        if os.path.exists(path):
+            return path
+    return ""
+
+
+def format_students_export_face_status(face_status):
+    if face_status == "registered":
+        return "Registered"
+    if face_status == "unregistered":
+        return "Not Registered"
+    return "All"
+
+
+def format_students_export_timestamp(value, multiline=False):
+    raw = normalize_timestamp_value(value).strip()
+    if not raw:
+        return "N/A"
+
+    parsed = None
+    normalized = raw.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except Exception:
+        for pattern in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+            try:
+                parsed = datetime.strptime(raw[:19] if "H" in pattern else raw[:10], pattern)
+                break
+            except Exception:
+                continue
+
+    if parsed is not None:
+        if multiline:
+            return f"{parsed.strftime('%Y-%m-%d')}<br/>{parsed.strftime('%H:%M')}"
+        return parsed.strftime("%B %d, %Y %I:%M:%S %p")
+
+    fallback = xml_escape(raw)
+    if multiline:
+        parts = raw.replace("T", " ", 1).split()
+        if len(parts) >= 2:
+            return f"{xml_escape(parts[0])}<br/>{xml_escape(parts[1][:5])}"
+    return fallback
+
+
+def build_students_export_section_breakdown(rows):
+    section_counts = {}
+    for row in rows:
+        grade_label = row.get("grade_level") or "Unassigned"
+        section_label = normalize_section_value(row.get("section")) or "Unassigned"
+        key = (grade_label, section_label)
+        section_counts[key] = section_counts.get(key, 0) + 1
+
+    ordered_rows = []
+    for (grade_label, section_label), count in sorted(
+        section_counts.items(),
+        key=lambda item: (grade_sort_key(extract_grade_number(item[0][0]) or item[0][0]), item[0][1].lower()),
+    ):
+        ordered_rows.append((grade_label, section_label, count))
+    return ordered_rows
+
+
+def build_school_export_footer(canvas_obj, doc):
+    footer_title = getattr(doc, "export_footer_title", "Cawitan High School Export")
+    document_title = getattr(doc, "export_title", footer_title)
+    document_subject = getattr(doc, "export_subject", document_title)
+    canvas_obj.saveState()
+    if canvas_obj.getPageNumber() == 1:
+        canvas_obj.setTitle(document_title)
+        canvas_obj.setAuthor(getattr(doc, "export_author", "Cawitan High School"))
+        canvas_obj.setSubject(document_subject)
+    canvas_obj.setFont("Helvetica", 8.5)
+    canvas_obj.setFillColor(colors.HexColor("#475569"))
+    canvas_obj.drawString(doc.leftMargin, 36, footer_title)
+    canvas_obj.drawRightString(doc.pagesize[0] - doc.rightMargin, 36, f"Page {canvas_obj.getPageNumber()}")
+    canvas_obj.restoreState()
+
+
+def build_school_export_styles():
+    styles = getSampleStyleSheet()
+    return {
+        "header_title": ParagraphStyle(
+            "SchoolExportHeaderTitle",
+            parent=styles["Normal"],
+            fontName="Helvetica-Bold",
+            fontSize=18,
+            leading=22,
+            alignment=TA_CENTER,
+            textColor=colors.HexColor("#0f172a"),
+        ),
+        "doc_title": ParagraphStyle(
+            "SchoolExportDocTitle",
+            parent=styles["Normal"],
+            fontName="Helvetica-Bold",
+            fontSize=11,
+            leading=14,
+            alignment=TA_CENTER,
+            textColor=colors.HexColor("#14532d"),
+            spaceBefore=4,
+        ),
+        "metadata_label": ParagraphStyle(
+            "SchoolExportMetaLabel",
+            parent=styles["Normal"],
+            fontName="Helvetica-Bold",
+            fontSize=8.5,
+            leading=11,
+            alignment=TA_LEFT,
+            textColor=colors.HexColor("#0f172a"),
+        ),
+        "metadata_value": ParagraphStyle(
+            "SchoolExportMetaValue",
+            parent=styles["Normal"],
+            fontName="Helvetica",
+            fontSize=8.5,
+            leading=11,
+            alignment=TA_LEFT,
+            textColor=colors.HexColor("#334155"),
+        ),
+        "section_title": ParagraphStyle(
+            "SchoolExportSectionTitle",
+            parent=styles["Normal"],
+            fontName="Helvetica-Bold",
+            fontSize=12,
+            leading=15,
+            alignment=TA_LEFT,
+            textColor=colors.HexColor("#0f172a"),
+            spaceAfter=2,
+        ),
+        "table_header": ParagraphStyle(
+            "SchoolExportTableHeader",
+            parent=styles["Normal"],
+            fontName="Helvetica-Bold",
+            fontSize=7.2,
+            leading=8.6,
+            alignment=TA_CENTER,
+            textColor=colors.HexColor("#0f172a"),
+        ),
+        "table_cell": ParagraphStyle(
+            "SchoolExportTableCell",
+            parent=styles["Normal"],
+            fontName="Helvetica",
+            fontSize=7,
+            leading=8.4,
+            alignment=TA_LEFT,
+            textColor=colors.HexColor("#111827"),
+        ),
+        "table_cell_center": ParagraphStyle(
+            "SchoolExportTableCellCenter",
+            parent=styles["Normal"],
+            fontName="Helvetica",
+            fontSize=7,
+            leading=8.4,
+            alignment=TA_CENTER,
+            textColor=colors.HexColor("#111827"),
+        ),
+        "footer_value": ParagraphStyle(
+            "SchoolExportFooterValue",
+            parent=styles["Normal"],
+            fontName="Helvetica",
+            fontSize=9,
+            leading=12,
+            alignment=TA_LEFT,
+            textColor=colors.HexColor("#0f172a"),
+        ),
+        "signature": ParagraphStyle(
+            "SchoolExportSignature",
+            parent=styles["Normal"],
+            fontName="Helvetica",
+            fontSize=9,
+            leading=12,
+            alignment=TA_CENTER,
+            textColor=colors.HexColor("#0f172a"),
+        ),
+        "note": ParagraphStyle(
+            "SchoolExportNote",
+            parent=styles["Normal"],
+            fontName="Helvetica-Oblique",
+            fontSize=8,
+            leading=10,
+            alignment=TA_LEFT,
+            textColor=colors.HexColor("#475569"),
+        ),
+    }
+
+
+def build_school_export_document(document_title, header_caption, metadata_items, footer_title, export_subject, export_author="Cawitan High School"):
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=landscape(letter),
+        rightMargin=72,
+        leftMargin=72,
+        topMargin=72,
+        bottomMargin=72,
     )
+    doc.export_author = export_author
+    doc.export_title = document_title
+    doc.export_subject = export_subject
+    doc.export_footer_title = footer_title
+
+    styles = build_school_export_styles()
+    story = []
+
+    logo_path = resolve_students_export_logo_path()
+    logo_flowable = Spacer(1, 0.85 * inch)
+    if logo_path:
+        logo_width = 0.8 * inch
+        logo_height = 0.8 * inch
+        try:
+            with Image.open(logo_path) as logo_image:
+                src_width, src_height = logo_image.size
+                if src_width and src_height:
+                    ratio = min(float(logo_width) / float(src_width), float(logo_height) / float(src_height))
+                    logo_width = max(src_width * ratio, 1)
+                    logo_height = max(src_height * ratio, 1)
+        except Exception:
+            logo_width = 0.8 * inch
+            logo_height = 0.8 * inch
+        logo_flowable = RLImage(logo_path, width=logo_width, height=logo_height)
+
+    header_style = ParagraphStyle(
+        "SchoolExportHeaderBlock",
+        parent=styles["header_title"],
+        fontSize=17,
+        leading=20,
+    )
+    school_header = Paragraph(
+        "<b>Cawitan High School</b><br/>"
+        "<font size='9'>Cawitan, Sta. Catalina, Negros Oriental</font><br/>"
+        f"<font size='8'>{xml_escape(header_caption)}</font>",
+        header_style,
+    )
+    header_table = Table(
+        [[logo_flowable, school_header, Spacer(1, 0.85 * inch)]],
+        colWidths=[1.0 * inch, 7.0 * inch, 1.0 * inch],
+    )
+    header_table.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("ALIGN", (0, 0), (0, 0), "CENTER"),
+        ("ALIGN", (1, 0), (1, 0), "CENTER"),
+        ("ALIGN", (2, 0), (2, 0), "CENTER"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ("TOPPADDING", (0, 0), (-1, -1), 0),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+    ]))
+    story.append(header_table)
+    story.append(Spacer(1, 0.12 * inch))
+    story.append(Paragraph(xml_escape(document_title), styles["doc_title"]))
+    story.append(Spacer(1, 0.08 * inch))
+    story.append(HRFlowable(width="100%", thickness=1.6, color=colors.HexColor("#0f172a")))
+    story.append(Spacer(1, 0.16 * inch))
+
+    metadata_rows = []
+    items = list(metadata_items or [])
+    if len(items) % 2 != 0:
+        items.append(("", ""))
+    for index in range(0, len(items), 2):
+        left_label, left_value = items[index]
+        right_label, right_value = items[index + 1]
+        metadata_rows.append([
+            Paragraph(f"<b>{xml_escape(str(left_label or ''))}</b>", styles["metadata_label"]),
+            Paragraph(xml_escape(str(left_value or "")), styles["metadata_value"]),
+            Paragraph(f"<b>{xml_escape(str(right_label or ''))}</b>", styles["metadata_label"]),
+            Paragraph(xml_escape(str(right_value or "")), styles["metadata_value"]),
+        ])
+
+    if metadata_rows:
+        metadata_table = Table(
+            metadata_rows,
+            colWidths=[1.15 * inch, 3.35 * inch, 1.15 * inch, 3.35 * inch],
+        )
+        metadata_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f8fafc")),
+            ("BOX", (0, 0), (-1, -1), 0.75, colors.HexColor("#94a3b8")),
+            ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 6),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+            ("TOPPADDING", (0, 0), (-1, -1), 5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ]))
+        story.append(metadata_table)
+        story.append(Spacer(1, 0.18 * inch))
+
+    return buffer, doc, story, styles
 
 
-@app.route("/students/export", methods=["GET"])
+def append_school_export_section_title(story, title, styles):
+    story.append(Paragraph(xml_escape(title), styles["section_title"]))
+    story.append(HRFlowable(width="100%", thickness=1.4, color=colors.HexColor("#0f172a")))
+    story.append(Spacer(1, 0.1 * inch))
+
+
+def build_school_export_table(data, col_widths, styles, span_empty_row=False):
+    table = LongTable(data, repeatRows=1, colWidths=col_widths)
+    table_style = [
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#dbeafe")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#0f172a")),
+        ("BOX", (0, 0), (-1, -1), 0.75, colors.HexColor("#94a3b8")),
+        ("INNERGRID", (0, 0), (-1, -1), 0.45, colors.HexColor("#cbd5e1")),
+        ("LINEBELOW", (0, 0), (-1, 0), 1.1, colors.HexColor("#0f172a")),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ]
+    for index in range(1, len(data)):
+        table_style.append((
+            "BACKGROUND",
+            (0, index),
+            (-1, index),
+            colors.HexColor("#f8fafc") if index % 2 == 0 else colors.white,
+        ))
+    if span_empty_row and len(data) == 2:
+        table_style.append(("SPAN", (0, 1), (-1, 1)))
+        table_style.append(("ALIGN", (0, 1), (-1, 1), "CENTER"))
+    table.setStyle(TableStyle(table_style))
+    return table
+
+
+def build_school_export_footer_block(styles):
+    return KeepTogether([
+        Spacer(1, 0.24 * inch),
+        HRFlowable(width="100%", thickness=1.2, color=colors.HexColor("#0f172a")),
+        Spacer(1, 0.14 * inch),
+        Table(
+            [[
+                Paragraph(
+                    "<b>Exported By:</b><br/><br/>______________________________",
+                    styles["footer_value"],
+                ),
+                Paragraph(
+                    "______________________________<br/>Principal",
+                    styles["signature"],
+                ),
+            ]],
+            colWidths=[4.5 * inch, 4.5 * inch],
+            style=TableStyle([
+                ("VALIGN", (0, 0), (-1, -1), "BOTTOM"),
+                ("ALIGN", (0, 0), (0, 0), "LEFT"),
+                ("ALIGN", (1, 0), (1, 0), "CENTER"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                ("TOPPADDING", (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+            ]),
+        ),
+        Spacer(1, 0.14 * inch),
+        Paragraph("This document is system-generated and valid without signature.", styles["note"]),
+    ])
+
+
+def format_export_date_range_label(start_date, end_date):
+    start_text = str(start_date or "").strip()
+    end_text = str(end_date or "").strip()
+    if start_text and end_text:
+        return f"{start_text} to {end_text}"
+    if start_text:
+        return f"From {start_text}"
+    if end_text:
+        return f"Until {end_text}"
+    return "All dates"
+
+
+def format_export_sort_label(sort_by):
+    return "Oldest First" if str(sort_by or "").strip().lower() == "oldest" else "Newest First"
+
+
+@app.route("/students/export_pdf", methods=["GET"])
 @require_permission("students_read")
-def students_export():
-    query, q_value, grade_level, section_value = build_students_query(
+def students_export_pdf():
+    selected_school_year = resolve_selected_school_year(request.args.get("school_year", ""))
+    query, q_value, grade_level, section_value, face_status, school_year_label = build_students_query(
         request.args.get("q", ""),
         request.args.get("grade", "") or request.args.get("grade_level", ""),
         request.args.get("section", ""),
+        request.args.get("face_status", ""),
+        selected_school_year,
     )
 
-    def excel_text(value):
-        text = str(value or "")
-        text = text.replace("\r\n", "\n").replace("\r", "\n")
-        escaped = text.replace('"', '""')
-        return f'="{escaped}"'
+    collection = get_school_year_enrollment_collection(school_year_label)
+    raw_rows = list(collection.find(query).sort([("created_at", -1), ("name", 1)]))
+    rows = [normalize_enrollment_doc(row) for row in raw_rows]
 
-    total_students_all = students.count_documents({})
-    total_students_scope = students.count_documents(query)
+    admin_username = session.get("admin", "Admin")
+    admin_name = admin_username
+    try:
+        user_doc, profile = current_user_profile()
+        if profile and profile.get("fullName"):
+            admin_name = profile.get("fullName")
+    except Exception:
+        pass
 
-    section_pipeline = []
-    if query:
-        section_pipeline.append({"$match": query})
-    section_pipeline.extend([
-        {"$group": {"_id": {"$ifNull": ["$section", ""]}, "count": {"$sum": 1}}},
-        {"$project": {"_id": 0, "section": {"$cond": [{"$eq": ["$_id", ""]}, "Unassigned", "$_id"]}, "count": 1}},
-        {"$sort": {"count": -1, "section": 1}},
-    ])
-    section_breakdown = list(students.aggregate(section_pipeline))
+    generated_at = now_local()
+    generated_at_label = generated_at.strftime("%B %d, %Y %I:%M:%S %p")
+    filters = {
+        "School Year": school_year_label or get_current_school_year_label(),
+        "Search Query": q_value or "All records",
+        "Grade Filter": grade_level or "All grades",
+        "Section Filter": section_value or "All sections",
+        "Face Status": format_students_export_face_status(face_status),
+    }
+    section_breakdown = build_students_export_section_breakdown(rows)
 
-    rows = list(students.find(query).sort([("created_at", -1), ("name", 1)]))
-
-    output = StringIO(newline="")
-    writer = csv.writer(
-        output,
-        delimiter=",",
-        quotechar='"',
-        quoting=csv.QUOTE_ALL,
-        lineterminator="\r\n",
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=landscape(letter),
+        rightMargin=72,
+        leftMargin=72,
+        topMargin=72,
+        bottomMargin=72,
+    )
+    doc.export_author = admin_name
+    doc.export_title = "Official Student Records Report"
+    doc.export_subject = "Student records export"
+    doc.export_footer_title = "Cawitan High School Student Records Export"
+    story = []
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        "StudentsExportTitle",
+        parent=styles["Normal"],
+        fontName="Helvetica-Bold",
+        fontSize=18,
+        leading=22,
+        alignment=TA_CENTER,
+        textColor=colors.HexColor("#0f172a"),
+        spaceAfter=2,
+    )
+    doc_title_style = ParagraphStyle(
+        "StudentsExportDocTitle",
+        parent=styles["Normal"],
+        fontName="Helvetica-Bold",
+        fontSize=11,
+        leading=14,
+        alignment=TA_CENTER,
+        textColor=colors.HexColor("#14532d"),
+        spaceBefore=4,
+    )
+    metadata_label_style = ParagraphStyle(
+        "StudentsExportMetaLabel",
+        parent=styles["Normal"],
+        fontName="Helvetica-Bold",
+        fontSize=8.5,
+        leading=11,
+        alignment=TA_LEFT,
+        textColor=colors.HexColor("#0f172a"),
+    )
+    metadata_value_style = ParagraphStyle(
+        "StudentsExportMetaValue",
+        parent=styles["Normal"],
+        fontName="Helvetica",
+        fontSize=8.5,
+        leading=11,
+        alignment=TA_LEFT,
+        textColor=colors.HexColor("#334155"),
+    )
+    section_title_style = ParagraphStyle(
+        "StudentsExportSectionTitle",
+        parent=styles["Normal"],
+        fontName="Helvetica-Bold",
+        fontSize=12,
+        leading=15,
+        alignment=TA_LEFT,
+        textColor=colors.HexColor("#0f172a"),
+        spaceAfter=2,
+    )
+    table_header_style = ParagraphStyle(
+        "StudentsExportTableHeader",
+        parent=styles["Normal"],
+        fontName="Helvetica-Bold",
+        fontSize=7.2,
+        leading=8.6,
+        alignment=TA_CENTER,
+        textColor=colors.HexColor("#0f172a"),
+    )
+    table_cell_style = ParagraphStyle(
+        "StudentsExportTableCell",
+        parent=styles["Normal"],
+        fontName="Helvetica",
+        fontSize=7,
+        leading=8.4,
+        alignment=TA_LEFT,
+        textColor=colors.HexColor("#111827"),
+    )
+    centered_cell_style = ParagraphStyle(
+        "StudentsExportCenteredCell",
+        parent=table_cell_style,
+        alignment=TA_CENTER,
+    )
+    note_style = ParagraphStyle(
+        "StudentsExportNote",
+        parent=styles["Normal"],
+        fontName="Helvetica-Oblique",
+        fontSize=8,
+        leading=10,
+        alignment=TA_LEFT,
+        textColor=colors.HexColor("#475569"),
+    )
+    footer_value_style = ParagraphStyle(
+        "StudentsExportFooterValue",
+        parent=styles["Normal"],
+        fontName="Helvetica",
+        fontSize=9,
+        leading=12,
+        alignment=TA_LEFT,
+        textColor=colors.HexColor("#0f172a"),
+    )
+    signature_style = ParagraphStyle(
+        "StudentsExportSignature",
+        parent=styles["Normal"],
+        fontName="Helvetica",
+        fontSize=9,
+        leading=12,
+        alignment=TA_CENTER,
+        textColor=colors.HexColor("#0f172a"),
     )
 
-    writer.writerow(["sep=,"])
-    writer.writerow(["Students Export"])
-    writer.writerow(["Generated At", now_iso()])
-    writer.writerow(["Search Filter", q_value or ""])
-    writer.writerow(["Grade Filter", grade_level or "All Grades"])
-    writer.writerow(["Section Filter", section_value or "All Sections"])
-    writer.writerow(["Total Students (All Records)", int(total_students_all)])
-    writer.writerow(["Total Students (Export Scope)", int(total_students_scope)])
-    writer.writerow([])
-    writer.writerow(["Section Breakdown"])
-    writer.writerow(["Section", "Student Count"])
+    logo_path = resolve_students_export_logo_path()
+    logo_flowable = Spacer(1, 0.85 * inch)
+    if logo_path:
+        logo_width = 0.8 * inch
+        logo_height = 0.8 * inch
+        try:
+            with Image.open(logo_path) as logo_image:
+                src_width, src_height = logo_image.size
+                if src_width and src_height:
+                    ratio = min(float(logo_width) / float(src_width), float(logo_height) / float(src_height))
+                    logo_width = max(src_width * ratio, 1)
+                    logo_height = max(src_height * ratio, 1)
+        except Exception:
+            logo_width = 0.8 * inch
+            logo_height = 0.8 * inch
+        logo_flowable = RLImage(logo_path, width=logo_width, height=logo_height)
+
+    school_header = Paragraph(
+        "<b>Cawitan High School</b><br/>"
+        "<font size='9'>Cawitan, Sta. Catalina, Negros Oriental</font><br/>"
+        "<font size='8'>Student Records Export</font>",
+        ParagraphStyle(
+            "StudentsExportHeaderBlock",
+            parent=title_style,
+            fontSize=17,
+            leading=20,
+        ),
+    )
+    header_table = Table(
+        [[logo_flowable, school_header, Spacer(1, 0.85 * inch)]],
+        colWidths=[1.0 * inch, 7.0 * inch, 1.0 * inch],
+    )
+    header_table.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("ALIGN", (0, 0), (0, 0), "CENTER"),
+        ("ALIGN", (1, 0), (1, 0), "CENTER"),
+        ("ALIGN", (2, 0), (2, 0), "CENTER"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ("TOPPADDING", (0, 0), (-1, -1), 0),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+    ]))
+    story.append(header_table)
+    story.append(Spacer(1, 0.12 * inch))
+    story.append(Paragraph("Official Student Records Report", doc_title_style))
+    story.append(Spacer(1, 0.08 * inch))
+    story.append(HRFlowable(width="100%", thickness=1.6, color=colors.HexColor("#0f172a")))
+    story.append(Spacer(1, 0.16 * inch))
+
+    metadata_rows = [
+        [
+            Paragraph("<b>Generated At</b>", metadata_label_style),
+            Paragraph(xml_escape(generated_at_label), metadata_value_style),
+            Paragraph("<b>School Year</b>", metadata_label_style),
+            Paragraph(xml_escape(filters["School Year"]), metadata_value_style),
+        ],
+        [
+            Paragraph("<b>Total Records</b>", metadata_label_style),
+            Paragraph(xml_escape(str(len(rows))), metadata_value_style),
+            Paragraph("", metadata_label_style),
+            Paragraph("", metadata_value_style),
+        ],
+        [
+            Paragraph("<b>Search Query</b>", metadata_label_style),
+            Paragraph(xml_escape(filters["Search Query"]), metadata_value_style),
+            Paragraph("<b>Grade Filter</b>", metadata_label_style),
+            Paragraph(xml_escape(filters["Grade Filter"]), metadata_value_style),
+        ],
+        [
+            Paragraph("<b>Section Filter</b>", metadata_label_style),
+            Paragraph(xml_escape(filters["Section Filter"]), metadata_value_style),
+            Paragraph("<b>Face Status</b>", metadata_label_style),
+            Paragraph(xml_escape(filters["Face Status"]), metadata_value_style),
+        ],
+    ]
+    metadata_table = Table(
+        metadata_rows,
+        colWidths=[1.15 * inch, 3.35 * inch, 1.15 * inch, 3.35 * inch],
+    )
+    metadata_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f8fafc")),
+        ("BOX", (0, 0), (-1, -1), 0.75, colors.HexColor("#94a3b8")),
+        ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 6),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+        ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+    ]))
+    story.append(metadata_table)
+    story.append(Spacer(1, 0.18 * inch))
+
+    story.append(Paragraph("Section Breakdown", section_title_style))
+    story.append(HRFlowable(width="100%", thickness=1.4, color=colors.HexColor("#0f172a")))
+    story.append(Spacer(1, 0.1 * inch))
+
     if section_breakdown:
-        for item in section_breakdown:
-            writer.writerow([str(item.get("section") or "Unassigned"), int(item.get("count") or 0)])
+        breakdown_data = [[
+            Paragraph("Grade", table_header_style),
+            Paragraph("Section", table_header_style),
+            Paragraph("Students", table_header_style),
+        ]]
+        for grade_label, section_label, count in section_breakdown:
+            breakdown_data.append([
+                Paragraph(xml_escape(grade_label or "Unassigned"), table_cell_style),
+                Paragraph(xml_escape(section_label or "Unassigned"), table_cell_style),
+                Paragraph(xml_escape(str(count)), centered_cell_style),
+            ])
+
+        breakdown_table = LongTable(
+            breakdown_data,
+            repeatRows=1,
+            colWidths=[2.2 * inch, 4.7 * inch, 2.1 * inch],
+        )
+        breakdown_style = [
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#dbeafe")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#0f172a")),
+            ("BOX", (0, 0), (-1, -1), 0.75, colors.HexColor("#94a3b8")),
+            ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
+            ("LINEBELOW", (0, 0), (-1, 0), 1.1, colors.HexColor("#0f172a")),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 5),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+            ("TOPPADDING", (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ]
+        for index in range(1, len(breakdown_data)):
+            breakdown_style.append((
+                "BACKGROUND",
+                (0, index),
+                (-1, index),
+                colors.HexColor("#f8fafc") if index % 2 == 0 else colors.white,
+            ))
+        breakdown_table.setStyle(TableStyle(breakdown_style))
+        story.append(breakdown_table)
     else:
-        writer.writerow(["No records", 0])
+        story.append(Paragraph("No records available for the selected filters.", metadata_value_style))
 
-    writer.writerow([])
-    writer.writerow(["Student Records"])
-    writer.writerow([
-        "LRN",
-        "Student ID",
-        "Name",
-        "Grade Level",
-        "Section",
-        "Parent Contact",
-        "Gender",
-        "Status",
-        "Face Registered",
-        "Created At",
-        "Updated At",
-    ])
+    story.append(Spacer(1, 0.22 * inch))
+    story.append(Paragraph("Student Records", section_title_style))
+    story.append(HRFlowable(width="100%", thickness=1.4, color=colors.HexColor("#0f172a")))
+    story.append(Spacer(1, 0.1 * inch))
 
+    student_table_data = [[
+        Paragraph("LRN", table_header_style),
+        Paragraph("Student ID", table_header_style),
+        Paragraph("Name", table_header_style),
+        Paragraph("Grade", table_header_style),
+        Paragraph("Section", table_header_style),
+        Paragraph("Parent Contact", table_header_style),
+        Paragraph("Gender", table_header_style),
+        Paragraph("Status", table_header_style),
+        Paragraph("Face Registered", table_header_style),
+        Paragraph("Created At", table_header_style),
+        Paragraph("Updated At", table_header_style),
+    ]]
     for row in rows:
-        writer.writerow([
-            excel_text(row.get("lrn", "")),
-            excel_text(row.get("student_id", "")),
-            str(row.get("name", "") or ""),
-            str(row.get("grade_level", row.get("grade", "")) or ""),
-            str(row.get("section", "") or ""),
-            excel_text(row.get("parent_contact", "")),
-            str(row.get("gender", row.get("sex", "")) or ""),
-            str(row.get("status", "") or ""),
-            "Yes" if bool(row.get("face_registered")) else "No",
-            excel_text(row.get("created_at", "")),
-            excel_text(row.get("updated_at", row.get("updatedAt", ""))),
+        student_table_data.append([
+            Paragraph(xml_escape(row.get("lrn") or "N/A"), table_cell_style),
+            Paragraph(xml_escape(row.get("student_id") or "N/A"), table_cell_style),
+            Paragraph(xml_escape(row.get("name") or "N/A"), table_cell_style),
+            Paragraph(xml_escape(row.get("grade_level") or "N/A"), centered_cell_style),
+            Paragraph(xml_escape(row.get("section") or "N/A"), table_cell_style),
+            Paragraph(xml_escape(row.get("parent_contact") or "N/A"), table_cell_style),
+            Paragraph(xml_escape(row.get("gender") or "N/A"), centered_cell_style),
+            Paragraph(xml_escape(row.get("status") or "Active"), centered_cell_style),
+            Paragraph("Yes" if row.get("face_registered") else "No", centered_cell_style),
+            Paragraph(format_students_export_timestamp(row.get("created_at"), multiline=True), centered_cell_style),
+            Paragraph(format_students_export_timestamp(row.get("updated_at"), multiline=True), centered_cell_style),
         ])
 
-    filename = f"students_export_{now_local().strftime('%Y%m%d_%H%M%S')}.csv"
-    csv_bytes = output.getvalue().encode("utf-8-sig")
-    return Response(
-        csv_bytes,
-        mimetype="text/csv; charset=utf-8",
-        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    if len(student_table_data) == 1:
+        student_table_data.append([
+            Paragraph("No student records matched the selected filters.", table_cell_style),
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+        ])
+
+    student_table = LongTable(
+        student_table_data,
+        repeatRows=1,
+        colWidths=[
+            0.82 * inch,
+            0.82 * inch,
+            1.55 * inch,
+            0.62 * inch,
+            0.75 * inch,
+            0.95 * inch,
+            0.58 * inch,
+            0.62 * inch,
+            0.67 * inch,
+            0.81 * inch,
+            0.81 * inch,
+        ],
+    )
+    student_table_style = [
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#dbeafe")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#0f172a")),
+        ("BOX", (0, 0), (-1, -1), 0.75, colors.HexColor("#94a3b8")),
+        ("INNERGRID", (0, 0), (-1, -1), 0.45, colors.HexColor("#cbd5e1")),
+        ("LINEBELOW", (0, 0), (-1, 0), 1.1, colors.HexColor("#0f172a")),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ]
+    for index in range(1, len(student_table_data)):
+        student_table_style.append((
+            "BACKGROUND",
+            (0, index),
+            (-1, index),
+            colors.HexColor("#f8fafc") if index % 2 == 0 else colors.white,
+        ))
+    if len(student_table_data) == 2 and not rows:
+        student_table_style.append(("SPAN", (0, 1), (-1, 1)))
+        student_table_style.append(("ALIGN", (0, 1), (-1, 1), "CENTER"))
+    student_table.setStyle(TableStyle(student_table_style))
+    story.append(student_table)
+
+    footer_block = KeepTogether([
+        Spacer(1, 0.24 * inch),
+        HRFlowable(width="100%", thickness=1.2, color=colors.HexColor("#0f172a")),
+        Spacer(1, 0.14 * inch),
+        Table(
+            [[
+                Paragraph(
+                    "<b>Exported By:</b><br/><br/>______________________________",
+                    footer_value_style,
+                ),
+                Paragraph(
+                    "______________________________<br/>Principal",
+                    signature_style,
+                ),
+            ]],
+            colWidths=[4.5 * inch, 4.5 * inch],
+            style=TableStyle([
+                ("VALIGN", (0, 0), (-1, -1), "BOTTOM"),
+                ("ALIGN", (0, 0), (0, 0), "LEFT"),
+                ("ALIGN", (1, 0), (1, 0), "CENTER"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                ("TOPPADDING", (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+            ]),
+        ),
+        Spacer(1, 0.14 * inch),
+        Paragraph("This document is system-generated and valid without signature.", note_style),
+    ])
+    story.append(footer_block)
+
+    doc.build(story, onFirstPage=build_school_export_footer, onLaterPages=build_school_export_footer)
+    buffer.seek(0)
+
+    filename = f"students_export_{now_local().strftime('%Y%m%d_%H%M%S')}.pdf"
+    return send_file(
+        buffer,
+        as_attachment=True,
+        download_name=filename,
+        mimetype="application/pdf"
     )
 
 
 @app.route("/api/students/stats", methods=["GET"])
 @require_permission("students_read", api=True)
 def api_students_stats():
-    return api_success({"stats": build_students_stats_payload()})
+    school_year_label = resolve_selected_school_year(request.args.get("school_year", ""))
+    return api_success({"stats": build_students_stats_payload(school_year_label), "school_year": school_year_label})
 
 
 @app.route("/api/students", methods=["GET", "POST"])
 @require_permission("students_read", api=True)
 def api_students_collection():
     if request.method == "GET":
-        query, q_value, grade_level, section_value = build_students_query(
+        selected_school_year = resolve_selected_school_year(request.args.get("school_year", ""))
+        collection = get_school_year_enrollment_collection(selected_school_year)
+        query, q_value, grade_level, section_value, face_status, school_year_label = build_students_query(
             request.args.get("q", ""),
             request.args.get("grade", "") or request.args.get("grade_level", ""),
             request.args.get("section", ""),
+            request.args.get("face_status", ""),
+            selected_school_year,
         )
         try:
-            limit = int(request.args.get("limit", "10"))
+            limit = int(request.args.get("limit", "5"))
         except (TypeError, ValueError):
-            limit = 10
+            limit = 5
         try:
             page = int(request.args.get("page", "1"))
         except (TypeError, ValueError):
@@ -5722,18 +7576,21 @@ def api_students_collection():
         page = max(page, 1)
         skip = (page - 1) * limit
 
-        total = students.count_documents(query)
-        rows = students.find(query).sort([("created_at", -1), ("name", 1)]).skip(skip).limit(limit)
+        total = collection.count_documents(query)
+        rows = collection.find(query).sort([("created_at", -1), ("name", 1)]).skip(skip).limit(limit)
         payload = {
-            "students": [normalize_student_doc(row) for row in rows],
+            "students": [normalize_enrollment_doc(row) for row in rows],
             "total": total,
             "page": page,
             "limit": limit,
             "pages": (total + limit - 1) // limit if total else 1,
+            "school_year": school_year_label,
+            "archived_view": school_year_label != get_current_school_year_label(),
             "filters": {
                 "q": q_value,
                 "grade": grade_level,
                 "section": section_value,
+                "face_status": face_status,
             },
         }
         return api_success(payload)
@@ -5742,33 +7599,69 @@ def api_students_collection():
         return api_error("Forbidden", 403)
 
     payload = request_payload()
-    student_data, err_message, err_field = sanitize_personal_student_payload(payload)
+    school_year_label = resolve_selected_school_year(payload.get("school_year", ""))
+    if school_year_label != get_current_school_year_label():
+        return api_error("Archived school years are read-only.", 403, "school_year")
+
+    student_data, err_message, err_field = sanitize_personal_student_payload(payload, school_year=school_year_label)
     if err_message:
         return api_error(err_message, 400, err_field)
 
-    if students.count_documents(build_lrn_duplicate_query(student_data["lrn"])) > 0:
-        return api_error("LRN already exists.", 400, "lrn")
+    collection = get_school_year_enrollment_collection(school_year_label)
+    if collection.count_documents({"school_year": school_year_label, "student_id": student_data["lrn"]}) > 0:
+        return api_error(f"Student is already enrolled for School Year {school_year_label}.", 400, "lrn")
 
     try:
         upsert_manual_section(
             student_data.get("grade_level", ""),
             student_data.get("section", ""),
             created_by=session.get("admin", ""),
+            school_year=school_year_label,
         )
     except ValueError as exc:
         return api_error(str(exc), 400, "section")
 
-    student_data = build_new_student_document(student_data)
+    existing_student = students.find_one(build_lrn_duplicate_query(student_data["lrn"]))
+    if existing_student:
+        update_fields = {
+            "name": student_data.get("name", existing_student.get("name", "")),
+            "gender": student_data.get("gender", existing_student.get("gender", "")),
+            "sex": student_data.get("gender", existing_student.get("sex", "")),
+            "parent_contact": student_data.get("parent_contact", existing_student.get("parent_contact", "")),
+            "grade_level": student_data.get("grade_level", existing_student.get("grade_level", "")),
+            "grade": student_data.get("grade_level", existing_student.get("grade", "")),
+            "section": student_data.get("section", existing_student.get("section", "")),
+            "status": student_data.get("status", existing_student.get("status", "Active")),
+            "updated_at": now_iso(),
+        }
+        students.update_one({"_id": existing_student["_id"]}, {"$set": update_fields})
+        student_doc = students.find_one({"_id": existing_student["_id"]}) or existing_student
+    else:
+        student_doc = build_new_student_document(student_data)
+        try:
+            inserted = students.insert_one(student_doc)
+        except DuplicateKeyError:
+            return api_error("LRN already exists.", 400, "lrn")
+        student_doc = students.find_one({"_id": inserted.inserted_id}) or student_doc
 
     try:
-        inserted = students.insert_one(student_data)
-    except DuplicateKeyError:
-        return api_error("LRN already exists.", 400, "lrn")
+        saved_enrollment = upsert_student_enrollment(
+            student_doc,
+            school_year_label,
+            grade_level=student_data.get("grade_level", ""),
+            section=student_data.get("section", ""),
+            status=student_data.get("status", "Active"),
+            update_existing=False,
+        )
+    except ValueError as exc:
+        return api_error(str(exc), 400, "lrn")
+
+    sync_student_base_fields_to_enrollments(student_doc)
     signal_data_change("students")
-    saved = students.find_one({"_id": inserted.inserted_id})
     return api_success({
-        "message": "Student created successfully.",
-        "student": normalize_student_doc(saved),
+        "message": f"Student enrolled successfully for School Year {school_year_label}.",
+        "student": normalize_enrollment_doc(saved_enrollment),
+        "school_year": school_year_label,
     }, 201)
 
 
@@ -5791,6 +7684,9 @@ def api_students_import():
         return api_error(str(exc), 400, "file")
 
     total_rows_read = len(parsed_rows)
+    school_year_label = resolve_selected_school_year(request.form.get("school_year", ""))
+    if school_year_label != get_current_school_year_label():
+        return api_error("Archived school years are read-only.", 403, "school_year")
     default_grade_level = normalize_grade_level(request.form.get("default_grade_level", ""))
     default_section = normalize_section_value(request.form.get("default_section", ""))
 
@@ -5811,7 +7707,7 @@ def api_students_import():
             "gender": row.get("gender", ""),
             "section": row_section,
             "status": "Active",
-        })
+        }, require_existing_section=True, school_year=school_year_label)
         if err_message:
             validation_errors.append(f"Row {row.get('row_number', '?')}: {err_message}")
             continue
@@ -5823,9 +7719,10 @@ def api_students_import():
     candidate_lrns = sorted({item["student_data"]["lrn"] for item in pending_rows if item.get("student_data")})
     existing_lrns = set()
     if candidate_lrns:
-        for row in students.find(
-            {"$or": [{"lrn": {"$in": candidate_lrns}}, {"student_id": {"$in": candidate_lrns}}]},
-            {"lrn": 1, "student_id": 1},
+        collection = get_school_year_enrollment_collection(school_year_label)
+        for row in collection.find(
+            {"school_year": school_year_label, "student_id": {"$in": candidate_lrns}},
+            {"student_id": 1, "lrn": 1},
         ):
             existing_lrn = normalize_lrn_value(row.get("lrn") or row.get("student_id"))
             if existing_lrn:
@@ -5851,22 +7748,44 @@ def api_students_import():
             validation_errors.append(f"Row {row_number}: LRN already exists ({lrn_value}).")
             continue
 
-        try:
-            upsert_manual_section(
-                student_data.get("grade_level", ""),
-                student_data.get("section", ""),
-                created_by=session.get("admin", ""),
-            )
-        except ValueError as exc:
-            validation_errors.append(f"Row {row_number}: {exc}")
-            continue
+        existing_student = students.find_one(build_lrn_duplicate_query(lrn_value))
+        if existing_student:
+            update_fields = {
+                "name": student_data.get("name", existing_student.get("name", "")),
+                "gender": student_data.get("gender", existing_student.get("gender", "")),
+                "sex": student_data.get("gender", existing_student.get("sex", "")),
+                "parent_contact": student_data.get("parent_contact", existing_student.get("parent_contact", "")),
+                "grade_level": student_data.get("grade_level", existing_student.get("grade_level", "")),
+                "grade": student_data.get("grade_level", existing_student.get("grade", "")),
+                "section": student_data.get("section", existing_student.get("section", "")),
+                "status": student_data.get("status", existing_student.get("status", "Active")),
+                "updated_at": now_iso(),
+            }
+            students.update_one({"_id": existing_student["_id"]}, {"$set": update_fields})
+            student_doc = students.find_one({"_id": existing_student["_id"]}) or existing_student
+        else:
+            student_doc = build_new_student_document(student_data)
+            try:
+                inserted = students.insert_one(student_doc)
+            except DuplicateKeyError:
+                duplicate_count += 1
+                validation_errors.append(f"Row {row_number}: LRN already exists ({lrn_value}).")
+                continue
+            student_doc = students.find_one({"_id": inserted.inserted_id}) or student_doc
 
-        student_doc = build_new_student_document(student_data)
         try:
-            students.insert_one(student_doc)
-        except DuplicateKeyError:
+            upsert_student_enrollment(
+                student_doc,
+                school_year_label,
+                grade_level=student_data.get("grade_level", ""),
+                section=student_data.get("section", ""),
+                status=student_data.get("status", "Active"),
+                update_existing=False,
+            )
+            sync_student_base_fields_to_enrollments(student_doc)
+        except ValueError as exc:
             duplicate_count += 1
-            validation_errors.append(f"Row {row_number}: LRN already exists ({lrn_value}).")
+            validation_errors.append(f"Row {row_number}: {exc}")
             continue
 
         imported_count += 1
@@ -5892,6 +7811,7 @@ def api_students_import():
 
     response_payload = {
         "message": message,
+        "school_year": school_year_label,
         "total_rows_read": total_rows_read,
         "imported_count": imported_count,
         "skipped_count": skipped_count,
@@ -5926,57 +7846,87 @@ def api_students_import_template():
 @app.route("/api/students/<id>", methods=["GET", "PUT", "DELETE"])
 @require_permission("students_read", api=True)
 def api_students_item(id):
-    student_oid = parse_student_oid(id)
-    if not student_oid:
-        return api_error("Invalid student id.", 400, "id")
+    enrollment_oid = parse_student_oid(id)
+    if not enrollment_oid:
+        return api_error("Invalid student record id.", 400, "id")
+
+    enrollment_doc, enrollment_school_year = find_student_enrollment_record(enrollment_oid)
+    if not enrollment_doc:
+        return api_error("Student record not found.", 404)
+    enrollment_school_year = normalize_school_year_value(enrollment_school_year or enrollment_doc.get("school_year"))
+    collection = get_school_year_enrollment_collection(enrollment_school_year)
 
     if request.method == "GET":
-        student_doc = students.find_one({"_id": student_oid})
-        if not student_doc:
-            return api_error("Student not found.", 404)
-        return api_success({"student": normalize_student_doc(student_doc)})
+        return api_success({
+            "student": normalize_enrollment_doc(enrollment_doc),
+            "archived_view": enrollment_school_year != get_current_school_year_label(),
+        })
 
     if not has_permission("students_write"):
         return api_error("Forbidden", 403)
 
-    if request.method == "DELETE":
-        result = students.delete_one({"_id": student_oid})
-        if result.deleted_count == 0:
-            return api_error("Student not found.", 404)
-        signal_data_change("students", "sections")
-        return api_success({"message": "Student deleted successfully."})
+    if enrollment_school_year != get_current_school_year_label():
+        return api_error("Archived school years are read-only.", 403, "school_year")
 
-    existing_doc = students.find_one({"_id": student_oid})
+    if request.method == "DELETE":
+        result = collection.delete_one({"_id": enrollment_oid})
+        if result.deleted_count == 0:
+            return api_error("Student record not found.", 404)
+        signal_data_change("students", "sections")
+        return api_success({"message": f"Student enrollment removed from School Year {enrollment_school_year}."})
+
+    student_ref_id = parse_student_oid(enrollment_doc.get("student_ref_id"))
+    existing_doc = students.find_one({"_id": student_ref_id}) if student_ref_id else None
     if not existing_doc:
-        return api_error("Student not found.", 404)
+        return api_error("Student profile not found.", 404)
 
     payload = request_payload()
-    student_data, err_message, err_field = sanitize_personal_student_payload(payload, existing_doc=existing_doc)
+    student_data, err_message, err_field = sanitize_personal_student_payload(
+        payload,
+        existing_doc=existing_doc,
+        school_year=enrollment_school_year,
+    )
     if err_message:
         return api_error(err_message, 400, err_field)
 
-    if students.count_documents(build_lrn_duplicate_query(student_data["lrn"], exclude_oid=student_oid)) > 0:
-        return api_error("LRN already exists.", 400, "lrn")
+    if student_data["lrn"] != normalize_lrn_value(existing_doc.get("lrn") or existing_doc.get("student_id")):
+        return api_error("LRN cannot be changed for an existing student profile.", 400, "lrn")
 
     try:
         upsert_manual_section(
             student_data.get("grade_level", ""),
             student_data.get("section", ""),
             created_by=session.get("admin", ""),
+            school_year=enrollment_school_year,
         )
     except ValueError as exc:
         return api_error(str(exc), 400, "section")
 
-    student_data["updated_at"] = now_iso()
-    try:
-        students.update_one({"_id": student_oid}, {"$set": student_data})
-    except DuplicateKeyError:
-        return api_error("LRN already exists.", 400, "lrn")
+    student_update = {
+        "name": student_data.get("name", existing_doc.get("name", "")),
+        "gender": student_data.get("gender", existing_doc.get("gender", "")),
+        "sex": student_data.get("gender", existing_doc.get("sex", "")),
+        "parent_contact": student_data.get("parent_contact", existing_doc.get("parent_contact", "")),
+        "grade_level": student_data.get("grade_level", existing_doc.get("grade_level", "")),
+        "grade": student_data.get("grade_level", existing_doc.get("grade", "")),
+        "section": student_data.get("section", existing_doc.get("section", "")),
+        "status": student_data.get("status", existing_doc.get("status", "Active")),
+        "updated_at": now_iso(),
+    }
+    students.update_one({"_id": existing_doc["_id"]}, {"$set": student_update})
+    sync_student_base_fields_to_enrollments(students.find_one({"_id": existing_doc["_id"]}) or existing_doc)
+    updated_doc = upsert_student_enrollment(
+        students.find_one({"_id": existing_doc["_id"]}) or existing_doc,
+        enrollment_school_year,
+        grade_level=student_data.get("grade_level", ""),
+        section=student_data.get("section", ""),
+        status=student_data.get("status", "Active"),
+        update_existing=True,
+    )
     signal_data_change("students")
-    updated_doc = students.find_one({"_id": student_oid})
     return api_success({
-        "message": "Student updated successfully.",
-        "student": normalize_student_doc(updated_doc),
+        "message": f"Student enrollment updated for School Year {enrollment_school_year}.",
+        "student": normalize_enrollment_doc(updated_doc),
     })
 
 
@@ -5984,19 +7934,29 @@ def api_students_item(id):
 @require_permission("students_read", api=True)
 def api_sections():
     if request.method == "GET":
+        school_year_label = resolve_selected_school_year(request.args.get("school_year", ""))
         grade_filter = request.args.get("grade", "").strip() or request.args.get("grade_level", "").strip()
         return api_success({
-            "sections_by_grade": build_sections_by_grade(grade_filter),
+            "school_year": school_year_label,
+            "sections_by_grade": build_sections_by_grade(grade_filter, school_year=school_year_label),
         })
 
     if not has_permission("students_write"):
         return api_error("Forbidden", 403)
 
     payload = request_payload()
+    school_year_label = resolve_selected_school_year(payload.get("school_year", ""))
+    if school_year_label != get_current_school_year_label():
+        return api_error("Archived school years are read-only.", 403, "school_year")
     grade_value = str(payload.get("grade", payload.get("grade_level", "")) or "").strip()
     section_value = payload.get("section", "")
     try:
-        section_doc = upsert_manual_section(grade_value, section_value, created_by=session.get("admin", ""))
+        section_doc = upsert_manual_section(
+            grade_value,
+            section_value,
+            created_by=session.get("admin", ""),
+            school_year=school_year_label,
+        )
     except ValueError as exc:
         message = str(exc)
         field = "grade" if "grade" in message.lower() else "section"
@@ -6004,14 +7964,17 @@ def api_sections():
 
     return api_success({
         "message": "Section saved successfully.",
+        "school_year": school_year_label,
         "section": section_doc,
-        "sections_by_grade": build_sections_by_grade(),
+        "sections_by_grade": build_sections_by_grade(school_year=school_year_label),
     })
 
 
 @app.route("/api/sections/stats", methods=["GET"])
 @require_permission("students_read", api=True)
 def api_sections_stats():
+    school_year_label = resolve_selected_school_year(request.args.get("school_year", ""))
+    collection = get_school_year_enrollment_collection(school_year_label)
     grade_value = request.args.get("grade", "").strip() or request.args.get("grade_level", "").strip()
     section_value = normalize_section_value(request.args.get("section", ""))
 
@@ -6025,7 +7988,7 @@ def api_sections_stats():
         return api_error("Invalid grade level.", 400, "grade")
 
     section_clause = {"section": section_value}
-    base_conditions = [grade_clause, section_clause]
+    base_conditions = [{"school_year": school_year_label}, grade_clause, section_clause]
     base_query = {"$and": base_conditions}
 
     male_values = ["Male", "male", "M", "m"]
@@ -6048,12 +8011,13 @@ def api_sections_stats():
     }
 
     return api_success({
+        "school_year": school_year_label,
         "grade_level": grade_level,
         "section": section_value,
         "stats": {
-            "total": students.count_documents(base_query),
-            "male": students.count_documents(male_query),
-            "female": students.count_documents(female_query),
+            "total": collection.count_documents(base_query),
+            "male": collection.count_documents(male_query),
+            "female": collection.count_documents(female_query),
         },
     })
 
@@ -6062,6 +8026,10 @@ def api_sections_stats():
 @require_permission("students_write", api=True)
 def api_sections_clear_students():
     payload = request_payload()
+    school_year_label = resolve_selected_school_year(payload.get("school_year", ""))
+    collection = get_school_year_enrollment_collection(school_year_label)
+    if school_year_label != get_current_school_year_label():
+        return api_error("Archived school years are read-only.", 403, "school_year")
     grade_value = str(payload.get("grade", payload.get("grade_level", "")) or "").strip()
     section_value = normalize_section_value(payload.get("section", ""))
 
@@ -6074,8 +8042,8 @@ def api_sections_clear_students():
     if not grade_clause:
         return api_error("Invalid grade level.", 400, "grade")
 
-    query = {"$and": [grade_clause, {"section": section_value}]}
-    update_result = students.update_many(
+    query = {"$and": [{"school_year": school_year_label}, grade_clause, {"section": section_value}]}
+    update_result = collection.update_many(
         query,
         {
             "$set": {
@@ -6088,8 +8056,9 @@ def api_sections_clear_students():
         signal_data_change("students", "sections")
 
     return api_success({
-        "message": f"Removed {update_result.modified_count} student(s) from {grade_level} - {section_value}.",
+        "message": f"Removed {update_result.modified_count} student(s) from {grade_level} - {section_value} for School Year {school_year_label}.",
         "removed_count": int(update_result.modified_count),
+        "school_year": school_year_label,
         "grade_level": grade_level,
         "section": section_value,
     })
@@ -6121,9 +8090,10 @@ def save_face_registration(student_id, is_update=False):
     }
     students.update_one({"_id": student_oid}, {"$set": update_doc})
     refresh_scan_face_index_if_active()
-    signal_data_change("students")
-
     saved_doc = students.find_one({"_id": student_oid})
+    if saved_doc:
+        sync_student_base_fields_to_enrollments(saved_doc)
+    signal_data_change("students")
     message = "Face registration updated successfully." if is_update else "Face registered successfully."
     return api_success({"message": message, "student": normalize_student_doc(saved_doc)})
 
@@ -6155,7 +8125,8 @@ def delete_student(id):
 # =====================================
 # LOG ROUTES
 # =====================================
-def build_gate_logs_query(args):
+def build_gate_logs_query(args, school_year=""):
+    school_year_label = resolve_selected_school_year(school_year or args.get("school_year", ""))
     q = args.get("q", "").strip()
     start_date = args.get("start_date", "").strip()
     end_date = args.get("end_date", "").strip()
@@ -6163,7 +8134,7 @@ def build_gate_logs_query(args):
     session_filter = args.get("session", "").strip().upper()
     sort_by = args.get("sort", "newest").strip()
 
-    query = {}
+    query = {"school_year": school_year_label}
     q_regex = contains_regex_filter(q)
     if q_regex:
         query["$or"] = [
@@ -6189,6 +8160,7 @@ def build_gate_logs_query(args):
     sort_spec = [("timestamp", -1)] if sort_by != "oldest" else [("timestamp", 1)]
 
     filters_payload = {
+        "school_year": school_year_label,
         "q": q,
         "start_date": start_date,
         "end_date": end_date,
@@ -6196,7 +8168,7 @@ def build_gate_logs_query(args):
         "session": session_filter,
         "sort": sort_by,
     }
-    return query, sort_spec, filters_payload
+    return query, sort_spec, filters_payload, school_year_label
 
 
 def build_student_photo_map(student_ids):
@@ -6219,14 +8191,15 @@ def build_student_photo_map(student_ids):
     return photo_map
 
 
-def build_sms_logs_query(args):
+def build_sms_logs_query(args, school_year=""):
+    school_year_label = resolve_selected_school_year(school_year or args.get("school_year", ""))
     q = args.get("q", "").strip()
     start_date = args.get("start_date", "").strip()
     end_date = args.get("end_date", "").strip()
     status_filter = args.get("status", "").strip()
     sort_by = args.get("sort", "newest").strip()
 
-    query = {}
+    query = {"school_year": school_year_label}
     q_regex = contains_regex_filter(q)
     if q_regex:
         query["$or"] = [
@@ -6249,19 +8222,83 @@ def build_sms_logs_query(args):
     sort_spec = [("timestamp", -1)] if sort_by != "oldest" else [("timestamp", 1)]
 
     filters_payload = {
+        "school_year": school_year_label,
         "q": q,
         "start_date": start_date,
         "end_date": end_date,
         "status": status_filter,
         "sort": sort_by,
     }
-    return query, sort_spec, filters_payload
+    return query, sort_spec, filters_payload, school_year_label
+
+
+def build_gate_logs_summary_rows(rows):
+    summary = {
+        "Total Entries": len(rows),
+        "IN Logs": 0,
+        "OUT Logs": 0,
+        "Present": 0,
+        "Late": 0,
+        "Absent": 0,
+    }
+    extra_statuses = {}
+
+    for row in rows:
+        gate_action = str(row.get("gate_action") or "").strip().upper()
+        if gate_action == "IN":
+            summary["IN Logs"] += 1
+        elif gate_action == "OUT":
+            summary["OUT Logs"] += 1
+
+        status = str(row.get("status") or "").strip().title()
+        if status in {"Present", "Late", "Absent"}:
+            summary[status] += 1
+        elif status:
+            extra_statuses[status] = extra_statuses.get(status, 0) + 1
+
+    ordered = [(label, count) for label, count in summary.items()]
+    for status_label in sorted(extra_statuses.keys()):
+        ordered.append((status_label, extra_statuses[status_label]))
+    return ordered
+
+
+def build_sms_logs_summary_rows(rows):
+    summary = {
+        "Total Logs": len(rows),
+        "Sent": 0,
+        "Failed": 0,
+        "Queued": 0,
+        "Sending": 0,
+        "Skipped": 0,
+    }
+    extra_statuses = {}
+
+    for row in rows:
+        status_raw = str(row.get("status") or "").strip()
+        status_key = status_raw.lower()
+        if status_key == "sent":
+            summary["Sent"] += 1
+        elif status_key == "failed":
+            summary["Failed"] += 1
+        elif status_key == "queued":
+            summary["Queued"] += 1
+        elif status_key == "sending":
+            summary["Sending"] += 1
+        elif status_key == "skipped":
+            summary["Skipped"] += 1
+        elif status_raw:
+            extra_statuses[status_raw.title()] = extra_statuses.get(status_raw.title(), 0) + 1
+
+    ordered = [(label, count) for label, count in summary.items()]
+    for status_label in sorted(extra_statuses.keys()):
+        ordered.append((status_label, extra_statuses[status_label]))
+    return ordered
 
 
 @app.route("/gate-logs")
 @require_permission("logs")
 def gate_logs_page():
-    query, sort_spec, filters_payload = build_gate_logs_query(request.args)
+    query, sort_spec, filters_payload, selected_school_year = build_gate_logs_query(request.args)
     try:
         page = max(int(request.args.get("page", "1")), 1)
     except ValueError:
@@ -6305,73 +8342,137 @@ def gate_logs_page():
         filters=filters_payload,
         pagination=pagination,
         export_query=urlencode({k: v for k, v in filters_payload.items() if v not in ("", None)}),
-        **sidebar_context("gate_logs"),
+        **sidebar_context("gate_logs", selected_school_year),
     )
 
 
 @app.route("/gate-logs/export")
 @require_permission("logs")
 def gate_logs_export():
-    query, sort_spec, _filters_payload = build_gate_logs_query(request.args)
+    query, sort_spec, filters_payload, selected_school_year = build_gate_logs_query(request.args)
     rows = list(attendance_logs.find(query).sort(sort_spec).limit(5000))
-
-    def excel_text(value):
-        text = str(value or "")
-        text = text.replace("\r\n", "\n").replace("\r", "\n")
-        escaped = text.replace('"', '""')
-        return f'="{escaped}"'
-
-    output = StringIO(newline="")
-    writer = csv.writer(
-        output,
-        delimiter=",",
-        quotechar='"',
-        quoting=csv.QUOTE_ALL,
-        lineterminator="\r\n",
+    generated_at_label = now_local().strftime("%B %d, %Y %I:%M:%S %p")
+    metadata_items = [
+        ("Generated At", generated_at_label),
+        ("School Year", selected_school_year),
+        ("Total Records", len(rows)),
+        ("Search Query", filters_payload.get("q") or "All records"),
+        ("Date Range", format_export_date_range_label(filters_payload.get("start_date"), filters_payload.get("end_date"))),
+        ("Status", filters_payload.get("status") or "All statuses"),
+        ("Gate Action", filters_payload.get("session") or "All actions"),
+        ("Sort Order", format_export_sort_label(filters_payload.get("sort"))),
+    ]
+    buffer, doc, story, styles = build_school_export_document(
+        document_title="Official Gate Logs Report",
+        header_caption="Gate Logs Export",
+        metadata_items=metadata_items,
+        footer_title="Cawitan High School Gate Logs Export",
+        export_subject="Gate logs export",
     )
-    writer.writerow(["sep=,"])
-    writer.writerow([
-        "Log ID",
-        "Student ID",
-        "Name",
-        "Date",
-        "Time",
-        "Action",
-        "Session",
-        "Status",
-        "Verification Label",
-        "Source",
-        "Timestamp",
-    ])
-    for row in rows:
-        writer.writerow([
-            excel_text(row.get("_id", "")),
-            excel_text(row.get("student_id", "")),
-            row.get("student_name", ""),
-            excel_text(row.get("date", "")),
-            excel_text(row.get("time", "")),
-            row.get("gate_action", ""),
-            row.get("session", ""),
-            row.get("status", ""),
-            row.get("verification_label", ""),
-            row.get("source", ""),
-            excel_text(row.get("timestamp", "")),
-        ])
 
-    filename = f"gate_logs_{now_local().strftime('%Y%m%d_%H%M%S')}.csv"
-    csv_bytes = output.getvalue().encode("utf-8-sig")
-    return Response(
-        csv_bytes,
-        mimetype="text/csv; charset=utf-8",
-        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    append_school_export_section_title(story, "Gate Log Summary", styles)
+    summary_data = [[
+        Paragraph("Metric", styles["table_header"]),
+        Paragraph("Count", styles["table_header"]),
+    ]]
+    for label, count in build_gate_logs_summary_rows(rows):
+        summary_data.append([
+            Paragraph(xml_escape(str(label)), styles["table_cell"]),
+            Paragraph(xml_escape(str(count)), styles["table_cell_center"]),
+        ])
+    if len(summary_data) == 1:
+        summary_data.append([
+            Paragraph("No gate log summary available.", styles["table_cell"]),
+            "",
+        ])
+    story.append(build_school_export_table(
+        summary_data,
+        col_widths=[6.6 * inch, 2.4 * inch],
+        styles=styles,
+        span_empty_row=len(summary_data) == 2 and not rows,
+    ))
+
+    story.append(Spacer(1, 0.22 * inch))
+    append_school_export_section_title(story, "Gate Log Records", styles)
+    gate_table_data = [[
+        Paragraph("Log ID", styles["table_header"]),
+        Paragraph("Student ID", styles["table_header"]),
+        Paragraph("Name", styles["table_header"]),
+        Paragraph("Date", styles["table_header"]),
+        Paragraph("Time", styles["table_header"]),
+        Paragraph("Action", styles["table_header"]),
+        Paragraph("Session", styles["table_header"]),
+        Paragraph("Status", styles["table_header"]),
+        Paragraph("Verification Label", styles["table_header"]),
+        Paragraph("Source", styles["table_header"]),
+        Paragraph("Timestamp", styles["table_header"]),
+    ]]
+    for row in rows:
+        gate_table_data.append([
+            Paragraph(xml_escape(str(row.get("_id") or "N/A")), styles["table_cell"]),
+            Paragraph(xml_escape(str(row.get("student_id") or "N/A")), styles["table_cell"]),
+            Paragraph(xml_escape(str(row.get("student_name") or "N/A")), styles["table_cell"]),
+            Paragraph(xml_escape(str(row.get("date") or "N/A")), styles["table_cell_center"]),
+            Paragraph(xml_escape(str(row.get("time") or "N/A")), styles["table_cell_center"]),
+            Paragraph(xml_escape(str(row.get("gate_action") or "N/A")), styles["table_cell_center"]),
+            Paragraph(xml_escape(str(row.get("session") or "N/A")), styles["table_cell_center"]),
+            Paragraph(xml_escape(str(row.get("status") or "N/A")), styles["table_cell_center"]),
+            Paragraph(xml_escape(str(row.get("verification_label") or "N/A")), styles["table_cell"]),
+            Paragraph(xml_escape(str(row.get("source") or "System")), styles["table_cell"]),
+            Paragraph(format_students_export_timestamp(row.get("timestamp"), multiline=True), styles["table_cell_center"]),
+        ])
+    if len(gate_table_data) == 1:
+        gate_table_data.append([
+            Paragraph("No gate log records matched the selected filters.", styles["table_cell"]),
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+        ])
+    story.append(build_school_export_table(
+        gate_table_data,
+        col_widths=[
+            0.78 * inch,
+            0.82 * inch,
+            1.25 * inch,
+            0.68 * inch,
+            0.52 * inch,
+            0.52 * inch,
+            0.55 * inch,
+            0.60 * inch,
+            0.86 * inch,
+            0.55 * inch,
+            1.87 * inch,
+        ],
+        styles=styles,
+        span_empty_row=len(gate_table_data) == 2 and not rows,
+    ))
+    story.append(build_school_export_footer_block(styles))
+
+    doc.build(story, onFirstPage=build_school_export_footer, onLaterPages=build_school_export_footer)
+    buffer.seek(0)
+
+    filename = f"gate_logs_{now_local().strftime('%Y%m%d_%H%M%S')}.pdf"
+    return send_file(
+        buffer,
+        as_attachment=True,
+        download_name=filename,
+        mimetype="application/pdf",
     )
 
 
 @app.route("/api/gate-logs/latest")
 @require_permission("logs", api=True)
 def gate_logs_latest():
+    school_year_label = resolve_selected_school_year(request.args.get("school_year", ""))
     since_id = request.args.get("since_id", "").strip()
-    query = {}
+    query = {"school_year": school_year_label}
     if since_id:
         try:
             query["_id"] = {"$gt": ObjectId(since_id)}
@@ -6399,12 +8500,13 @@ def gate_logs_latest():
             "profile_photo": photo_map.get(str(student_id).strip(), ""),
         })
 
-    return jsonify({"status": "ok", "logs": payload})
+    return jsonify({"status": "ok", "school_year": school_year_label, "logs": payload})
 
 
 @app.route("/api/gate-logs/corrections", methods=["GET", "POST"])
 @require_permission("logs", api=True)
 def gate_logs_corrections_api():
+    school_year_label = resolve_selected_school_year(request.args.get("school_year", ""))
     if request.method == "GET":
         status_filter = (request.args.get("status", "pending") or "").strip().lower()
         mine_only = (request.args.get("mine", "") or "").strip().lower() in {"1", "true", "yes"}
@@ -6414,7 +8516,7 @@ def gate_logs_corrections_api():
             limit_value = 20
         limit_value = max(1, min(limit_value, 100))
 
-        query = {}
+        query = {"school_year": school_year_label}
         if status_filter and status_filter != "all":
             query["status"] = status_filter
 
@@ -6425,8 +8527,8 @@ def gate_logs_corrections_api():
 
         docs = list(attendance_corrections.find(query).sort("requestedAt", -1).limit(limit_value))
         rows = [serialize_attendance_correction(doc) for doc in docs]
-        pending_count = attendance_corrections.count_documents({"status": "pending"})
-        return jsonify({"status": "ok", "rows": rows, "pending_count": pending_count})
+        pending_count = attendance_corrections.count_documents({"school_year": school_year_label, "status": "pending"})
+        return jsonify({"status": "ok", "school_year": school_year_label, "rows": rows, "pending_count": pending_count})
 
     payload = request.get_json(silent=True) or {}
     log_id = str(payload.get("log_id") or "").strip()
@@ -6462,6 +8564,7 @@ def gate_logs_corrections_api():
     now_utc = _now_utc()
     correction_doc = {
         "attendance_log_id": str(log_oid),
+        "school_year": normalize_school_year_value(row.get("school_year")) or derive_school_year_label_from_value(row.get("date")),
         "student_id": str(row.get("student_id") or ""),
         "student_name": str(row.get("student_name") or ""),
         "log_timestamp": str(row.get("timestamp") or ""),
@@ -6485,7 +8588,11 @@ def gate_logs_corrections_api():
         "info",
         f"Correction requested for {correction_doc['student_name'] or correction_doc['student_id']}.",
         "attendance",
-        {"attendance_log_id": str(log_oid), "requested_status": requested_status},
+        {
+            "attendance_log_id": str(log_oid),
+            "requested_status": requested_status,
+            "school_year": correction_doc.get("school_year", ""),
+        },
     )
     log_audit_event(
         action="gate_log.correction_requested",
@@ -6565,7 +8672,11 @@ def gate_logs_correction_review_api(correction_id):
         "info",
         f"Correction {decision}d for {correction.get('student_name') or correction.get('student_id')}.",
         "attendance",
-        {"attendance_log_id": attendance_log_id, "decision": decision},
+        {
+            "attendance_log_id": attendance_log_id,
+            "decision": decision,
+            "school_year": normalize_school_year_value(correction.get("school_year")),
+        },
     )
     log_audit_event(
         action="gate_log.correction_reviewed",
@@ -6627,6 +8738,7 @@ def simulate_gate(student_id):
     now = now_local()
     date_str = now.strftime("%Y-%m-%d")
     time_str = now.strftime("%H:%M:%S")
+    school_year_label = derive_school_year_label_from_value(date_str) or get_current_school_year_label()
     session_info = resolve_gate_session(now)
     status = session_info["status"]
     gate_action = session_info["gate_action"]
@@ -6645,6 +8757,7 @@ def simulate_gate(student_id):
         attendance_logs.insert_one({
             "student_id": student.get("student_id", ""),
             "student_name": student.get("name", ""),
+            "school_year": school_year_label,
             "status": status,
             "session": session_name,
             "source": "manual_simulation",
@@ -6674,7 +8787,7 @@ def simulate_gate(student_id):
 @app.route("/sms-logs")
 @require_permission("logs")
 def sms_logs_page():
-    query, sort_spec, filters_payload = build_sms_logs_query(request.args)
+    query, sort_spec, filters_payload, selected_school_year = build_sms_logs_query(request.args)
     try:
         page = max(int(request.args.get("page", "1")), 1)
     except ValueError:
@@ -6719,7 +8832,7 @@ def sms_logs_page():
         filters=filters_payload,
         pagination=pagination,
         export_query=urlencode({k: v for k, v in filters_payload.items() if v not in ("", None)}),
-        **sidebar_context("sms_logs"),
+        **sidebar_context("sms_logs", selected_school_year),
     )
 
 
@@ -6783,47 +8896,116 @@ def sms_logs_template_update():
 @app.route("/sms-logs/export")
 @require_permission("logs")
 def sms_logs_export():
-    query, sort_spec, _filters_payload = build_sms_logs_query(request.args)
+    query, sort_spec, filters_payload, selected_school_year = build_sms_logs_query(request.args)
     rows = list(sms_logs.find(query).sort(sort_spec).limit(5000))
-
-    def excel_text(value):
-        # Force Excel to keep identifiers/date-like values as text (no scientific notation/date coercion).
-        text = str(value or "")
-        text = text.replace("\r\n", "\n").replace("\r", "\n")
-        escaped = text.replace('"', '""')
-        return f'="{escaped}"'
-
-    output = StringIO(newline="")
-    writer = csv.writer(
-        output,
-        delimiter=",",
-        quotechar='"',
-        quoting=csv.QUOTE_ALL,
-        lineterminator="\r\n",
+    generated_at_label = now_local().strftime("%B %d, %Y %I:%M:%S %p")
+    metadata_items = [
+        ("Generated At", generated_at_label),
+        ("School Year", selected_school_year),
+        ("Total Records", len(rows)),
+        ("Search Query", filters_payload.get("q") or "All records"),
+        ("Date Range", format_export_date_range_label(filters_payload.get("start_date"), filters_payload.get("end_date"))),
+        ("Status", filters_payload.get("status") or "All statuses"),
+        ("Sort Order", format_export_sort_label(filters_payload.get("sort"))),
+    ]
+    buffer, doc, story, styles = build_school_export_document(
+        document_title="Official SMS Logs Report",
+        header_caption="SMS Logs Export",
+        metadata_items=metadata_items,
+        footer_title="Cawitan High School SMS Logs Export",
+        export_subject="SMS logs export",
     )
-    # Excel delimiter hint for locales that default to semicolon-separated CSV.
-    writer.writerow(["sep=,"])
-    writer.writerow(["Student ID", "Name", "Parent Contact", "Date", "Time", "Status", "Message", "SID", "Error", "Timestamp"])
-    for row in rows:
-        writer.writerow([
-            excel_text(row.get("student_id", "")),
-            row.get("name", ""),
-            excel_text(row.get("parent_contact", "")),
-            excel_text(row.get("date", "")),
-            excel_text(row.get("time", "")),
-            row.get("status", ""),
-            row.get("message", ""),
-            excel_text(row.get("sid", "")),
-            row.get("error", ""),
-            excel_text(row.get("timestamp", "")),
-        ])
 
-    filename = f"sms_logs_{now_local().strftime('%Y%m%d_%H%M%S')}.csv"
-    csv_bytes = output.getvalue().encode("utf-8-sig")
-    return Response(
-        csv_bytes,
-        mimetype="text/csv; charset=utf-8",
-        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    append_school_export_section_title(story, "SMS Delivery Summary", styles)
+    summary_data = [[
+        Paragraph("Metric", styles["table_header"]),
+        Paragraph("Count", styles["table_header"]),
+    ]]
+    for label, count in build_sms_logs_summary_rows(rows):
+        summary_data.append([
+            Paragraph(xml_escape(str(label)), styles["table_cell"]),
+            Paragraph(xml_escape(str(count)), styles["table_cell_center"]),
+        ])
+    if len(summary_data) == 1:
+        summary_data.append([
+            Paragraph("No SMS summary available.", styles["table_cell"]),
+            "",
+        ])
+    story.append(build_school_export_table(
+        summary_data,
+        col_widths=[6.6 * inch, 2.4 * inch],
+        styles=styles,
+        span_empty_row=len(summary_data) == 2 and not rows,
+    ))
+
+    story.append(Spacer(1, 0.22 * inch))
+    append_school_export_section_title(story, "SMS Log Records", styles)
+    sms_table_data = [[
+        Paragraph("Student ID", styles["table_header"]),
+        Paragraph("Name", styles["table_header"]),
+        Paragraph("Parent Contact", styles["table_header"]),
+        Paragraph("Date", styles["table_header"]),
+        Paragraph("Time", styles["table_header"]),
+        Paragraph("Status", styles["table_header"]),
+        Paragraph("Message", styles["table_header"]),
+        Paragraph("SID", styles["table_header"]),
+        Paragraph("Error", styles["table_header"]),
+        Paragraph("Timestamp", styles["table_header"]),
+    ]]
+    for row in rows:
+        sms_table_data.append([
+            Paragraph(xml_escape(str(row.get("student_id") or "N/A")), styles["table_cell"]),
+            Paragraph(xml_escape(str(row.get("name") or "N/A")), styles["table_cell"]),
+            Paragraph(xml_escape(str(row.get("parent_contact") or "N/A")), styles["table_cell"]),
+            Paragraph(xml_escape(str(row.get("date") or "N/A")), styles["table_cell_center"]),
+            Paragraph(xml_escape(str(row.get("time") or "N/A")), styles["table_cell_center"]),
+            Paragraph(xml_escape(str(row.get("status") or "N/A").title()), styles["table_cell_center"]),
+            Paragraph(xml_escape(str(row.get("message") or "N/A")), styles["table_cell"]),
+            Paragraph(xml_escape(str(row.get("sid") or "N/A")), styles["table_cell"]),
+            Paragraph(xml_escape(str(row.get("error") or "N/A")), styles["table_cell"]),
+            Paragraph(format_students_export_timestamp(row.get("timestamp"), multiline=True), styles["table_cell_center"]),
+        ])
+    if len(sms_table_data) == 1:
+        sms_table_data.append([
+            Paragraph("No SMS log records matched the selected filters.", styles["table_cell"]),
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+        ])
+    story.append(build_school_export_table(
+        sms_table_data,
+        col_widths=[
+            0.82 * inch,
+            1.18 * inch,
+            0.90 * inch,
+            0.66 * inch,
+            0.52 * inch,
+            0.68 * inch,
+            1.60 * inch,
+            0.65 * inch,
+            0.85 * inch,
+            1.14 * inch,
+        ],
+        styles=styles,
+        span_empty_row=len(sms_table_data) == 2 and not rows,
+    ))
+    story.append(build_school_export_footer_block(styles))
+
+    doc.build(story, onFirstPage=build_school_export_footer, onLaterPages=build_school_export_footer)
+    buffer.seek(0)
+
+    filename = f"sms_logs_{now_local().strftime('%Y%m%d_%H%M%S')}.pdf"
+    return send_file(
+        buffer,
+        as_attachment=True,
+        download_name=filename,
+        mimetype="application/pdf",
     )
 
 
@@ -6848,7 +9030,11 @@ def sms_logs_resend(id):
         parent_contact,
         message,
         sms_type=original.get("type", "transactional"),
-        metadata={"context": "sms_resend", "resent_from": str(original.get("_id"))},
+        metadata={
+            "context": "sms_resend",
+            "resent_from": str(original.get("_id")),
+            "school_year": normalize_school_year_value(original.get("school_year")),
+        },
         student_id=original.get("student_id", ""),
         student_name=original.get("name", ""),
         parent_contact=parent_contact,
@@ -6863,7 +9049,11 @@ def sms_logs_resend(id):
             level="high",
             message=f"Failed SMS resend for {original.get('name', original.get('student_id', 'Unknown'))}.",
             category="sms",
-            meta={"student_id": original.get("student_id", ""), "error": sms_error},
+            meta={
+                "student_id": original.get("student_id", ""),
+                "error": sms_error,
+                "school_year": normalize_school_year_value(original.get("school_year")),
+            },
         )
         log_audit_event(
             action="sms.resend",
@@ -6899,21 +9089,37 @@ def sms_logs_resend(id):
 @app.route("/analytics")
 @require_permission("analytics")
 def analytics():
+    selected_school_year = resolve_selected_school_year(request.args.get("school_year", ""))
     today = now_local().date()
+    school_year_start, school_year_end = school_year_date_bounds(selected_school_year)
+    range_anchor = today
+    if school_year_start and school_year_end:
+        if range_anchor < school_year_start:
+            range_anchor = school_year_start
+        elif range_anchor > school_year_end:
+            range_anchor = school_year_end
+
     range_type = request.args.get("range", "month").strip().lower()
 
     if range_type == "week":
-        start_date = today - timedelta(days=6)
-        end_date = today
+        start_date = range_anchor - timedelta(days=6)
+        end_date = range_anchor
     elif range_type == "custom":
-        start_date = parse_date_or_none(request.args.get("start_date")) or (today - timedelta(days=29))
-        end_date = parse_date_or_none(request.args.get("end_date")) or today
+        start_date = parse_date_or_none(request.args.get("start_date")) or (range_anchor - timedelta(days=29))
+        end_date = parse_date_or_none(request.args.get("end_date")) or range_anchor
         if start_date > end_date:
             start_date, end_date = end_date, start_date
     else:
         range_type = "month"
-        start_date = today - timedelta(days=29)
-        end_date = today
+        start_date = range_anchor - timedelta(days=29)
+        end_date = range_anchor
+
+    if school_year_start and start_date < school_year_start:
+        start_date = school_year_start
+    if school_year_end and end_date > school_year_end:
+        end_date = school_year_end
+    if start_date > end_date:
+        start_date = end_date
 
     labels = []
     cursor = start_date
@@ -6921,12 +9127,20 @@ def analytics():
         labels.append(cursor.strftime("%Y-%m-%d"))
         cursor += timedelta(days=1)
 
+    start_str = start_date.strftime("%Y-%m-%d")
+    end_str = end_date.strftime("%Y-%m-%d")
     attendance_pipeline = [
-        {"$match": {"date": {"$gte": start_date.strftime("%Y-%m-%d"), "$lte": end_date.strftime("%Y-%m-%d")}}},
+        {"$match": {"school_year": selected_school_year, "date": {"$gte": start_str, "$lte": end_str}}},
         {"$group": {"_id": "$date", "count": {"$sum": 1}}},
     ]
     sms_pipeline = [
-        {"$match": {"date": {"$gte": start_date.strftime("%Y-%m-%d"), "$lte": end_date.strftime("%Y-%m-%d")}, "status": sms_status_mongo_filter("sent")}},
+        {
+            "$match": {
+                "school_year": selected_school_year,
+                "date": {"$gte": start_str, "$lte": end_str},
+                "status": sms_status_mongo_filter("sent"),
+            }
+        },
         {"$group": {"_id": "$date", "count": {"$sum": 1}}},
     ]
 
@@ -6939,14 +9153,14 @@ def analytics():
     total_sms_sent = sum(sms_series)
 
     today_str = today.strftime("%Y-%m-%d")
-    present_today_ids = set(attendance_logs.distinct("student_id", {"date": today_str}))
+    present_today_ids = set(attendance_logs.distinct("student_id", {"school_year": selected_school_year, "date": today_str}))
     present_today_count = len([sid for sid in present_today_ids if sid])
-    late_today_count = attendance_logs.count_documents({"date": today_str, "status": "Late"})
+    late_today_count = attendance_logs.count_documents({"school_year": selected_school_year, "date": today_str, "status": "Late"})
 
-    end_str = end_date.strftime("%Y-%m-%d")
-    total_students = students.count_documents({})
-    late_ids = set(attendance_logs.distinct("student_id", {"date": end_str, "status": "Late"}))
-    present_ids_all = set(attendance_logs.distinct("student_id", {"date": end_str}))
+    enrollment_collection = get_school_year_enrollment_collection(selected_school_year)
+    total_students = enrollment_collection.count_documents({"school_year": selected_school_year})
+    late_ids = set(attendance_logs.distinct("student_id", {"school_year": selected_school_year, "date": end_str, "status": "Late"}))
+    present_ids_all = set(attendance_logs.distinct("student_id", {"school_year": selected_school_year, "date": end_str}))
     present_ids = set([sid for sid in present_ids_all if sid]) - set([sid for sid in late_ids if sid])
     late_ids = set([sid for sid in late_ids if sid])
     absent_count = max(total_students - len(present_ids) - len(late_ids), 0)
@@ -6960,6 +9174,7 @@ def analytics():
     return render_template(
         "analytics.html",
         filters={
+            "school_year": selected_school_year,
             "range": range_type,
             "start_date": start_date.strftime("%Y-%m-%d"),
             "end_date": end_date.strftime("%Y-%m-%d"),
@@ -6975,22 +9190,8 @@ def analytics():
         sms_series=sms_series,
         attendance_distribution=attendance_distribution,
         grade_options=list(GRADE_LEVEL_OPTIONS),
-        ai_defaults={
-            "range": "7d" if range_type == "week" else "30d",
-            "change_mode": "custom_range" if range_type == "custom" else "today_vs_yesterday",
-        },
-        **sidebar_context("analytics"),
+        **sidebar_context("analytics", selected_school_year),
     )
-
-
-def analytics_collections():
-    return {
-        "students": students,
-        "attendance_logs": attendance_logs,
-        "sms_logs": sms_logs,
-        "alerts": alerts,
-        "failed_scans": failed_scans,
-    }
 
 
 @app.route("/api/analytics/scheduled-reports", methods=["GET", "POST"])
@@ -7382,156 +9583,6 @@ def analytics_anomaly_rule_evaluate_api(rule_id):
     return api_success(result)
 
 
-@app.route("/api/analytics/ai/insights", methods=["GET"])
-@require_permission("analytics", api=True)
-def api_analytics_ai_insights():
-    range_value = request.args.get("range", "7d").strip().lower()
-    grade_value = request.args.get("grade", "").strip()
-    section_value = request.args.get("section", "").strip()
-
-    if range_value not in SUPPORTED_INSIGHT_RANGES:
-        return api_error("Invalid range. Allowed values: today, 7d, 30d.", 400, "range")
-
-    try:
-        payload = get_ai_insights(
-            analytics_collections(),
-            range_key=range_value,
-            grade=grade_value,
-            section=section_value,
-        )
-        return api_success(payload)
-    except ValueError as exc:
-        return api_error(str(exc), 400)
-    except Exception as exc:
-        print(f"[ERROR] /api/analytics/ai/insights failed: {exc}")
-        return api_error("Failed to generate AI insights.", 500)
-
-
-@app.route("/api/analytics/ai/risk", methods=["GET"])
-@require_permission("analytics", api=True)
-def api_analytics_ai_risk():
-    target_value = request.args.get("target", "next_school_day").strip()
-    grade_value = request.args.get("grade", "").strip()
-    section_value = request.args.get("section", "").strip()
-    try:
-        limit_value = int(request.args.get("limit", "20"))
-    except (TypeError, ValueError):
-        limit_value = 20
-    try:
-        page_value = int(request.args.get("page", "1"))
-    except (TypeError, ValueError):
-        page_value = 1
-    try:
-        per_page_value = int(request.args.get("per_page", str(limit_value)))
-    except (TypeError, ValueError):
-        per_page_value = limit_value
-
-    if target_value not in SUPPORTED_RISK_TARGETS:
-        return api_error("Invalid target. Allowed values: next_school_day.", 400, "target")
-
-    try:
-        payload = get_risk_predictions(
-            analytics_collections(),
-            target=target_value,
-            limit=limit_value,
-            page=page_value,
-            per_page=per_page_value,
-            grade=grade_value,
-            section=section_value,
-        )
-        return api_success(payload)
-    except ValueError as exc:
-        return api_error(str(exc), 400)
-    except Exception as exc:
-        print(f"[ERROR] /api/analytics/ai/risk failed: {exc}")
-        return api_error("Failed to compute risk predictions.", 500)
-
-
-@app.route("/api/analytics/ai/changes", methods=["GET"])
-@require_permission("analytics", api=True)
-def api_analytics_ai_changes():
-    mode_value = request.args.get("mode", "today_vs_yesterday").strip()
-    start_value = request.args.get("start", "").strip()
-    end_value = request.args.get("end", "").strip()
-    grade_value = request.args.get("grade", "").strip()
-    section_value = request.args.get("section", "").strip()
-
-    if mode_value not in SUPPORTED_CHANGE_MODES and not (start_value and end_value):
-        return api_error(
-            "Invalid mode. Allowed values: today_vs_yesterday, week_vs_last_week, custom_range.",
-            400,
-            "mode",
-        )
-
-    try:
-        payload = get_change_explanations(
-            analytics_collections(),
-            mode=mode_value,
-            start=start_value,
-            end=end_value,
-            grade=grade_value,
-            section=section_value,
-        )
-        return api_success(payload)
-    except ValueError as exc:
-        return api_error(str(exc), 400)
-    except Exception as exc:
-        print(f"[ERROR] /api/analytics/ai/changes failed: {exc}")
-        return api_error("Failed to compute change explanation.", 500)
-
-
-@app.route("/api/analytics/ai/nlq", methods=["POST"])
-@require_permission("analytics", api=True)
-def api_analytics_ai_nlq():
-    payload = parse_json_payload()
-    query_text = str(payload.get("query", "")).strip()
-    grade_value = str(payload.get("grade", "")).strip()
-    section_value = str(payload.get("section", "")).strip()
-
-    if not query_text:
-        return api_error("Query is required.", 400, "query")
-
-    try:
-        result = run_nlq_query(
-            analytics_collections(),
-            query=query_text,
-            grade=grade_value,
-            section=section_value,
-            llm_enabled=AI_NLQ_LLM_ENABLED,
-        )
-        return api_success(result)
-    except ValueError as exc:
-        return api_error(str(exc), 400, "query")
-    except Exception as exc:
-        print(f"[ERROR] /api/analytics/ai/nlq failed: {exc}")
-        return api_error("Failed to process analytics query.", 500)
-
-
-@app.route("/api/analytics/ai/actions", methods=["GET"])
-@require_permission("analytics", api=True)
-def api_analytics_ai_actions():
-    range_value = request.args.get("range", "30d").strip().lower()
-    grade_value = request.args.get("grade", "").strip()
-    section_value = request.args.get("section", "").strip()
-
-    if range_value not in SUPPORTED_INSIGHT_RANGES:
-        return api_error("Invalid range. Allowed values: today, 7d, 30d.", 400, "range")
-
-    try:
-        payload = get_next_best_actions(
-            analytics_collections(),
-            range_key=range_value,
-            grade=grade_value,
-            section=section_value,
-        )
-        return api_success(payload)
-    except ValueError as exc:
-        return api_error(str(exc), 400)
-    except Exception as exc:
-        print(f"[ERROR] /api/analytics/ai/actions failed: {exc}")
-        return api_error("Failed to compute next best actions.", 500)
-
-
 # =====================================
 # TEST SMS
 # =====================================
@@ -7616,20 +9667,21 @@ def resolve_ssl_context():
 
 
 if __name__ == "__main__":
-    debug_mode = os.getenv("FLASK_DEBUG", "1").strip().lower() in {"1", "true", "yes", "on"}
+    debug_mode = FLASK_DEBUG_MODE
+    use_reloader = bool(debug_mode or DEV_AUTO_RELOAD)
     ssl_context = resolve_ssl_context()
 
     if not HTTPS_ENABLED:
         print("[WARNING] HTTPS_ENABLED=0. Browsers will block camera access on non-HTTPS origins (except localhost).")
 
     scheme = "https" if ssl_context else "http"
-    print(f"[INFO] Starting Flask server on {scheme}://{FLASK_HOST}:{FLASK_PORT} (debug={debug_mode})")
+    print(f"[INFO] Starting Flask server on {scheme}://{FLASK_HOST}:{FLASK_PORT} (debug={debug_mode}, auto_reload={use_reloader})")
 
     app.run(
         host=FLASK_HOST,
         port=FLASK_PORT,
         debug=debug_mode,
-        use_reloader=debug_mode,
+        use_reloader=use_reloader,
         ssl_context=ssl_context,
     )
 

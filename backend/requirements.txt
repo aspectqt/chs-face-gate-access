@@ -11,3 +11,4 @@ Pillow==12.1.1
 openpyxl==3.1.5
 requests==2.32.5
 setuptools<81
+reportlab==4.4.4

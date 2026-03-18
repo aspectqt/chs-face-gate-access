@@ -8,8 +8,6 @@
   <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon-16x16.png') }}">
   <script src="https://cdn.tailwindcss.com"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="{{ url_for('static', filename='chart_system.js', v='20260312a') }}"></script>
   {% include 'partials/theme_assets.html' %}
 </head>
 <body class="bg-slate-100 h-screen overflow-hidden text-slate-800" data-authenticated="1" data-user-theme="{{ current_theme|default('') }}" x-data="{ mobileMenuOpen: false }">
@@ -127,325 +125,117 @@
         </article>
       </section>
 
-      <section id="reports-charts" class="grid grid-cols-1 xl:grid-cols-12 gap-5">
-        <article class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 xl:col-span-8">
+      <section class="space-y-5">
+        <article class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
           <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
             <div>
               <h3 class="text-lg font-semibold text-slate-800">Daily Gate Entries</h3>
-              <p class="text-xs text-slate-500 mt-1">Day-by-day attendance trend for the selected range.</p>
+              <p class="text-xs text-slate-500 mt-1">Attendance flow from gate scans within the selected range.</p>
             </div>
-            <span class="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
-              {{ chart_labels|length }} Days
-            </span>
-          </div>
-          <div class="h-64"><canvas id="gateEntriesChart"></canvas></div>
-        </article>
-        <article class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 xl:col-span-4">
-          <h3 class="text-lg font-semibold text-slate-800">Attendance Distribution</h3>
-          <p class="text-xs text-slate-500 mt-1 mb-3">Present, absent, and late distribution snapshot.</p>
-          <div class="h-52"><canvas id="attendancePieChart"></canvas></div>
-          <div class="mt-3 grid grid-cols-3 gap-2 text-[11px]">
-            <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-center">
-              <p class="font-semibold text-emerald-700">{{ attendance_distribution.present }}</p>
-              <p class="text-emerald-700/80">Present</p>
-            </div>
-            <div class="rounded-lg border border-rose-200 bg-rose-50 px-2 py-1.5 text-center">
-              <p class="font-semibold text-rose-700">{{ attendance_distribution.absent }}</p>
-              <p class="text-rose-700/80">Absent</p>
-            </div>
-            <div class="rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-center">
-              <p class="font-semibold text-amber-700">{{ attendance_distribution.late }}</p>
-              <p class="text-amber-700/80">Late</p>
-            </div>
-          </div>
-        </article>
-        <article class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 xl:col-span-12">
-          <div class="flex items-start justify-between gap-3 mb-4">
-            <div>
-              <h3 class="text-lg font-semibold text-slate-800">SMS Logs Per Day</h3>
-              <p class="text-xs text-slate-500 mt-1">Notification delivery volume by date.</p>
-            </div>
-            <span class="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700">
-              {{ sms_series|sum }} Sent
-            </span>
-          </div>
-          <div class="h-56"><canvas id="smsBarChart"></canvas></div>
-        </article>
-      </section>
-
-      <section
-        id="aiAnalyticsModule"
-        class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 lg:p-5 space-y-5"
-        data-default-range="{{ ai_defaults.range }}"
-        data-default-change-mode="{{ ai_defaults.change_mode }}"
-        data-default-start="{{ filters.start_date }}"
-        data-default-end="{{ filters.end_date }}"
-      >
-        <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
-          <div>
-            <h2 class="text-xl font-semibold text-slate-800">AI Analytics</h2>
-            <p class="text-sm text-slate-500 mt-1">Insights, risk detection, and recommendations from attendance, gate logs, and SMS logs.</p>
-          </div>
-          <div class="grid grid-cols-1 sm:grid-cols-4 gap-2 w-full lg:w-auto">
-            <select id="aiRangeFilter" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
-              <option value="today">Today</option>
-              <option value="7d">Last 7 Days</option>
-              <option value="30d">Last 30 Days</option>
-            </select>
-            <select id="aiGradeFilter" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
-              <option value="">All Grades</option>
-              {% for grade in grade_options %}
-              <option value="{{ grade }}">{{ grade }}</option>
-              {% endfor %}
-            </select>
-            <input id="aiSectionFilter" type="text" placeholder="Section (e.g. A)" class="rounded-xl border border-slate-300 px-3 py-2 text-sm">
-            <button id="aiRefreshBtn" type="button" class="rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-900 transition">Refresh</button>
-          </div>
-        </div>
-
-        <div id="aiGlobalError" class="hidden rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700"></div>
-
-        <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
-          <article class="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 xl:col-span-2">
-            <div class="flex items-center justify-between gap-2 mb-3">
-              <h3 class="text-sm uppercase tracking-wide font-semibold text-slate-600">AI Insights</h3>
-              <span id="aiInsightsMeta" class="text-xs text-slate-500"></span>
-            </div>
-            <div id="aiInsightsList" class="space-y-2">
-              <div class="animate-pulse h-12 rounded-xl bg-slate-200"></div>
-              <div class="animate-pulse h-12 rounded-xl bg-slate-200"></div>
-              <div class="animate-pulse h-12 rounded-xl bg-slate-200"></div>
-            </div>
-          </article>
-
-          <article class="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-            <div class="flex items-center justify-between gap-2 mb-3">
-              <h3 class="text-sm uppercase tracking-wide font-semibold text-slate-600">What Changed?</h3>
-              <button id="aiCompareBtn" type="button" class="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100">Compare</button>
-            </div>
-            <div class="grid grid-cols-1 gap-2 mb-3">
-              <select id="aiChangesMode" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
-                <option value="today_vs_yesterday">Today vs Yesterday</option>
-                <option value="week_vs_last_week">This Week vs Last Week</option>
-                <option value="custom_range">Custom Range vs Previous</option>
-              </select>
-              <div class="grid grid-cols-2 gap-2">
-                <input id="aiChangesStart" type="date" class="rounded-xl border border-slate-300 px-3 py-2 text-sm">
-                <input id="aiChangesEnd" type="date" class="rounded-xl border border-slate-300 px-3 py-2 text-sm">
+            <div class="grid grid-cols-3 gap-2 text-xs">
+              <div class="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-center">
+                <p class="font-semibold text-slate-800">{{ gate_series|sum }}</p>
+                <p class="text-slate-500">Range Total</p>
+              </div>
+              <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-2 text-center">
+                <p class="font-semibold text-emerald-700">{{ stats.present_today }}</p>
+                <p class="text-emerald-700/80">Present Today</p>
+              </div>
+              <div class="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-center">
+                <p class="font-semibold text-amber-700">{{ stats.late_today }}</p>
+                <p class="text-amber-700/80">Late Today</p>
               </div>
             </div>
-            <div id="aiChangesSummary" class="grid grid-cols-1 gap-2 text-sm"></div>
-            <div id="aiChangesExplain" class="mt-3 space-y-1 text-xs text-slate-600"></div>
-          </article>
-        </div>
-
-        <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
-          <article class="rounded-2xl border border-slate-200 p-4 xl:col-span-2">
-            <div class="flex items-center justify-between gap-2 mb-3">
-              <h3 class="text-sm uppercase tracking-wide font-semibold text-slate-600">Early Warning - Next School Day Risk</h3>
-              <span id="aiRiskMeta" class="text-xs text-slate-500"></span>
-            </div>
-            <div class="overflow-x-auto">
-              <table class="min-w-full text-sm">
-                <thead class="bg-slate-900 text-white text-xs uppercase tracking-wide">
-                  <tr>
-                    <th class="px-3 py-2 text-left">Student ID</th>
-                    <th class="px-3 py-2 text-left">Name</th>
-                    <th class="px-3 py-2 text-left">Grade</th>
-                    <th class="px-3 py-2 text-left">Section</th>
-                    <th class="px-3 py-2 text-left">Risk Score</th>
-                    <th class="px-3 py-2 text-left">Reasons</th>
-                  </tr>
-                </thead>
-                <tbody id="aiRiskTableBody" class="divide-y divide-slate-200">
-                  <tr><td colspan="6" class="px-3 py-5 text-center text-slate-500">Loading risk predictions...</td></tr>
-                </tbody>
-              </table>
-            </div>
-            <div class="mt-3 flex items-center justify-between gap-2 border-t border-slate-200 pt-3">
-              <button id="aiRiskPrevBtn" type="button" class="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50">
-                Previous
-              </button>
-              <span id="aiRiskPageIndicator" class="text-xs font-medium text-slate-600">Page 1 of 1</span>
-              <button id="aiRiskNextBtn" type="button" class="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50">
-                Next
-              </button>
-            </div>
-          </article>
-
-          <article class="rounded-2xl border border-slate-200 p-4 space-y-3">
-            <h3 class="text-sm uppercase tracking-wide font-semibold text-slate-600">Quick Ask</h3>
-            <form id="aiAskForm" class="flex gap-2">
-              <input id="aiAskInput" type="text" placeholder="Ask analytics..." class="flex-1 rounded-xl border border-slate-300 px-3 py-2 text-sm">
-              <button type="submit" class="rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700">Ask</button>
-            </form>
-            <p class="text-xs text-slate-500">Try: "late trend for grade 9 this month", "sections with most absences last 2 weeks", "students with 3+ consecutive absences".</p>
-            <div id="aiAskStatus" class="text-xs text-slate-500"></div>
-            <div id="aiAskTableWrap" class="hidden overflow-x-auto rounded-xl border border-slate-200">
-              <table class="min-w-full text-xs">
-                <thead id="aiAskHead" class="bg-slate-100"></thead>
-                <tbody id="aiAskBody" class="divide-y divide-slate-100"></tbody>
-              </table>
-            </div>
-            <div id="aiAskChartWrap" class="hidden h-44">
-              <canvas id="aiAskChart"></canvas>
-            </div>
-          </article>
-        </div>
-
-        <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
-          <article class="rounded-2xl border border-slate-200 p-4 xl:col-span-2">
-            <h3 class="text-sm uppercase tracking-wide font-semibold text-slate-600 mb-3">Next Best Actions</h3>
-            <div id="aiActionsList" class="space-y-2">
-              <div class="animate-pulse h-11 rounded-xl bg-slate-200"></div>
-              <div class="animate-pulse h-11 rounded-xl bg-slate-200"></div>
-            </div>
-          </article>
-          <article class="rounded-2xl border border-slate-200 p-4">
-            <div class="flex items-center justify-between gap-2 mb-3">
-              <h3 class="text-sm uppercase tracking-wide font-semibold text-slate-600">Drilldown</h3>
-              <button id="aiClearDrilldown" type="button" class="text-xs font-semibold text-emerald-700 hover:underline">Clear</button>
-            </div>
-            <p id="aiDrilldownTitle" class="text-sm font-semibold text-slate-700 mb-2">No drilldown selected</p>
-            <div id="aiDrilldownWrap" class="overflow-x-auto">
-              <div id="aiDrilldownEmpty" class="text-xs text-slate-500">Use View buttons from insights/actions to open supporting data.</div>
-              <table id="aiDrilldownTable" class="min-w-full text-xs hidden">
-                <thead id="aiDrilldownHead" class="bg-slate-100"></thead>
-                <tbody id="aiDrilldownBody" class="divide-y divide-slate-100"></tbody>
-              </table>
-            </div>
-          </article>
-        </div>
-      </section>
-
-      <section id="phase2OpsModule" class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 lg:p-5 space-y-4">
-        <div class="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 class="text-lg font-semibold text-slate-800">Phase 2 Operations</h2>
-            <p class="text-xs text-slate-500 mt-1">Manage scheduled reports and anomaly detection rules connected to MongoDB.</p>
           </div>
-          <button id="phase2ReloadBtn" type="button" class="rounded-xl border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100">
-            Refresh
-          </button>
-        </div>
+          <div class="h-64">
+            <canvas id="gateEntriesChart"></canvas>
+          </div>
+        </article>
 
-        <div id="phase2OpsError" class="hidden rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700"></div>
-
-        <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
-          <article class="rounded-2xl border border-slate-200 p-4">
-            <div class="flex items-center justify-between gap-2 mb-3">
-              <h3 class="text-sm uppercase tracking-wide font-semibold text-slate-600">Scheduled Reports</h3>
-            </div>
-            <form id="scheduledReportForm" class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <input id="reportNameInput" type="text" placeholder="Report Name" class="rounded-xl border border-slate-300 px-3 py-2 text-sm sm:col-span-2" required>
-              <select id="reportFrequencyInput" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
-                <option value="daily">Daily</option>
-                <option value="weekly" selected>Weekly</option>
-                <option value="monthly">Monthly</option>
-              </select>
-              <input id="reportSendTimeInput" type="time" value="07:00" class="rounded-xl border border-slate-300 px-3 py-2 text-sm">
-              <input id="reportRecipientsInput" type="text" placeholder="Recipients (comma-separated emails)" class="rounded-xl border border-slate-300 px-3 py-2 text-sm sm:col-span-2" required>
-              <select id="reportGradeInput" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
-                <option value="">All Grades</option>
-                {% for grade in grade_options %}
-                <option value="{{ grade }}">{{ grade }}</option>
-                {% endfor %}
-              </select>
-              <input id="reportSectionInput" type="text" placeholder="Section (optional)" class="rounded-xl border border-slate-300 px-3 py-2 text-sm">
-              <label class="sm:col-span-2 inline-flex items-center gap-2 text-xs font-medium text-slate-600">
-                <input id="reportEnabledInput" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-emerald-600" checked>
-                Enabled
-              </label>
-              <button type="submit" class="sm:col-span-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700 transition">Create Scheduled Report</button>
-            </form>
-
-            <div class="mt-3 max-h-64 overflow-y-auto space-y-2 pr-1" id="scheduledReportsList">
-              <p class="text-sm text-slate-500">Loading scheduled reports...</p>
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
+          <article class="bg-white rounded-2xl border border-slate-200 shadow-sm lg:col-span-7 flex flex-col overflow-hidden relative">
+            <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-400 to-blue-600"></div>
+            <div class="p-5 flex-1 flex flex-col">
+              <div class="flex items-start justify-between gap-3 mb-6 pb-4 border-b border-slate-100">
+                <div>
+                  <div class="flex items-center gap-2">
+                    <span class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M21 12c0 4.418-4.03 8-9 8s-9-3.582-9-8 4.03-8 9-8 9 3.582 9 8z" />
+                      </svg>
+                    </span>
+                    <h3 class="text-base font-bold text-slate-800 tracking-tight">SMS Logs Sent Per Day</h3>
+                  </div>
+                  <p class="text-[11.5px] text-slate-500 mt-1.5 ml-10">Delivered guardian notification totals within the selected range.</p>
+                </div>
+                <div class="text-right">
+                  <p class="text-2xl font-bold text-slate-800 tracking-tight">{{ sms_series|sum }}</p>
+                  <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Total Sent</p>
+                </div>
+              </div>
+              <div class="flex-1 w-full min-h-[240px]">
+                <canvas id="smsBarChart" class="h-full w-full"></canvas>
+              </div>
             </div>
           </article>
 
-          <article class="rounded-2xl border border-slate-200 p-4">
-            <div class="flex items-center justify-between gap-2 mb-3">
-              <h3 class="text-sm uppercase tracking-wide font-semibold text-slate-600">Anomaly Rules</h3>
-              <button id="anomalyEvaluateAllBtn" type="button" class="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100">Evaluate Now</button>
-            </div>
-            <form id="anomalyRuleForm" class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <input id="ruleNameInput" type="text" placeholder="Rule Name" class="rounded-xl border border-slate-300 px-3 py-2 text-sm sm:col-span-2" required>
-              <select id="ruleMetricInput" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
-                <option value="late_count">Late Count</option>
-                <option value="failed_sms_count">Failed SMS Count</option>
-                <option value="unknown_scan_count">Unknown Scan Count</option>
-                <option value="pending_correction_count">Pending Correction Count</option>
-              </select>
-              <select id="ruleOperatorInput" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
-                <option value="gt">&gt;</option>
-                <option value="gte">&gt;=</option>
-                <option value="lt">&lt;</option>
-                <option value="lte">&lt;=</option>
-              </select>
-              <input id="ruleThresholdInput" type="number" step="0.01" min="0" value="5" placeholder="Threshold" class="rounded-xl border border-slate-300 px-3 py-2 text-sm">
-              <input id="ruleWindowInput" type="number" min="1" max="90" value="1" placeholder="Window (days)" class="rounded-xl border border-slate-300 px-3 py-2 text-sm">
-              <select id="ruleSeverityInput" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
-                <option value="warn" selected>Warn</option>
-                <option value="info">Info</option>
-                <option value="high">High</option>
-              </select>
-              <input id="ruleCooldownInput" type="number" min="5" max="1440" value="60" placeholder="Cooldown (minutes)" class="rounded-xl border border-slate-300 px-3 py-2 text-sm">
-              <input id="ruleNotifyEmailsInput" type="text" placeholder="Notify emails (optional)" class="rounded-xl border border-slate-300 px-3 py-2 text-sm sm:col-span-2">
-              <label class="sm:col-span-2 inline-flex items-center gap-2 text-xs font-medium text-slate-600">
-                <input id="ruleEnabledInput" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-emerald-600" checked>
-                Enabled
-              </label>
-              <button type="submit" class="sm:col-span-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 transition">Create Anomaly Rule</button>
-            </form>
+          <article class="bg-white rounded-2xl border border-slate-200 shadow-sm lg:col-span-5 flex flex-col overflow-hidden relative">
+            <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-400 to-amber-400"></div>
+            <div class="p-5 flex-1 flex flex-col">
+              <div class="flex items-start justify-between gap-3 mb-6 pb-4 border-b border-slate-100">
+                <div>
+                  <div class="flex items-center gap-2">
+                    <span class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" />
+                      </svg>
+                    </span>
+                    <h3 class="text-base font-bold text-slate-800 tracking-tight">Attendance Distribution</h3>
+                  </div>
+                  <p class="text-[11.5px] text-slate-500 mt-1.5 ml-10">Present, absent, and late breakdown based on the end date in the selected range.</p>
+                </div>
+              </div>
 
-            <div class="mt-3 max-h-64 overflow-y-auto space-y-2 pr-1" id="anomalyRulesList">
-              <p class="text-sm text-slate-500">Loading anomaly rules...</p>
-            </div>
-          </article>
-        </div>
-
-        <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
-          <article class="rounded-2xl border border-slate-200 p-4">
-            <h3 class="text-sm uppercase tracking-wide font-semibold text-slate-600 mb-2">Recent Report Runs</h3>
-            <div id="reportRunsList" class="max-h-44 overflow-y-auto space-y-2 pr-1">
-              <p class="text-sm text-slate-500">No report runs yet.</p>
-            </div>
-          </article>
-          <article class="rounded-2xl border border-slate-200 p-4">
-            <h3 class="text-sm uppercase tracking-wide font-semibold text-slate-600 mb-2">Recent Anomaly Events</h3>
-            <div id="anomalyEventsList" class="max-h-44 overflow-y-auto space-y-2 pr-1">
-              <p class="text-sm text-slate-500">No anomaly events yet.</p>
+              <div class="flex-1 flex flex-col justify-center">
+                <div class="h-44 w-full mb-6">
+                  <canvas id="attendancePieChart" class="h-full w-full"></canvas>
+                </div>
+                <div class="grid grid-cols-3 gap-3 border-t border-slate-100 pt-5">
+                  <div class="flex flex-col items-center justify-center p-2 rounded-xl border border-slate-100 bg-slate-50/50">
+                    <p class="text-xl font-bold text-slate-800">{{ attendance_distribution.present }}</p>
+                    <div class="flex items-center gap-1.5 mt-1">
+                      <div class="w-2 h-2 rounded-full bg-emerald-500"></div>
+                      <p class="text-[10px] uppercase font-semibold tracking-wider text-slate-500">Present</p>
+                    </div>
+                  </div>
+                  <div class="flex flex-col items-center justify-center p-2 rounded-xl border border-slate-100 bg-slate-50/50">
+                    <p class="text-xl font-bold text-slate-800">{{ attendance_distribution.absent }}</p>
+                    <div class="flex items-center gap-1.5 mt-1">
+                      <div class="w-2 h-2 rounded-full bg-rose-500"></div>
+                      <p class="text-[10px] uppercase font-semibold tracking-wider text-slate-500">Absent</p>
+                    </div>
+                  </div>
+                  <div class="flex flex-col items-center justify-center p-2 rounded-xl border border-slate-100 bg-slate-50/50">
+                    <p class="text-xl font-bold text-slate-800">{{ attendance_distribution.late }}</p>
+                    <div class="flex items-center gap-1.5 mt-1">
+                      <div class="w-2 h-2 rounded-full bg-amber-500"></div>
+                      <p class="text-[10px] uppercase font-semibold tracking-wider text-slate-500">Late</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </article>
         </div>
       </section>
+
     </main>
   </div>
 </div>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="{{ url_for('static', filename='chart_system.js', v='20260312a') }}"></script>
 <script>
-const chartLabels = {{ chart_labels | tojson }};
-const gateSeries = {{ gate_series | tojson }};
-const smsSeries = {{ sms_series | tojson }};
-const attendanceDistribution = {{ attendance_distribution | tojson }};
-
-const analyticsCharts = window.AppCharts?.initCoreCharts({
-  gateCanvas: document.getElementById('gateEntriesChart'),
-  smsCanvas: document.getElementById('smsBarChart'),
-  attendanceCanvas: document.getElementById('attendancePieChart'),
-  labels: chartLabels,
-  gateSeries,
-  smsSeries,
-  attendanceDistribution,
-  initialTheme: window.AppTheme?.getTheme?.() || 'light',
-});
-
-if (analyticsCharts?.applyTheme) {
-  window.addEventListener('app-theme-change', (event) => {
-    analyticsCharts.applyTheme(event.detail?.theme || 'light');
-  });
-}
-
 const rangeSelect = document.getElementById('rangeSelect');
 const startInput = document.getElementById('startDateInput');
 const endInput = document.getElementById('endDateInput');
@@ -463,6 +253,27 @@ function toggleCustomDates() {
 }
 rangeSelect.addEventListener('change', toggleCustomDates);
 toggleCustomDates();
+
+const chartLabels = {{ chart_labels | tojson }};
+const gateSeries = {{ gate_series | tojson }};
+const smsSeries = {{ sms_series | tojson }};
+const attendanceDistribution = {{ attendance_distribution | tojson }};
+const analyticsCharts = window.AppCharts?.initCoreCharts({
+  gateCanvas: document.getElementById('gateEntriesChart'),
+  smsCanvas: document.getElementById('smsBarChart'),
+  attendanceCanvas: document.getElementById('attendancePieChart'),
+  labels: chartLabels,
+  gateSeries,
+  smsSeries,
+  attendanceDistribution,
+  initialTheme: window.AppTheme?.getTheme?.() || 'light',
+});
+
+if (analyticsCharts?.applyTheme) {
+  window.addEventListener('app-theme-change', (event) => {
+    analyticsCharts.applyTheme(event.detail?.theme || 'light');
+  });
+}
 
 let analyticsChangesStream = null;
 let analyticsChangesReconnectTimer = null;
@@ -550,7 +361,5 @@ function initAnalyticsRealtime() {
 window.addEventListener('beforeunload', closeAnalyticsRealtime);
 initAnalyticsRealtime();
 </script>
-<script src="{{ url_for('static', filename='analytics_ai.js', v='20260309b') }}"></script>
-<script src="{{ url_for('static', filename='analytics_phase2.js', v='20260309b') }}"></script>
 </body>
 </html>
