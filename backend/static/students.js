@@ -1822,19 +1822,18 @@
     return false;
   };
 
-  const drawOverlay = (ctx, width, height, aligned, hasFace) => {
+    const drawOverlay = (ctx, width, height, aligned, hasFace) => {
     ctx.clearRect(0, 0, width, height);
-
-    const centerX = width / 2;
-    const centerY = height / 2;
-    const ovalWidth = width * 0.43;
-    const ovalHeight = height * 0.62;
-
-    ctx.beginPath();
-    ctx.ellipse(centerX, centerY, ovalWidth / 2, ovalHeight / 2, 0, 0, Math.PI * 2);
-    ctx.strokeStyle = !hasFace ? "rgba(148,163,184,0.95)" : (aligned ? "rgba(34,197,94,0.95)" : "rgba(148,163,184,0.95)");
-    ctx.lineWidth = 4;
-    ctx.stroke();
+    const ring = document.getElementById("faceGuideRing");
+    if (ring) {
+      if (!hasFace) {
+        ring.className = "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[66%] aspect-square rounded-full border-4 border-slate-400/30 transition-colors duration-300";
+      } else if (aligned) {
+        ring.className = "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[66%] aspect-square rounded-full border-4 border-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.4)] transition-colors duration-300";
+      } else {
+        ring.className = "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[66%] aspect-square rounded-full border-4 border-blue-400/60 shadow-[0_0_10px_rgba(96,165,250,0.2)] transition-colors duration-300";
+      }
+    }
   };
 
   const renderFaceState = () => {
@@ -1993,11 +1992,26 @@
       return;
     }
 
-    try {
-      state.face.stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 960 }, height: { ideal: 720 }, facingMode: "user" },
+        try {
+      const constraints = {
+        video: { 
+          width: { ideal: 960 }, 
+          height: { ideal: 720 }, 
+          facingMode: "user"
+        },
         audio: false,
-      });
+      };
+      
+      state.face.stream = await navigator.mediaDevices.getUserMedia(constraints);
+      
+      const videoTrack = state.face.stream.getVideoTracks()[0];
+      if (videoTrack && typeof videoTrack.applyConstraints === 'function') {
+        const capabilities = videoTrack.getCapabilities ? videoTrack.getCapabilities() : {};
+        if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
+          await videoTrack.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
+        }
+      }
+      
       refs.faceVideo.srcObject = state.face.stream;
       await refs.faceVideo.play();
 

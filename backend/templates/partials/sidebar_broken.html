@@ -1,0 +1,394 @@
+{% set page = current_page|default('') %}
+{% set role = current_role|default('Staff') %}
+{% set unread = alerts_unread|default(0) %}
+
+<!-- Mobile Sidebar Backdrop -->
+<div x-show="mobileMenuOpen" 
+     x-transition:enter="transition-opacity ease-linear duration-300"
+     x-transition:enter-start="opacity-0"
+     x-transition:enter-end="opacity-100"
+     x-transition:leave="transition-opacity ease-linear duration-300"
+     x-transition:leave-start="opacity-100"
+     x-transition:leave-end="opacity-0"
+     @click="mobileMenuOpen = false"
+     class="fixed inset-0 z-40 bg-black/20 backdrop-blur-sm md:hidden" 
+     aria-hidden="true">
+</div>
+
+<aside x-data="sidebarPanel()"
+       :class="[
+           open ? 'w-64' : 'w-16',
+           mobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+       ]"
+       class="fixed inset-y-0 left-0 z-50 flex flex-col bg-white border-r border-neutral-200 shadow-lg transition-all duration-300 md:relative md:translate-x-0">
+  <!-- Logo Section -->
+  <div class="px-4 py-6 border-b border-neutral-100">
+    <div class="flex items-center gap-3">
+      <img src="/static/logo.png" alt="Logo" class="h-8 w-8 rounded-lg object-cover shrink-0">
+      <div x-show="open" x-transition.opacity class="min-w-0">
+        <p class="text-lg font-semibold text-neutral-900 leading-tight">CHS Gate Access</p>
+        <p class="text-xs text-neutral-500">Academic Security Console</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Navigation -->
+  <nav class="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+    <!-- Dashboard -->
+    <a href="{{ url_for('dashboard') }}" 
+       class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200
+              {% if page == 'dashboard' %}bg-primary-50 text-primary-700{% else %}text-neutral-700 hover:bg-neutral-50{% endif %}">
+      <svg class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+      </svg>
+      <span x-show="open" x-transition.opacity class="truncate">Dashboard</span>
+    </a>
+
+    <!-- Students -->
+    {% if can_manage_students %}
+    <a href="{{ url_for('students_page') }}" 
+       class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200
+              {% if page == 'students' %}bg-primary-50 text-primary-700{% else %}text-neutral-700 hover:bg-neutral-50{% endif %}">
+      <svg class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v-1m0 0V6a6 6 0 00-12 0v6m0 0V1a6 6 0 0012 0zm-6 0h6" />
+      </svg>
+      <span x-show="open" x-transition.opacity class="truncate">Students</span>
+    </a>
+    {% endif %}
+
+    <!-- Monitoring Section -->
+    {% if can_view_logs %}
+    <div x-show="open" x-transition.opacity class="px-3 py-2">
+      <p class="text-xs font-semibold text-neutral-500 uppercase tracking-wider">Monitoring</p>
+    </div>
+    
+    <a href="{{ url_for('face_recognition') }}" 
+       class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200
+              {% if page == 'face_recognition' %}bg-primary-50 text-primary-700{% else %}text-neutral-700 hover:bg-neutral-50{% endif %}">
+      <svg class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+      </svg>
+      <span x-show="open" x-transition.opacity class="truncate">Gate Scanning</span>
+    </a>
+
+    <a href="{{ url_for('gate_logs_page') }}" 
+       class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200
+              {% if page == 'gate_logs' %}bg-primary-50 text-primary-700{% else %}text-neutral-700 hover:bg-neutral-50{% endif %}">
+      <svg class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+      <span x-show="open" x-transition.opacity class="truncate">Gate Logs</span>
+    </a>
+
+    <a href="{{ url_for('sms_logs_page') }}" 
+       class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200
+              {% if page == 'sms_logs' %}bg-primary-50 text-primary-700{% else %}text-neutral-700 hover:bg-neutral-50{% endif %}">
+      <svg class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+      </svg>
+      <span x-show="open" x-transition.opacity class="truncate">SMS Logs</span>
+    </a>
+    {% endif %}
+
+    <!-- Analytics Section -->
+    {% if can_view_analytics %}
+    <div x-show="open" x-transition.opacity class="px-3 py-2">
+      <p class="text-xs font-semibold text-neutral-500 uppercase tracking-wider">Analytics</p>
+    </div>
+    
+    <a href="{{ url_for('analytics') }}" 
+       class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200
+              {% if page == 'analytics' %}bg-primary-50 text-primary-700{% else %}text-neutral-700 hover:bg-neutral-50{% endif %}">
+      <svg class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+      </svg>
+      <span x-show="open" x-transition.opacity class="truncate">Analytics</span>
+    </a>
+    {% endif %}
+
+    <!-- Management Section -->
+    {% if can_manage_users or can_manage_alerts %}
+    <div x-show="open" x-transition.opacity class="px-3 py-2">
+      <p class="text-xs font-semibold text-neutral-500 uppercase tracking-wider">Management</p>
+    </div>
+    
+    {% if can_manage_users %}
+    <a href="{{ url_for('users_page') }}" 
+       class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200
+              {% if page == 'users' %}bg-primary-50 text-primary-700{% else %}text-neutral-700 hover:bg-neutral-50{% endif %}">
+      <svg class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v-1m0 0V6a6 6 0 00-12 0v6m0 0V1a6 6 0 0012 0zm-6 0h6" />
+      </svg>
+      <span x-show="open" x-transition.opacity class="truncate">Users</span>
+    </a>
+    {% endif %}
+
+    {% if can_manage_alerts %}
+    <a href="{{ url_for('alerts_page') }}" 
+       class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200
+              {% if page == 'alerts' %}bg-primary-50 text-primary-700{% else %}text-neutral-700 hover:bg-neutral-50{% endif %}">
+      <svg class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-5 5v-5z" />
+        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+      <span x-show="open" x-transition.opacity class="truncate">
+        Alerts
+        {% if unread > 0 %}
+        <span class="ml-2 px-2 py-1 text-xs bg-red-100 text-red-700 rounded-full">{{ unread }}</span>
+        {% endif %}
+      </span>
+    </a>
+    {% endif %}
+
+    {% if is_full_admin %}
+    <a href="{{ url_for('early_timeout') }}" 
+       class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200
+              {% if page == 'early_timeout' %}bg-primary-50 text-primary-700{% else %}text-neutral-700 hover:bg-neutral-50{% endif %}">
+      <svg class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      <span x-show="open" x-transition.opacity class="truncate">
+        Early Time-Out
+        {% if pending_eto_count > 0 %}
+        <span class="ml-2 px-2 py-1 text-xs bg-amber-100 text-amber-700 rounded-full">{{ pending_eto_count }}</span>
+        {% endif %}
+      </span>
+    </a>
+    {% endif %}
+    {% endif %}
+
+    <!-- Support Section -->
+    <div x-show="open" x-transition.opacity class="px-3 py-2">
+      <p class="text-xs font-semibold text-neutral-500 uppercase tracking-wider">Support</p>
+    </div>
+    
+    <a href="{{ url_for('developers') }}" 
+       class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200
+              {% if page == 'developers' %}bg-primary-50 text-primary-700{% else %}text-neutral-700 hover:bg-neutral-50{% endif %}">
+      <svg class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h1m0 0V6a2 2 0 00-2-2H8a2 2 0 00-2 2v6h1m0 0h6m-6 0v6h6" />
+      </svg>
+      <span x-show="open" x-transition.opacity class="truncate">Help</span>
+    </a>
+  </nav>
+
+  <!-- User Profile -->
+  <div class="px-4 py-4 border-t border-neutral-100">
+    <div class="flex items-center gap-3">
+      <div class="h-8 w-8 rounded-full bg-primary-100 flex items-center justify-center">
+        <span class="text-sm font-medium text-primary-700">{{ current_user[0]|upper if current_user else 'A' }}</span>
+      </div>
+      <div x-show="open" x-transition.opacity class="min-w-0">
+        <p class="text-sm font-medium text-neutral-900 truncate">{{ current_user }}</p>
+        <p class="text-xs text-neutral-500 truncate">{{ current_role }}</p>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<script>
+function sidebarPanel() {
+    return {
+        open: true,
+        init() {
+            // Auto-collapse on mobile
+            if (window.innerWidth < 768) {
+                this.open = false;
+            }
+            
+            // Handle window resize
+            window.addEventListener('resize', () => {
+                if (window.innerWidth >= 768) {
+                    this.open = true;
+                } else {
+                    this.open = false;
+                }
+            });
+        }
+    }
+}
+</script>
+
+  <nav class="sidebar-scroll flex-1 px-3 py-6 space-y-8">
+    <!-- Main Navigation -->
+    <section class="space-y-1">
+      <div x-show="open" class="px-3 mb-3">
+        <p class="text-xs font-medium text-neutral-400 uppercase tracking-wider">Main</p>
+      </div>
+      
+      <a href="/dashboard" class="group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 {% if page == 'dashboard' %}bg-primary-50 text-primary-600{% else %}text-neutral-600 hover:bg-neutral-50{% endif %}">
+        <svg class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7m-11 0l7 7m-11-13h18" />
+        </svg>
+        <span x-show="open" x-transition.opacity>Dashboard</span>
+        <span x-show="!open" x-transition.opacity class="pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 rounded-lg border border-neutral-200 bg-white px-2 py-1 text-xs whitespace-nowrap shadow-lg opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">Dashboard</span>
+      </a>
+      
+      <a href="/students" class="group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 {% if page == 'students' %}bg-primary-50 text-primary-600{% else %}text-neutral-600 hover:bg-neutral-50{% endif %}">
+        <svg class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+        <span x-show="open" x-transition.opacity>Students</span>
+        <span x-show="!open" x-transition.opacity class="pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 rounded-lg border border-neutral-200 bg-white px-2 py-1 text-xs whitespace-nowrap shadow-lg opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">Students</span>
+      </a>
+    </section>
+
+    <!-- Monitoring Section -->
+    <section class="space-y-1">
+      <div x-show="open" class="px-3 mb-3">
+        <p class="text-xs font-medium text-neutral-400 uppercase tracking-wider">Monitoring</p>
+      </div>
+      
+      <a href="/dashboard#gate-scanning" class="group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 text-neutral-600 hover:bg-neutral-50">
+        <svg class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7a1 1 0 01-1.004 0C17.523 16.057 13.478 19 9 19c-4.477 0-8.268-2.943-9.542-7a1 1 0 011.004 0z" />
+        </svg>
+        <span x-show="open" x-transition.opacity>Gate Scanning</span>
+        <span x-show="!open" x-transition.opacity class="pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 rounded-lg border border-neutral-200 bg-white px-2 py-1 text-xs whitespace-nowrap shadow-lg opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">Gate Scanning</span>
+      </a>
+      
+      <a href="/gate-logs" class="group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 {% if page == 'gate_logs' %}bg-primary-50 text-primary-600{% else %}text-neutral-600 hover:bg-neutral-50{% endif %}">
+        <svg class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+        <span x-show="open" x-transition.opacity>Gate Logs</span>
+        <span x-show="!open" x-transition.opacity class="pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 rounded-lg border border-neutral-200 bg-white px-2 py-1 text-xs whitespace-nowrap shadow-lg opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">Gate Logs</span>
+      </a>
+      
+      <a href="/sms-logs" class="group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 {% if page == 'sms_logs' %}bg-primary-50 text-primary-600{% else %}text-neutral-600 hover:bg-neutral-50{% endif %}">
+        <svg class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2v-6a2 2 0 012-2h14a2 2 0 012 2v6a2 2 0 01-2 2z" />
+        </svg>
+        <span x-show="open" x-transition.opacity>SMS Logs</span>
+        <span x-show="!open" x-transition.opacity class="pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 rounded-lg border border-neutral-200 bg-white px-2 py-1 text-xs whitespace-nowrap shadow-lg opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">SMS Logs</span>
+      </a>
+      
+      <a href="/analytics" class="group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 {% if page == 'analytics' %}bg-primary-50 text-primary-600{% else %}text-neutral-600 hover:bg-neutral-50{% endif %}">
+        <svg class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+        <span x-show="open" x-transition.opacity>Analytics</span>
+        <span x-show="!open" x-transition.opacity class="pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 rounded-lg border border-neutral-200 bg-white px-2 py-1 text-xs whitespace-nowrap shadow-lg opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">Analytics</span>
+      </a>
+
+      {% if is_full_admin %}
+      <!-- Early Time-Out Monitoring (Admin Only) -->
+      <a href="/early-timeout?{{ school_year_query }}" class="group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 {% if page == 'early_timeout' %}bg-primary-50 text-primary-600{% else %}text-neutral-600 hover:bg-neutral-50{% endif %}">
+        <svg class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-6 0v-1m6 0H9" />
+        </svg>
+        <span x-show="open" x-transition.opacity>Early Time-Out</span>
+        <span id="sidebarETOBadge" class="ml-auto inline-flex items-center rounded-full bg-amber-500 px-2 py-0.5 text-[11px] font-semibold text-white {% if pending_count|default(0) == 0 %}hidden{% endif %}" :class="{'absolute -top-1 -right-1 ml-0': !open}">{{ pending_count|default(0) }}</span>
+        <span x-show="!open" x-transition.opacity class="pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 rounded-lg border border-neutral-200 bg-white px-2 py-1 text-xs whitespace-nowrap shadow-lg opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">Early Time-Out</span>
+      </a>
+      {% endif %}
+    </section>
+
+    {% if can_view_analytics %}
+    <!-- Schedule Section -->
+    <section class="space-y-1">
+      <div x-show="open" class="px-3 mb-3">
+        <p class="text-xs font-medium text-neutral-400 uppercase tracking-wider">Schedule</p>
+      </div>
+      
+      <a href="/calendar" class="group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 {% if page == 'calendar' %}bg-primary-50 text-primary-600{% else %}text-neutral-600 hover:bg-neutral-50{% endif %}">
+        <svg class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+        <span x-show="open" x-transition.opacity>School Calendar</span>
+        <span x-show="!open" x-transition.opacity class="pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 rounded-lg border border-neutral-200 bg-white px-2 py-1 text-xs whitespace-nowrap shadow-lg opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">Calendar</span>
+      </a>
+    </section>
+    {% endif %}
+
+    <!-- Reports Section -->
+    <section class="space-y-1">
+      <div x-show="open" class="px-3 mb-3">
+        <p class="text-xs font-medium text-neutral-400 uppercase tracking-wider">Reports</p>
+      </div>
+      
+      <a href="/analytics#reports-charts" class="group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 text-neutral-600 hover:bg-neutral-50">
+        <svg class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2V10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 00-2-2H9a2 2 0 00-2 2v14a2 2 0 002 2z" />
+        </svg>
+        <span x-show="open" x-transition.opacity>Charts</span>
+        <span x-show="!open" x-transition.opacity class="pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 rounded-lg border border-neutral-200 bg-white px-2 py-1 text-xs whitespace-nowrap shadow-lg opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">Charts</span>
+      </a>
+    </section>
+
+    {% if can_manage_users %}
+    <!-- Management Section -->
+    <section class="space-y-1">
+      <div x-show="open" class="px-3 mb-3">
+        <p class="text-xs font-medium text-neutral-400 uppercase tracking-wider">Management</p>
+      </div>
+      
+      <a href="/dashboard#user-management" class="group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 text-neutral-600 hover:bg-neutral-50">
+        <svg class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v-1m0 0V6a6 6 0 00-12 0v6m0 0V1a6 6 0 0012 0zm-6 0h6" />
+        </svg>
+        <span x-show="open" x-transition.opacity>User Management</span>
+        <span x-show="!open" x-transition.opacity class="pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 rounded-lg border border-neutral-200 bg-white px-2 py-1 text-xs whitespace-nowrap shadow-lg opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">Users</span>
+      </a>
+      
+      <a href="/dashboard#user-management" class="group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 text-neutral-600 hover:bg-neutral-50">
+        <svg class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.433 7.433l-3.567 3.567A6 6 0 0110.433 17.5l3.567 3.567A6 6 0 0117 11V7a4 4 0 00-8 0v7m6 0V7a6 6 0 01-6 6H6a6 6 0 01-6-6V7a4 4 0 008 0V7z" />
+        </svg>
+        <span x-show="open" x-transition.opacity>Roles & Permissions</span>
+        <span x-show="!open" x-transition.opacity class="pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 rounded-lg border border-neutral-200 bg-white px-2 py-1 text-xs whitespace-nowrap shadow-lg opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">Roles</span>
+      </a>
+      
+      <a href="{{ '/admin/archive-summary?' ~ school_year_query if school_year_query else '/admin/archive-summary' }}" class="group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 {% if page == 'archive_summary' %}bg-primary-50 text-primary-600{% else %}text-neutral-600 hover:bg-neutral-50{% endif %}">
+        <svg class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+        </svg>
+        <span x-show="open" x-transition.opacity>Archive Summary</span>
+        <span x-show="!open" x-transition.opacity class="pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 rounded-lg border border-neutral-200 bg-white px-2 py-1 text-xs whitespace-nowrap shadow-lg opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">Archive Summary</span>
+      </a>
+    </section>
+    {% endif %}
+
+    <!-- Support Section -->
+    <section class="space-y-1">
+      <div x-show="open" class="px-3 mb-3">
+        <p class="text-xs font-medium text-neutral-400 uppercase tracking-wider">Support</p>
+      </div>
+      
+      <a href="/developers" class="group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 {% if page == 'developers' %}bg-primary-50 text-primary-600{% else %}text-neutral-600 hover:bg-neutral-50{% endif %}">
+        <svg class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 1.741 0 3.226.835 3.772 2m-3.772 4h8c0-1.165-.835-2-2-2-1.741 0-3.226.835-3.772 2m3.772-4c1.741 0 3.226.835 3.772 2" />
+        </svg>
+        <span x-show="open" x-transition.opacity>Help / Guide</span>
+        <span x-show="!open" x-transition.opacity class="pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 rounded-lg border border-neutral-200 bg-white px-2 py-1 text-xs whitespace-nowrap shadow-lg opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">Help</span>
+      </a>
+    </section>
+  </nav>
+
+  <!-- Collapse Button -->
+  <div class="px-3 py-4 border-t border-neutral-100">
+    <button type="button" @click="toggle()" class="w-full hidden md:flex items-center justify-center gap-2 rounded-xl bg-neutral-100 hover:bg-neutral-200 transition-all duration-200 py-2.5 text-sm font-medium text-neutral-600">
+      <svg class="h-4 w-4 transition-transform duration-200" :class="{'rotate-180': !open}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+      </svg>
+      <span x-show="open" x-transition.opacity>Collapse</span>
+    </button>
+  </div>
+</aside>
+
+<script>
+document.addEventListener('alpine:init', () => {
+  Alpine.data('sidebarPanel', () => ({
+    open: true,
+    init() {
+      const saved = window.localStorage.getItem('chs_sidebar_open');
+      this.open = saved === null ? true : saved === '1';
+    },
+    toggle() {
+      this.open = !this.open;
+      window.localStorage.setItem('chs_sidebar_open', this.open ? '1' : '0');
+    }
+  }));
+});
+</script>

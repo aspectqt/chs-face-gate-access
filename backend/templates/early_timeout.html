@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Early Time-Out Requests</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32x32.png') }}">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    {% include 'partials/theme_assets.html' %}
+    <style>
+        [x-cloak] { display: none !important; }
+        body { font-family: 'Manrope', sans-serif; }
+    </style>
+</head>
+<body class="bg-slate-100 h-screen overflow-hidden text-slate-800" data-authenticated="1"
+    data-user-theme="{{ current_theme|default('') }}" x-data="{ mobileMenuOpen: false }">
+    <div class="flex h-full">
+        {% include 'partials/sidebar.html' %}
+
+        <div class="flex-1 flex flex-col min-w-0 h-full overflow-hidden" x-data="etoPage()" x-init="init()">
+            <!-- Header -->
+            <header class="h-16 bg-white shadow-sm flex shrink-0 items-center justify-between px-4 md:px-6">
+                <div class="flex items-center gap-3">
+                    <button @click="mobileMenuOpen = true" class="md:hidden text-gray-500 hover:text-gray-700 focus:outline-none">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+                        </svg>
+                    </button>
+                    <h1 class="text-lg font-semibold hidden sm:block">Early Time-Out Requests</h1>
+                    <h1 class="text-lg font-semibold sm:hidden">Time-Outs</h1>
+                </div>
+                <div class="flex items-center gap-2">
+                    {% include 'partials/theme_toggle_button.html' %}
+                    <button @click="openNewRequest()" class="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 transition shadow-sm">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                        New Request
+                    </button>
+                </div>
+            </header>
+
+            <main class="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
+                <!-- Stats Overview -->
+                <section class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                        <p class="text-[10px] uppercase font-bold text-slate-400">Pending Approval</p>
+                        <p class="text-3xl font-bold text-amber-600 mt-1" x-text="pendingCount">0</p>
+                    </div>
+                    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                        <p class="text-[10px] uppercase font-bold text-slate-400">Approved Today</p>
+                        <p class="text-3xl font-bold text-emerald-600 mt-1" x-text="approvedCount">0</p>
+                    </div>
+                    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                        <p class="text-[10px] uppercase font-bold text-slate-400">Total requests</p>
+                        <p class="text-3xl font-bold text-slate-800 mt-1" x-text="totalCount">0</p>
+                    </div>
+                </section>
+
+                <!-- Filters -->
+                <section class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                    <div class="flex flex-wrap gap-3">
+                        <div class="flex-1 min-w-[200px]">
+                            <input type="text" x-model="filters.q" @input.debounce.300ms="fetchRequests()" placeholder="Search Student Name or ID..." class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition">
+                        </div>
+                        <div class="w-full sm:w-auto">
+                            <select x-model="filters.status" @change="fetchRequests()" class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition">
+                                <option value="">All Status</option>
+                                <option value="pending">Pending</option>
+                                <option value="approved">Approved</option>
+                                <option value="denied">Denied</option>
+                            </select>
+                        </div>
+                        <div class="w-full sm:w-auto">
+                            <input type="date" x-model="filters.date" @change="fetchRequests()" class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition">
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Request Table -->
+                <section class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-slate-200">
+                            <thead class="bg-slate-50 text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+                                <tr>
+                                    <th class="px-6 py-3 text-left">Student</th>
+                                    <th class="px-6 py-3 text-left">Reason</th>
+                                    <th class="px-6 py-3 text-left">Time Requested</th>
+                                    <th class="px-6 py-3 text-left">Status</th>
+                                    <th class="px-6 py-3 text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100">
+                                <template x-if="loading">
+                                    <tr><td colspan="5" class="px-6 py-10 text-center text-slate-400 text-sm">Loading requests...</td></tr>
+                                </template>
+                                <template x-if="!loading && requests.length === 0">
+                                    <tr><td colspan="5" class="px-6 py-10 text-center text-slate-400 text-sm">No requests found.</td></tr>
+                                </template>
+                                <template x-for="req in requests" :key="req._id">
+                                    <tr class="hover:bg-slate-50/50 transition">
+                                        <td class="px-6 py-4">
+                                            <p class="font-bold text-slate-800" x-text="req.student_name"></p>
+                                            <p class="text-xs text-slate-500" x-text="req.student_id"></p>
+                                        </td>
+                                        <td class="px-6 py-4">
+                                            <div class="flex items-center gap-2">
+                                                <span x-show="req.urgency === 'urgent'" class="shrink-0 rounded-full bg-rose-100 px-1.5 py-0.5 text-[10px] font-bold text-rose-600 uppercase">Urgent</span>
+                                                <p class="text-sm text-slate-700 truncate max-w-[200px]" x-text="req.reason"></p>
+                                            </div>
+                                        </td>
+                                        <td class="px-6 py-4">
+                                            <p class="text-sm text-slate-600" x-text="formatTime(req.requested_at)"></p>
+                                            <p class="text-[10px] text-slate-400" x-text="req.date"></p>
+                                        </td>
+                                        <td class="px-6 py-4">
+                                            <span class="inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold uppercase transition"
+                                                :class="{
+                                                    'bg-amber-100 text-amber-700': req.status === 'pending',
+                                                    'bg-emerald-100 text-emerald-700': req.status === 'approved',
+                                                    'bg-slate-100 text-slate-500': req.status === 'denied'
+                                                }" x-text="req.status"></span>
+                                        </td>
+                                        <td class="px-6 py-4 text-right">
+                                            <div class="flex justify-end gap-2">
+                                                <template x-if="req.status === 'pending'">
+                                                    <div class="flex gap-2">
+                                                        <button @click="approveRequest(req)" class="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 transition">Approve</button>
+                                                        <button @click="denyRequest(req)" class="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-100 transition">Deny</button>
+                                                    </div>
+                                                </template>
+                                                <button @click="viewRequest(req)" class="rounded-lg border border-slate-200 p-1.5 text-slate-500 hover:bg-slate-100 transition">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S3.732 16.057 2.458 12z"/></svg>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            </main>
+
+            <!-- Modals -->
+            <!-- New Request Modal -->
+            <div x-cloak x-show="modals.newRequest" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" @click.self="modals.newRequest = false">
+                <div class="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden" x-transition.scale>
+                    <div class="border-b p-5 flex justify-between items-center">
+                        <h3 class="text-lg font-bold">New Early Time-Out</h3>
+                        <button @click="modals.newRequest = false" class="text-slate-400 hover:text-slate-600">&times;</button>
+                    </div>
+                    <form @submit.prevent="submitRequest()" class="p-5 space-y-4">
+                        <div>
+                            <label class="block text-[10px] uppercase font-bold text-slate-400 mb-1 ml-1">Student ID</label>
+                            <input type="text" x-model="form.student_id" required placeholder="Enter student ID..." class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:ring-2 focus:ring-emerald-500 outline-none transition">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] uppercase font-bold text-slate-400 mb-1 ml-1">Reason for early exit</label>
+                            <textarea x-model="form.reason" required rows="3" placeholder="Explain the valid reason or emergency..." class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:ring-2 focus:ring-emerald-500 outline-none transition"></textarea>
+                        </div>
+                        <div>
+                            <label class="block text-[10px] uppercase font-bold text-slate-400 mb-1 ml-1">Urgency</label>
+                            <div class="grid grid-cols-2 gap-2 mt-1">
+                                <button type="button" @click="form.urgency = 'normal'" :class="form.urgency === 'normal' ? 'bg-emerald-50 border-emerald-500 text-emerald-700' : 'bg-slate-50 border-transparent text-slate-600'" class="rounded-xl border py-2 text-xs font-bold transition">Normal</button>
+                                <button type="button" @click="form.urgency = 'urgent'" :class="form.urgency === 'urgent' ? 'bg-rose-50 border-rose-500 text-rose-700' : 'bg-slate-50 border-transparent text-slate-600'" class="rounded-xl border py-2 text-xs font-bold transition">Urgent 🚩</button>
+                            </div>
+                        </div>
+                        <div class="pt-2 flex gap-2">
+                            <button type="button" @click="modals.newRequest = false" class="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-50 transition">Cancel</button>
+                            <button type="submit" :disabled="submitting" class="flex-1 rounded-xl bg-emerald-600 py-2.5 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50 transition">
+                                <span x-show="!submitting">Submit Request</span>
+                                <span x-show="submitting">Submitting...</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- View/Review Modal -->
+            <div x-cloak x-show="modals.view" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" @click.self="modals.view = false">
+                <div class="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden" x-transition.scale>
+                    <div class="border-b p-5 flex justify-between items-center">
+                        <h3 class="text-lg font-bold">Request Details</h3>
+                        <button @click="modals.view = false" class="text-slate-400 hover:text-slate-600">&times;</button>
+                    </div>
+                    <template x-if="selectedRequest">
+                        <div class="p-5 space-y-4">
+                        <div class="flex justify-between items-start">
+                            <div class="flex flex-col">
+                                <span class="text-[10px] uppercase font-bold text-slate-400">Student</span>
+                                <p class="font-bold text-slate-800" x-text="selectedRequest?.student_name"></p>
+                                <p class="text-xs text-slate-500" x-text="selectedRequest?.student_id"></p>
+                            </div>
+                            <span class="inline-flex rounded-full px-2.5 py-1 text-[10px] font-bold uppercase"
+                                :class="{
+                                    'bg-amber-100 text-amber-700': selectedRequest?.status === 'pending',
+                                    'bg-emerald-100 text-emerald-700': selectedRequest?.status === 'approved',
+                                    'bg-slate-100 text-slate-500': selectedRequest?.status === 'denied'
+                                }" x-text="selectedRequest?.status"></span>
+                        </div>
+
+                        <div>
+                            <span class="text-[10px] uppercase font-bold text-slate-400">Reason</span>
+                            <div class="mt-1 bg-slate-50 p-3 rounded-xl border border-slate-100 text-sm text-slate-700" x-text="selectedRequest?.reason"></div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <span class="text-[10px] uppercase font-bold text-slate-400">Requested By</span>
+                                <p class="text-sm font-medium text-slate-700" x-text="selectedRequest?.requested_by"></p>
+                            </div>
+                            <div>
+                                <span class="text-[10px] uppercase font-bold text-slate-400">At</span>
+                                <p class="text-sm font-medium text-slate-700" x-text="formatTime(selectedRequest?.requested_at)"></p>
+                            </div>
+                        </div>
+
+                        <template x-if="selectedRequest?.status !== 'pending'">
+                            <div class="pt-4 border-t space-y-3">
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <span class="text-[10px] uppercase font-bold text-slate-400" x-text="selectedRequest?.status === 'approved' ? 'Approved By' : 'Denied By'"></span>
+                                        <p class="text-sm font-medium text-slate-700" x-text="selectedRequest?.reviewed_by || 'System'"></p>
+                                    </div>
+                                    <div>
+                                        <span class="text-[10px] uppercase font-bold text-slate-400">Reviewed At</span>
+                                        <p class="text-sm font-medium text-slate-700" x-text="formatTime(selectedRequest?.reviewed_at)"></p>
+                                    </div>
+                                </div>
+                                <div x-show="selectedRequest?.review_note">
+                                    <span class="text-[10px] uppercase font-bold text-slate-400">Review Note</span>
+                                    <p class="mt-1 text-sm text-slate-600 bg-slate-50 p-2 rounded-lg" x-text="selectedRequest?.review_note"></p>
+                                </div>
+                            </div>
+                        </template>
+
+                        <div class="pt-4 flex gap-2" x-show="selectedRequest?.status === 'pending'">
+                            <button @click="approveRequest(selectedRequest); modals.view = false" class="flex-1 rounded-xl bg-emerald-600 py-2.5 text-sm font-bold text-white hover:bg-emerald-700 transition">Approve Exit</button>
+                            <button @click="denyRequest(selectedRequest); modals.view = false" class="flex-1 rounded-xl border border-rose-200 bg-rose-50 py-2.5 text-sm font-bold text-rose-700 hover:bg-rose-100 transition">Deny Request</button>
+                        </div>
+                        <template x-if="isFullAdmin">
+                             <button @click="deleteRequest(selectedRequest); modals.view = false" class="w-full mt-2 rounded-xl text-[11px] font-bold text-rose-400 hover:text-rose-600 py-1 transition">Delete Request Forever</button>
+                        </template>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="etoToast" class="fixed top-5 right-5 z-[100] hidden rounded-xl px-4 py-3 text-sm shadow-xl border animate-bounce"></div>
+
+    <script>
+        function etoPage() {
+            return {
+                requests: [],
+                loading: false,
+                submitting: false,
+                pendingCount: 0,
+                approvedCount: 0,
+                totalCount: 0,
+                isFullAdmin: {{ 'true' if current_role == 'Full Admin' else 'false' }},
+                filters: {
+                    status: 'pending',
+                    date: '',
+                    q: ''
+                },
+                form: {
+                    student_id: '',
+                    reason: '',
+                    urgency: 'normal'
+                },
+                selectedRequest: null,
+                modals: {
+                    newRequest: false,
+                    view: false
+                },
+                init() {
+                    this.fetchRequests();
+                    // Poll for updates every 30 seconds
+                    setInterval(() => this.updateCounts(), 30000);
+                },
+                async fetchRequests() {
+                    this.loading = true;
+                    try {
+                        const qs = new URLSearchParams(this.filters).toString();
+                        const res = await fetch(`/api/early-timeout/requests?${qs}`);
+                        const data = await res.json();
+                        if (data.status === 'ok') {
+                            this.requests = data.rows;
+                            this.pendingCount = data.pending_count;
+                            this.updateStats();
+                        }
+                    } catch (e) {
+                        console.error('Fetch error:', e);
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+                async updateCounts() {
+                    try {
+                        const res = await fetch('/api/early-timeout/requests/count');
+                        const data = await res.json();
+                        if (data.status === 'ok') {
+                            this.pendingCount = data.pending_count;
+                            // Optionally play sound if pending count increased
+                        }
+                    } catch (e) {}
+                },
+                updateStats() {
+                    this.totalCount = this.requests.length;
+                    this.approvedCount = this.requests.filter(r => r.status === 'approved').length;
+                },
+                openNewRequest() {
+                    this.form = { student_id: '', reason: '', urgency: 'normal' };
+                    this.modals.newRequest = true;
+                },
+                async submitRequest() {
+                    if (this.submitting) return;
+                    this.submitting = true;
+                    try {
+                        const res = await fetch('/api/early-timeout/request', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(this.form)
+                        });
+                        const data = await res.json();
+                        if (data.status === 'ok') {
+                            this.showToast(data.message);
+                            this.modals.newRequest = false;
+                            this.fetchRequests();
+                        } else {
+                            this.showToast(data.message, 'error');
+                        }
+                    } catch (e) {
+                        this.showToast('Network error', 'error');
+                    } finally {
+                        this.submitting = false;
+                    }
+                },
+                viewRequest(req) {
+                    this.selectedRequest = req;
+                    this.modals.view = true;
+                },
+                async approveRequest(req) {
+                    const note = prompt('Optional approval note (e.g. parent picked up):');
+                    if (note === null) return;
+                    try {
+                        const res = await fetch(`/api/early-timeout/requests/${req._id}/approve`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ review_note: note })
+                        });
+                        const data = await res.json();
+                        if (data.status === 'ok') {
+                            this.showToast(data.message);
+                            this.fetchRequests();
+                        } else {
+                            this.showToast(data.message, 'error');
+                        }
+                    } catch (e) {
+                        this.showToast('Approval failed', 'error');
+                    }
+                },
+                async denyRequest(req) {
+                    const note = prompt('Reason for denial:');
+                    if (!note) return;
+                    try {
+                        const res = await fetch(`/api/early-timeout/requests/${req._id}/deny`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ review_note: note })
+                        });
+                        const data = await res.json();
+                        if (data.status === 'ok') {
+                            this.showToast(data.message);
+                            this.fetchRequests();
+                        }
+                    } catch (e) {}
+                },
+                async deleteRequest(req) {
+                    if (!confirm('Delete this request permanent?')) return;
+                    try {
+                        const res = await fetch(`/api/early-timeout/requests/${req._id}`, { method: 'DELETE' });
+                        if (res.ok) {
+                            this.showToast('Request deleted');
+                            this.fetchRequests();
+                        }
+                    } catch (e) {}
+                },
+                formatTime(isoStr) {
+                    if (!isoStr) return '';
+                    const date = new Date(isoStr);
+                    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                },
+                showToast(msg, type = 'success') {
+                    const el = document.getElementById('etoToast');
+                    el.textContent = msg;
+                    el.className = `fixed top-10 right-10 z-[100] rounded-xl px-5 py-3 text-sm font-bold shadow-2xl border transition-all duration-300 transform scale-100 ${
+                        type === 'error' ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                    }`;
+                    el.classList.remove('hidden');
+                    setTimeout(() => el.classList.add('hidden'), 3500);
+                }
+            }
+        }
+    </script>
+</body>
+</html>

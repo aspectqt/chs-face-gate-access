@@ -49,6 +49,9 @@ scheduled_reports = db["scheduled_reports"]
 scheduled_report_runs = db["scheduled_report_runs"]
 anomaly_rules = db["anomaly_rules"]
 anomaly_events = db["anomaly_events"]
+system_settings = db["system_settings"]
+calendar_events = db["calendar_events"]
+early_timeout_requests = db["early_timeout_requests"]
 
 
 def _safe_create_index(collection, keys, **kwargs):
@@ -201,6 +204,13 @@ def ensure_indexes():
     _safe_create_index(failed_scans, [("timestamp", DESCENDING)])
     _safe_create_index(failed_scans, [("date", ASCENDING), ("reason", ASCENDING)])
     _safe_create_index(failed_scans, [("student_id", ASCENDING), ("reason", ASCENDING), ("date", DESCENDING)])
+
+    _safe_create_index(system_settings, [("key", ASCENDING)], unique=True)
+    _safe_create_index(calendar_events, [("date", ASCENDING)], unique=True)
+    _safe_create_index(calendar_events, [("school_year", ASCENDING), ("date", ASCENDING)])
+    _safe_create_index(early_timeout_requests, [("student_id", ASCENDING), ("date", ASCENDING)])
+    _safe_create_index(early_timeout_requests, [("status", ASCENDING), ("requested_at", DESCENDING)])
+    _safe_create_index(early_timeout_requests, [("school_year", ASCENDING), ("requested_at", DESCENDING)])
 
     try:
         sections.drop_index("grade_key_1_section_normalized_1")

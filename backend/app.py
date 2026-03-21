@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, Response, stream_with_context, has_request_context
 from bson.objectid import ObjectId
 from pymongo.errors import DuplicateKeyError
+from pymongo import ASCENDING, DESCENDING
 from datetime import datetime, timedelta, time as dtime
 from decimal import Decimal, InvalidOperation
 import os
@@ -55,6 +56,9 @@ from config import (
     scheduled_report_runs,
     anomaly_rules,
     anomaly_events,
+    system_settings,
+    calendar_events,
+    early_timeout_requests,
 )
 import json
 from PIL import Image
@@ -2130,60 +2134,109 @@ def build_pagination_payload(page, per_page, total, filters_payload, endpoint):
     }
 
 
-def session_info_for_time(dt):
-    t = dt.time()
-
-    if MORNING_START <= t < NOON_START:
-        is_late = t >= MORNING_LATE_THRESHOLD
-        return {
-            "session": "Morning In",
-            "gate_action": "IN",
-            "verification_label": "Verified In",
-            "status": "Late" if is_late else "Present",
-            "display_message": "Verified In - You are Late" if is_late else "Verified In",
-            "voice_message": "Verified In, but you are late" if is_late else "Verified In",
-        }
-
-    if NOON_START <= t < AFTERNOON_START:
-        return {
-            "session": "Noon Out",
-            "gate_action": "OUT",
-            "verification_label": "Verified Out",
-            "status": "Present",
-            "display_message": "Verified Out",
-            "voice_message": "Verified Out",
-        }
-
-    if AFTERNOON_START <= t < AFTERNOON_END_START:
-        is_late = t >= AFTERNOON_LATE_THRESHOLD
-        return {
-            "session": "Afternoon In",
-            "gate_action": "IN",
-            "verification_label": "Verified In",
-            "status": "Late" if is_late else "Present",
-            "display_message": "Verified In - You are Late" if is_late else "Verified In",
-            "voice_message": "Verified In, but you are late" if is_late else "Verified In",
-        }
-
-    if t >= AFTERNOON_END_START:
-        return {
-            "session": "Afternoon Out",
-            "gate_action": "OUT",
-            "verification_label": "Verified Out",
-            "status": "Present",
-            "display_message": "Verified Out",
-            "voice_message": "Verified Out",
-        }
-
-    # Before 5:00 AM fallback
+def get_default_schedule():
+    settings = system_settings.find_one({"key": "default_schedule"})
+    if settings and "schedule" in settings:
+        return settings["schedule"]
     return {
-        "session": "Morning In",
-        "gate_action": "IN",
-        "verification_label": "Verified In",
-        "status": "Present",
-        "display_message": "Verified In",
-        "voice_message": "Verified In",
+        "morning_start": "05:00",
+        "morning_late": "08:15",
+        "noon_start": "12:00",
+        "afternoon_start": "13:00",
+        "afternoon_late": "13:15",
+        "afternoon_end": "17:00"
     }
+
+def get_active_schedule(date_obj):
+    date_str = date_obj.strftime("%Y-%m-%d")
+    event = calendar_events.find_one({"date": date_str})
+    if event:
+        if event.get("custom_schedule"):
+            return {
+                "type": event.get("type", "event"),
+                "special_condition": event.get("special_condition"),
+                "schedule": event["custom_schedule"]
+            }
+        return {
+            "type": event.get("type", "event"),
+            "special_condition": event.get("special_condition"),
+            "schedule": get_default_schedule()
+        }
+    return {
+        "type": "regular",
+        "special_condition": None,
+        "schedule": get_default_schedule()
+    }
+
+def parse_time_str(time_str):
+    if not time_str: return None
+    try:
+        parts = str(time_str).split(":")
+        return dtime(hour=int(parts[0]), minute=int(parts[1]))
+    except:
+        return None
+
+def session_info_for_time(dt):
+    active_sched = get_active_schedule(dt)
+    sched = active_sched.get("schedule", {})
+    
+    m_start = parse_time_str(sched.get("morning_start")) or MORNING_START
+    m_late_thr = parse_time_str(sched.get("morning_late")) or MORNING_LATE_THRESHOLD
+    n_start = parse_time_str(sched.get("noon_start")) or NOON_START
+    a_start = parse_time_str(sched.get("afternoon_start")) or AFTERNOON_START
+    a_late_thr = parse_time_str(sched.get("afternoon_late")) or AFTERNOON_LATE_THRESHOLD
+    a_end = parse_time_str(sched.get("afternoon_end")) or AFTERNOON_END_START
+    
+    t = dt.time()
+    
+    is_holiday = active_sched.get("type") == "holiday"
+    special_cond = active_sched.get("special_condition")
+    
+    def make_res(session, action, status, label):
+        # Update label to "Welcome" / "Thank You" as requested
+        if action == "IN":
+            voice_msg = "Welcome"
+            if label == "Verified In":
+                label = "Welcome"
+        else:
+            voice_msg = "Thank you"
+            if label == "Verified Out":
+                label = "Thank You"
+
+        display_msg = f"{label}"
+        if special_cond:
+            display_msg += f" ({special_cond})"
+            
+        if is_holiday:
+            status = "Holiday"
+            display_msg = f"{label} (Holiday)"
+        elif status == "Late":
+            display_msg += " - You are Late"
+            
+        return {
+            "session": session,
+            "gate_action": action,
+            "verification_label": label,
+            "status": status,
+            "display_message": display_msg,
+            "voice_message": voice_msg,
+        }
+
+    if m_start <= t < n_start:
+        is_late = t >= m_late_thr
+        return make_res("Morning In", "IN", "Late" if is_late else "Present", "Verified In")
+
+    if n_start <= t < a_start:
+        return make_res("Noon Out", "OUT", "Present", "Verified Out")
+
+    if a_start <= t < a_end:
+        is_late = t >= a_late_thr
+        return make_res("Afternoon In", "IN", "Late" if is_late else "Present", "Verified In")
+
+    if t >= a_end:
+        return make_res("Afternoon Out", "OUT", "Present", "Verified Out")
+
+    return make_res("Morning In", "IN", "Present", "Verified In")
 
 
 def normalize_scan_session_mode(value, default="auto"):
@@ -2226,7 +2279,7 @@ def session_info_for_mode(dt, mode):
             "verification_label": "Verified In",
             "status": "Present",
             "display_message": "Verified In (Manual)",
-            "voice_message": "Verified In",
+            "voice_message": "Welcome",
         }
     if normalized_mode == "manual_out":
         return {
@@ -2235,7 +2288,7 @@ def session_info_for_mode(dt, mode):
             "verification_label": "Verified Out",
             "status": "Present",
             "display_message": "Verified Out (Manual)",
-            "voice_message": "Verified Out",
+            "voice_message": "Thank you",
         }
     return session_info_for_time(dt)
 
@@ -2271,10 +2324,8 @@ def create_alert(level, message, category="system", meta=None):
     normalized_category = str(category or "system").strip().lower() or "system"
     timestamp = now_iso()
     normalized_meta = dict(meta) if isinstance(meta, dict) else {}
-    school_year_label = (
-        normalize_school_year_value(normalized_meta.get("school_year"))
-        or derive_school_year_label_from_value(timestamp)
-    )
+    # Always use the current active school year from database for alerts
+    school_year_label = get_current_school_year_label()
     alerts_collection, school_year_label, _ = get_alerts_storage(school_year_label)
     if school_year_label:
         normalized_meta.setdefault("school_year", school_year_label)
@@ -2479,12 +2530,20 @@ def sidebar_context(current_page, school_year=""):
     selected_school_year = resolve_selected_school_year(school_year)
     role_name = current_role()
     can_manage_alerts = has_permission("alerts_manage")
+    is_full_admin = role_name == ROLE_FULL_ADMIN
     try:
         if can_manage_alerts:
             alerts_collection, selected_school_year, _ = get_alerts_storage(selected_school_year)
             unread = alerts_collection.count_documents(unread_notifications_query(selected_school_year))
     except Exception:
         unread = 0
+
+    pending_eto_count = 0
+    if is_full_admin:
+        try:
+            pending_eto_count = int(early_timeout_requests.count_documents({"status": "pending"}))
+        except Exception:
+            pass
 
     display_user = session.get("admin", "Admin")
     try:
@@ -2499,7 +2558,7 @@ def sidebar_context(current_page, school_year=""):
         "current_page": current_page,
         "current_user": display_user,
         "current_role": role_name,
-        "is_full_admin": role_name == ROLE_FULL_ADMIN,
+        "is_full_admin": is_full_admin,
         "can_manage_students": has_permission("students_write"),
         "can_register_faces": has_permission("face_register"),
         "can_view_logs": has_permission("logs"),
@@ -2507,6 +2566,7 @@ def sidebar_context(current_page, school_year=""):
         "can_manage_users": has_permission("users_manage"),
         "can_manage_alerts": can_manage_alerts,
         "alerts_unread": unread,
+        "pending_eto_count": pending_eto_count,
         "current_theme": theme,
         "selected_school_year": selected_school_year,
         "current_school_year": get_current_school_year_label(),
@@ -2849,7 +2909,25 @@ def load_face_index_from_db(allow_legacy_fallback=False):
             {"faces.0": {"$exists": True}},
         ])
 
+    # Strict academic year validation: only load students enrolled in current year
+    current_sy = get_current_school_year_label()
+    enrolled_ids = set()
+    if current_sy:
+        enrollment_coll = get_student_enrollment_collection(current_sy)
+        # Filter for active/enrolled status in that year
+        # We consider any record in the current year's enrollment collection that isn't 'Dropped' or similar
+        enrolled_cursor = enrollment_coll.find(
+            {"status": {"$nin": ["Dropped", "Withdrawn", "Transferred Out"]}},
+            {"student_id": 1}
+        )
+        enrolled_ids = {str(doc.get("student_id", "")).strip() for doc in enrolled_cursor if doc.get("student_id")}
+
     query = {"$and": [_active_students_match_clause(), face_source_match]}
+    
+    # Apply the academic year filter
+    if current_sy:
+        query["$and"].append({"student_id": {"$in": list(enrolled_ids)}})
+
     projection = {
         "student_id": 1,
         "name": 1,
@@ -3784,10 +3862,8 @@ def log_skipped_sms(student_id="", student_name="", parent_contact="", message="
     date_str = now.strftime("%Y-%m-%d")
     time_str = now.strftime("%H:%M:%S")
     metadata_payload = metadata if isinstance(metadata, dict) else {}
-    school_year_label = (
-        normalize_school_year_value(metadata_payload.get("school_year"))
-        or derive_school_year_label_from_value(date_str)
-    )
+    # Always use the current active school year from database for SMS logging
+    school_year_label = get_current_school_year_label()
     sms_collection, school_year_label, _ = get_sms_logs_storage(school_year_label)
     raw_to = str(parent_contact or "").strip()
     normalized_to = ""
@@ -3850,10 +3926,8 @@ def send_sms(to_number, message, sms_type="transactional", metadata=None, studen
     msg = str(message or "").strip()
     raw_to = str(to_number or "").strip()
     metadata_payload = metadata if isinstance(metadata, dict) else {}
-    school_year_label = (
-        normalize_school_year_value(metadata_payload.get("school_year"))
-        or derive_school_year_label_from_value(date_str)
-    )
+    # Always use the current active school year from database for SMS sending
+    school_year_label = get_current_school_year_label()
     sms_collection, school_year_label, _ = get_sms_logs_storage(school_year_label)
     try:
         retry_count = max(int(metadata_payload.get("retry_count", 0) or 0), 0)
@@ -4174,7 +4248,8 @@ def ensure_user_profile_defaults():
 
 def maybe_create_absence_alerts():
     today = now_local().date()
-    school_year_label = derive_school_year_label_from_value(today.isoformat()) or get_current_school_year_label()
+    # Always use the current active school year from database for absence alerts
+    school_year_label = get_current_school_year_label()
     school_days = []
     cursor = today
     while len(school_days) < 7:
@@ -4239,7 +4314,8 @@ def log_attendance_and_sms(student):
     timestamp = now_iso()
     date_str = now.strftime("%Y-%m-%d")
     time_str = now.strftime("%H:%M:%S")
-    school_year_label = derive_school_year_label_from_value(date_str) or get_current_school_year_label()
+    # Always use the current active school year from database for gate scanning
+    school_year_label = get_current_school_year_label()
     attendance_collection, school_year_label, _ = get_attendance_logs_storage(school_year_label)
     session_info = resolve_gate_session(now)
     status = session_info["status"]
@@ -5082,6 +5158,13 @@ def dashboard():
     payload.update(sidebar_context("dashboard", selected_school_year))
     payload["message"] = request.args.get("message", "").strip()
     payload["message_type"] = request.args.get("message_type", "success").strip() or "success"
+    # Inject today's active calendar event so the template can show a banner
+    today_active = get_active_schedule(now_local())
+    payload["today_event_type"] = today_active.get("type", "regular")
+    payload["today_special_condition"] = today_active.get("special_condition") or ""
+    today_date_str = now_local().strftime("%Y-%m-%d")
+    today_ev_doc = calendar_events.find_one({"date": today_date_str})
+    payload["today_event_title"] = today_ev_doc.get("title", "") if today_ev_doc else ""
     return render_template("dashboard.html", **payload)
 
 
@@ -9516,7 +9599,8 @@ def simulate_gate(student_id):
     now = now_local()
     date_str = now.strftime("%Y-%m-%d")
     time_str = now.strftime("%H:%M:%S")
-    school_year_label = derive_school_year_label_from_value(date_str) or get_current_school_year_label()
+    # Always use the current active school year from database for gate simulation
+    school_year_label = get_current_school_year_label()
     attendance_collection, school_year_label, _ = get_attendance_logs_storage(school_year_label)
     session_info = resolve_gate_session(now)
     status = session_info["status"]
@@ -10524,6 +10608,388 @@ def debug_sms_test():
         "result": result,
         "log": log_doc,
     }), http_code
+
+
+# =====================================
+# CALENDAR / SETTINGS API
+# =====================================
+
+# =====================================
+# EARLY TIME-OUT (ETO) FEATURE
+# =====================================
+
+@app.route("/early-timeout")
+@require_permission("logs")
+def early_timeout_page():
+    """Admin page for managing early time-out requests."""
+    sy = resolve_selected_school_year(request.args.get("school_year", ""))
+    pending_count = 0
+    try:
+        pending_count = int(early_timeout_requests.count_documents({"status": "pending"}))
+    except Exception:
+        pass
+    return render_template(
+        "early_timeout.html",
+        pending_count=pending_count,
+        **sidebar_context("early_timeout", sy)
+    )
+
+
+@app.route("/api/early-timeout/requests/count", methods=["GET"])
+def api_eto_count():
+    """Return pending ETO request count for badge display."""
+    if not login_required():
+        return jsonify({"status": "error", "message": "Unauthorized"}), 401
+    try:
+        count = int(early_timeout_requests.count_documents({"status": "pending"}))
+        return jsonify({"status": "ok", "pending_count": count})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/early-timeout/request", methods=["POST"])
+@require_permission("logs")
+def api_eto_submit():
+    """Submit a new early time-out request for a student (by staff/admin)."""
+    data = request.get_json(silent=True) or {}
+    student_id = str(data.get("student_id") or "").strip()
+    reason = str(data.get("reason") or "").strip()
+    urgency = str(data.get("urgency") or "normal").strip().lower()
+    notes = str(data.get("notes") or "").strip()
+    if not student_id:
+        return jsonify({"status": "error", "message": "Student ID is required."}), 400
+    if len(reason) < 5:
+        return jsonify({"status": "error", "message": "Please provide a clear reason (at least 5 characters)."}), 400
+
+    # Look up student across current school year
+    student = None
+    sy = resolve_selected_school_year("")
+    enroll_col = get_student_enrollment_collection(sy)
+    student = enroll_col.find_one({"student_id": student_id})
+    if not student:
+        student = students.find_one({"student_id": student_id})
+    student_name = (
+        str(student.get("name") or student.get("fullName") or "").strip()
+        if student else student_id
+    )
+    section = str(student.get("section") or "").strip() if student else ""
+    grade_level = str(student.get("grade_level") or student.get("grade") or "").strip() if student else ""
+
+    now = now_local()
+    now_str = now.isoformat()
+    date_str = now.strftime("%Y-%m-%d")
+    submitted_by = session.get("admin", "staff")
+
+    doc = {
+        "student_id": student_id,
+        "student_name": student_name,
+        "section": section,
+        "grade_level": grade_level,
+        "reason": reason,
+        "urgency": urgency if urgency in ("normal", "urgent") else "normal",
+        "notes": notes,
+        "status": "pending",
+        "requested_by": submitted_by,
+        "requested_at": now_str,
+        "date": date_str,
+        "school_year": sy,
+        "reviewed_by": None,
+        "reviewed_at": None,
+        "review_note": None,
+        "attendance_log_id": None,
+    }
+    result = early_timeout_requests.insert_one(doc)
+    return jsonify({"status": "ok", "message": f"Early time-out request submitted for {student_name}.", "request_id": str(result.inserted_id)})
+
+
+@app.route("/api/early-timeout/requests", methods=["GET"])
+@require_permission("logs")
+def api_eto_list():
+    """List early time-out requests with optional filters."""
+    status_filter = request.args.get("status", "").strip()
+    date_filter = request.args.get("date", "").strip()
+    student_q = request.args.get("q", "").strip()
+    limit = min(int(request.args.get("limit", 50)), 200)
+
+    query = {}
+    if status_filter in ("pending", "approved", "denied"):
+        query["status"] = status_filter
+    if date_filter:
+        query["date"] = date_filter
+    if student_q:
+        import re as _re
+        pat = {"$regex": _re.escape(student_q), "$options": "i"}
+        query["$or"] = [{"student_name": pat}, {"student_id": pat}]
+
+    rows = []
+    try:
+        for doc in early_timeout_requests.find(query).sort("requested_at", -1).limit(limit):
+            doc["_id"] = str(doc["_id"])
+            rows.append(doc)
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+    pending_count = int(early_timeout_requests.count_documents({"status": "pending"}))
+    return jsonify({"status": "ok", "rows": rows, "pending_count": pending_count})
+
+
+@app.route("/api/early-timeout/requests/<request_id>/approve", methods=["POST"])
+@require_permission("logs")
+def api_eto_approve(request_id):
+    """Approve an ETO request and create an attendance log exit entry."""
+    from bson import ObjectId
+    try:
+        oid = ObjectId(request_id)
+    except Exception:
+        return jsonify({"status": "error", "message": "Invalid request ID."}), 400
+
+    eto = early_timeout_requests.find_one({"_id": oid})
+    if not eto:
+        return jsonify({"status": "error", "message": "Request not found."}), 404
+    if eto.get("status") != "pending":
+        return jsonify({"status": "error", "message": f"Request is already {eto.get('status')}."}), 409
+
+    data = request.get_json(silent=True) or {}
+    review_note = str(data.get("review_note") or "").strip()
+    now = now_local()
+    now_str = now.isoformat()
+    date_str = eto.get("date") or now.strftime("%Y-%m-%d")
+    time_str = now.strftime("%I:%M %p")
+    reviewer = session.get("admin", "admin")
+
+    # Write attendance log entry for the early exit
+    log_entry = {
+        "student_id": eto["student_id"],
+        "name": eto.get("student_name", eto["student_id"]),
+        "student_name": eto.get("student_name", eto["student_id"]),
+        "section": eto.get("section", ""),
+        "grade_level": eto.get("grade_level", ""),
+        "grade": eto.get("grade_level", ""),
+        "action": "OUT",
+        "status": "Present",
+        "verification_label": "Early Timeout",
+        "early_timeout": True,
+        "early_timeout_reason": eto.get("reason", ""),
+        "early_timeout_request_id": str(oid),
+        "session": "Afternoon",
+        "date": date_str,
+        "time": time_str,
+        "timestamp": now_str,
+        "school_year": eto.get("school_year", get_current_school_year_label()),
+        "gate_action": "OUT",
+    }
+    log_result = attendance_logs.insert_one(log_entry)
+    log_id = str(log_result.inserted_id)
+
+    # Update ETO request status
+    early_timeout_requests.update_one(
+        {"_id": oid},
+        {"$set": {
+            "status": "approved",
+            "reviewed_by": reviewer,
+            "reviewed_at": now_str,
+            "review_note": review_note,
+            "attendance_log_id": log_id,
+        }}
+    )
+    return jsonify({
+        "status": "ok",
+        "message": f"Early time-out approved for {eto.get('student_name', eto['student_id'])}. Exit recorded.",
+        "attendance_log_id": log_id,
+    })
+
+
+@app.route("/api/early-timeout/requests/<request_id>/deny", methods=["POST"])
+@require_permission("logs")
+def api_eto_deny(request_id):
+    """Deny an ETO request."""
+    from bson import ObjectId
+    try:
+        oid = ObjectId(request_id)
+    except Exception:
+        return jsonify({"status": "error", "message": "Invalid request ID."}), 400
+
+    eto = early_timeout_requests.find_one({"_id": oid})
+    if not eto:
+        return jsonify({"status": "error", "message": "Request not found."}), 404
+    if eto.get("status") != "pending":
+        return jsonify({"status": "error", "message": f"Request is already {eto.get('status')}."}), 409
+
+    data = request.get_json(silent=True) or {}
+    review_note = str(data.get("review_note") or "").strip()
+    now = now_local()
+    reviewer = session.get("admin", "admin")
+
+    early_timeout_requests.update_one(
+        {"_id": oid},
+        {"$set": {
+            "status": "denied",
+            "reviewed_by": reviewer,
+            "reviewed_at": now.isoformat(),
+            "review_note": review_note,
+        }}
+    )
+    return jsonify({
+        "status": "ok",
+        "message": f"Early time-out request denied for {eto.get('student_name', eto['student_id'])}.",
+    })
+
+
+@app.route("/api/early-timeout/requests/<request_id>", methods=["DELETE"])
+@require_permission("full_admin")
+def api_eto_delete(request_id):
+    """Cancel/delete an ETO request (Full Admin only)."""
+    from bson import ObjectId
+    try:
+        oid = ObjectId(request_id)
+    except Exception:
+        return jsonify({"status": "error", "message": "Invalid request ID."}), 400
+    result = early_timeout_requests.delete_one({"_id": oid})
+    if result.deleted_count == 0:
+        return jsonify({"status": "error", "message": "Request not found."}), 404
+    return jsonify({"status": "ok", "message": "Request deleted."})
+
+
+# =====================================
+# CALENDAR / SETTINGS API
+# =====================================
+
+@app.route("/calendar")
+@require_permission("analytics")  # Reuse analytics permission - calendar is for full-admin only
+def admin_calendar():
+    return render_template(
+        "admin_calendar.html",
+        **sidebar_context("calendar", resolve_selected_school_year(request.args.get("school_year", "")))
+    )
+
+@app.route("/api/schedule/default", methods=["GET"])
+def api_get_default_schedule():
+    if not login_required():
+        return jsonify({"status": "error", "message": "Unauthorized"}), 401
+    return jsonify({"status": "ok", "schedule": get_default_schedule()})
+
+
+@app.route("/api/schedule/default", methods=["POST"])
+def api_update_default_schedule():
+    if not login_required() or session.get("role") != ROLE_FULL_ADMIN:
+        return jsonify({"status": "error", "message": "Unauthorized"}), 401
+        
+    payload = request.json or {}
+    schedule_data = {
+        "morning_start": payload.get("morning_start", "05:00"),
+        "morning_late": payload.get("morning_late", "08:15"),
+        "noon_start": payload.get("noon_start", "12:00"),
+        "afternoon_start": payload.get("afternoon_start", "13:00"),
+        "afternoon_late": payload.get("afternoon_late", "13:15"),
+        "afternoon_end": payload.get("afternoon_end", "17:00")
+    }
+    
+    system_settings.update_one(
+        {"key": "default_schedule"},
+        {"$set": {"schedule": schedule_data}},
+        upsert=True
+    )
+    return jsonify({"status": "ok", "message": "Default schedule updated", "schedule": schedule_data})
+
+
+@app.route("/api/calendar/events", methods=["GET"])
+def api_get_calendar_events():
+    if not login_required():
+        return jsonify({"status": "error", "message": "Unauthorized"}), 401
+    
+    start_date = request.args.get("start")
+    end_date = request.args.get("end")
+    
+    query = {}
+    if start_date or end_date:
+        date_q = {}
+        if start_date: date_q["$gte"] = start_date
+        if end_date: date_q["$lte"] = end_date
+        query["date"] = date_q
+        
+    eventsCursor = calendar_events.find(query).sort("date", ASCENDING)
+    events = []
+    for ev in eventsCursor:
+        ev["_id"] = str(ev["_id"])
+        events.append(ev)
+        
+    return jsonify({"status": "ok", "events": events})
+
+
+@app.route("/api/calendar/events", methods=["POST"])
+def api_create_calendar_event():
+    if not login_required() or session.get("role") != ROLE_FULL_ADMIN:
+        return jsonify({"status": "error", "message": "Unauthorized"}), 401
+        
+    payload = request.json or {}
+    date_str = payload.get("date")
+    type_str = payload.get("type", "holiday")
+    title = payload.get("title", "")
+    special_cond = payload.get("special_condition", "")
+    custom_schedule = payload.get("custom_schedule")
+    
+    if not date_str:
+        return jsonify({"status": "error", "message": "Date is required"}), 400
+        
+    doc = {
+        "date": date_str,
+        "type": type_str,
+        "title": title,
+        "special_condition": special_cond,
+    }
+    if custom_schedule:
+        doc["custom_schedule"] = custom_schedule
+        
+    try:
+        res = calendar_events.insert_one(doc)
+        doc["_id"] = str(res.inserted_id)
+        return jsonify({"status": "ok", "event": doc})
+    except DuplicateKeyError:
+        return jsonify({"status": "error", "message": "An event already exists for this date."}), 400
+
+
+@app.route("/api/calendar/events/<event_id>", methods=["PUT"])
+def api_update_calendar_event(event_id):
+    if not login_required() or session.get("role") != ROLE_FULL_ADMIN:
+        return jsonify({"status": "error", "message": "Unauthorized"}), 401
+        
+    payload = request.json or {}
+    type_str = payload.get("type", "holiday")
+    title = payload.get("title", "")
+    special_cond = payload.get("special_condition", "")
+    custom_schedule = payload.get("custom_schedule")
+    
+    update_data = {
+        "type": type_str,
+        "title": title,
+        "special_condition": special_cond,
+        "custom_schedule": custom_schedule
+    }
+    # Unset custom_schedule if it is not provided
+    if not custom_schedule:
+        calendar_events.update_one({"_id": ObjectId(event_id)}, {"$unset": {"custom_schedule": ""}})
+        update_data.pop("custom_schedule", None)
+        
+    res = calendar_events.update_one(
+        {"_id": ObjectId(event_id)},
+        {"$set": update_data}
+    )
+    if res.matched_count == 0:
+        return jsonify({"status": "error", "message": "Event not found"}), 404
+        
+    return jsonify({"status": "ok", "message": "Event updated"})
+
+
+@app.route("/api/calendar/events/<event_id>", methods=["DELETE"])
+def api_delete_calendar_event(event_id):
+    if not login_required() or session.get("role") != ROLE_FULL_ADMIN:
+        return jsonify({"status": "error", "message": "Unauthorized"}), 401
+        
+    res = calendar_events.delete_one({"_id": ObjectId(event_id)})
+    if res.deleted_count == 0:
+        return jsonify({"status": "error", "message": "Event not found"}), 404
+        
+    return jsonify({"status": "ok", "message": "Event deleted"})
 
 
 # =====================================

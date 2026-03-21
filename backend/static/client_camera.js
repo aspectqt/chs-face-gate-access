@@ -64,6 +64,22 @@ class ClientCamera {
             // Request camera access from CLIENT device
             this.stream = await navigator.mediaDevices.getUserMedia(mediaConstraints);
 
+            // Try to enable continuous focus if supported
+            try {
+                const track = this.stream.getVideoTracks()[0];
+                if (track && typeof track.getCapabilities === 'function') {
+                    const capabilities = track.getCapabilities();
+                    if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
+                        await track.applyConstraints({
+                            advanced: [{ focusMode: 'continuous' }]
+                        });
+                        console.log('[ClientCamera] Continuous focus enabled');
+                    }
+                }
+            } catch (e) {
+                console.debug('[ClientCamera] Focus mode capability check failed:', e.message);
+            }
+
             // Attach stream to video element
             if (this.videoElement.srcObject !== undefined) {
                 this.videoElement.srcObject = this.stream;
