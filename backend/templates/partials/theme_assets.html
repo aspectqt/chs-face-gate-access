@@ -1,6 +1,14 @@
 <meta name="csrf-token" content="{{ csrf_token() }}">
 <script>
   (function () {
+    window.AppPermissions = {
+      canManageStudents: {{ 'true' if can_manage_students else 'false' }},
+      canRegisterFaces: {{ 'true' if can_register_faces else 'false' }},
+      canViewLogs: {{ 'true' if can_view_logs else 'false' }},
+      canViewAnalytics: {{ 'true' if can_view_analytics else 'false' }},
+      canManageUsers: {{ 'true' if can_manage_users else 'false' }},
+      canManageAlerts: {{ 'true' if can_manage_alerts else 'false' }}
+    };
     var VALID = { light: true, dark: true };
     var serverTheme = "{{ current_theme|default('')|lower }}";
     var localTheme = "";
@@ -123,3 +131,5 @@
 </script>
 <link rel="stylesheet" href="{{ url_for('static', filename='theme.css') }}">
 <script src="{{ url_for('static', filename='theme.js') }}" defer></script>
+
+

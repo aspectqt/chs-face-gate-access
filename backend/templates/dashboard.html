@@ -32,10 +32,40 @@
             letter-spacing: -0.01em;
         }
 
+        .dashboard-shell {
+            min-width: 0;
+            flex: 1 1 auto;
+        }
+
+        .dashboard-header {
+            height: 4rem;
+            width: 100%;
+            min-width: 0;
+            overflow: visible;
+        }
+
+        .dashboard-header-actions {
+            min-width: 0;
+            flex-wrap: nowrap;
+            justify-content: flex-end;
+            flex-shrink: 0;
+            overflow: visible;
+        }
+
+        .dashboard-main {
+            width: 100%;
+            min-width: 0;
+        }
+
         .dashboard-main h1,
         .dashboard-main h2,
         .dashboard-main h3 {
             letter-spacing: -0.02em;
+        }
+
+        .dashboard-main>section {
+            width: 100%;
+            min-width: 0;
         }
 
         .dashboard-card {
@@ -86,30 +116,36 @@
             padding-top: 0.75rem;
             padding-bottom: 0.75rem;
         }
+
+        @media (max-width: 640px) {
+            .dashboard-main {
+                padding: 1rem;
+            }
+        }
     </style>
 </head>
 
-<body class="bg-slate-100 h-screen overflow-hidden text-slate-800 dashboard-page" data-authenticated="1"
-    data-user-theme="{{ current_theme|default('') }}" x-data="{ mobileMenuOpen: false }">
-    <div class="flex h-full">
+<body class="bg-slate-100 min-h-screen min-h-[100svh] w-full overflow-hidden text-slate-800 dashboard-page" data-authenticated="1"
+    data-user-theme="{{ current_theme|default('') }}" data-can-manage-alerts="{% if can_manage_alerts %}1{% else %}0{% endif %}" x-data="{ mobileMenuOpen: false }">
+    <div class="flex h-full w-full min-w-0">
 
         {% include 'partials/sidebar.html' %}
 
         <!-- MAIN -->
-        <div class="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
+        <div class="dashboard-shell flex h-full w-full flex-1 flex-col min-w-0 overflow-hidden">
 
             <!-- HEADER -->
-            <header class="relative z-20 h-16 bg-white shadow-sm flex shrink-0 items-center justify-between px-4 md:px-6">
-                <div class="flex items-center gap-3">
+            <header class="dashboard-header relative z-20 flex shrink-0 items-center justify-between gap-4 bg-white px-4 shadow-sm md:px-6">
+                <div class="flex min-w-0 items-center gap-3">
                     <button @click="mobileMenuOpen = true" class="md:hidden text-gray-500 hover:text-gray-700 focus:outline-none">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
                         </svg>
                     </button>
-                    <h1 class="text-lg font-semibold text-gray-800 hidden sm:block">Dashboard</h1>
+                    <h1 class="truncate text-lg font-semibold text-gray-800 hidden sm:block">Dashboard</h1>
                 </div>
 
-                <div class="flex items-center gap-2 md:gap-4">
+                <div class="dashboard-header-actions flex items-center gap-2 md:gap-4">
                     <a href="/developers"
                         class="text-xs font-medium text-emerald-700 border border-emerald-200 px-3 py-1.5 rounded-full hover:bg-emerald-50 transition">Help</a>
 
@@ -117,7 +153,8 @@
                     transition focus:outline-none focus:ring-2 focus:ring-emerald-400' %}
                     {% include 'partials/theme_toggle_button.html' %}
 
-                    <div class="relative">
+                    {% if can_manage_alerts %}
+                    <div class="relative shrink-0">
                         <button id="alertsButton" aria-expanded="false"
                             class="relative rounded-full bg-gray-100 p-2 transition hover:bg-gray-200"
                             title="Notifications" aria-label="Open notifications">
@@ -132,7 +169,7 @@
                         </button>
 
                         <div id="alertsDropdown"
-                            class="ui-dropdown-menu ui-dropdown-hidden hidden absolute right-0 mt-2 w-[25rem] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl z-50">
+                            class="ui-dropdown-menu ui-dropdown-hidden hidden absolute right-0 z-50 mt-2 w-[25rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
                             <div class="border-b border-slate-200 bg-gradient-to-r from-slate-50 to-white px-4 py-3">
                                 <div class="flex items-center justify-between gap-3">
                                     <div>
@@ -166,9 +203,10 @@
                             </div>
                         </div>
                     </div>
+                    {% endif %}
 
                     <button id="profileAvatarButton" type="button"
-                        class="relative h-10 w-10 rounded-full overflow-hidden border border-slate-300 bg-slate-100 hover:ring-2 hover:ring-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                        class="relative h-10 w-10 shrink-0 overflow-hidden rounded-full border border-slate-300 bg-slate-100 hover:ring-2 hover:ring-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-400"
                         aria-label="Open personal information">
                         <img id="headerAvatarImage" src="" alt="Profile avatar"
                             class="h-full w-full object-cover hidden">
@@ -176,20 +214,20 @@
                             class="absolute inset-0 flex items-center justify-center text-sm font-semibold text-slate-700">A</span>
                     </button>
 
-                    <div class="relative">
+                    <div class="relative min-w-0">
                         <button id="userMenuButton" aria-expanded="false"
-                            class="flex items-center gap-2 bg-gray-100 px-3 py-1.5 md:px-4 md:py-2 rounded-full hover:bg-gray-200 transition">
-                            <span id="headerDisplayName" class="text-gray-700 font-medium hidden sm:block">{{ current_user }}</span>
-                            <span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">{{
+                            class="flex max-w-full items-center gap-2 rounded-full bg-gray-100 px-3 py-1.5 transition hover:bg-gray-200 md:px-4 md:py-2">
+                            <span id="headerDisplayName" class="hidden truncate text-gray-700 font-medium sm:block">{{ current_user }}</span>
+                            <span class="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] text-emerald-700">{{
                                 current_role }}</span>
-                            <svg data-dropdown-arrow class="h-4 w-4 text-gray-600" fill="none" stroke="currentColor"
+                            <svg data-dropdown-arrow class="h-4 w-4 shrink-0 text-gray-600" fill="none" stroke="currentColor"
                                 stroke-width="2" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
                             </svg>
                         </button>
 
                         <div id="userDropdown"
-                            class="ui-dropdown-menu ui-dropdown-hidden absolute right-0 z-[120] mt-2 w-52 bg-white rounded-xl shadow-lg border border-gray-200 hidden p-2">
+                            class="ui-dropdown-menu ui-dropdown-hidden hidden absolute right-0 z-[120] mt-2 w-52 rounded-xl border border-gray-200 bg-white p-2 shadow-lg">
                             <a href="/logout" data-logout-link="1"
                                 class="inline-flex w-full items-center gap-2 rounded-lg border border-rose-200 bg-gradient-to-r from-rose-50 to-white px-3 py-2 text-sm font-semibold text-rose-700 transition hover:from-rose-100 hover:to-rose-50 hover:text-rose-800">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none"
@@ -207,10 +245,15 @@
             </header>
 
             <!-- CONTENT -->
-            <main class="flex-1 overflow-y-auto p-6 space-y-5 dashboard-main">
+            <main class="dashboard-main flex-1 overflow-y-auto p-6 space-y-5">
+                {% if message %}
+                <div class="rounded-2xl border px-4 py-3 text-sm {% if message_type == 'error' %}border-rose-200 bg-rose-50 text-rose-700{% else %}border-emerald-200 bg-emerald-50 text-emerald-700{% endif %}">
+                    {{ message }}
+                </div>
+                {% endif %}
 
                 <!-- STATS -->
-                <section class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-5">
+                <section class="grid w-full grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-5">
                     <article
                         class="dashboard-card group relative overflow-hidden rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-emerald-100/70 p-4 shadow-sm transition hover:shadow-md">
                         <div class="absolute -right-4 -top-4 h-20 w-20 rounded-full bg-emerald-200/40 blur-xl"></div>
@@ -321,7 +364,7 @@
                     </article>
                 </section>
 
-                <section class="dashboard-card rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <section class="dashboard-card w-full rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                     <div class="flex flex-wrap items-start justify-between gap-3">
                         <div>
                             <h3 class="text-base font-semibold text-slate-800">Operations Health</h3>
@@ -368,7 +411,7 @@
                 </section>
 
                 <!-- GATE + SEARCH -->
-                <section id="gate-scanning" class="grid grid-cols-1 xl:grid-cols-12 gap-5 items-stretch">
+                <section id="gate-scanning" class="grid w-full grid-cols-1 gap-5 xl:grid-cols-12 items-stretch">
                     <div class="xl:col-span-7">
                         <div id="gateConsoleCard"
                             class="dashboard-card rounded-3xl border border-slate-200 bg-gradient-to-b from-white via-slate-50 to-slate-100/70 p-4 shadow-sm">
@@ -575,7 +618,7 @@
                     </div>
                 </section>
 
-                <section class="grid grid-cols-1 xl:grid-cols-12 gap-5">
+                <section class="grid w-full grid-cols-1 gap-5 xl:grid-cols-12">
                     <div class="xl:col-span-12">
                         <div id="smsUnitsCard"
                             class="dashboard-card rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -624,16 +667,7 @@
                     </div>
                 </section>
 
-                {% set role_stats = namespace(full_admin=0, limited_access=0) %}
-                {% for user in users_list %}
-                {% if user.role == 'Full Admin' %}
-                {% set role_stats.full_admin = role_stats.full_admin + 1 %}
-                {% else %}
-                {% set role_stats.limited_access = role_stats.limited_access + 1 %}
-                {% endif %}
-                {% endfor %}
-
-                <section id="system-activity" class="grid grid-cols-1 xl:grid-cols-12 gap-5 items-stretch">
+                <section id="system-activity" class="grid w-full grid-cols-1 gap-5 xl:grid-cols-12 items-stretch">
                     <article
                         class="dashboard-card bg-white rounded-2xl shadow-sm border border-slate-200 p-5 xl:col-span-7">
                         <div class="flex items-start justify-between gap-3 mb-3">
@@ -704,6 +738,7 @@
                     </article>
                 </section>
 
+                {% if can_manage_users %}
                 <section class="space-y-5">
                     <article id="user-management"
                         class="dashboard-card bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden relative">
@@ -739,21 +774,21 @@
                             <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-5">
                                 <div class="relative overflow-hidden rounded-xl border border-slate-200 bg-white p-4 shadow-sm group hover:border-indigo-200 transition-colors">
                                     <p class="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-1">Total Active Users</p>
-                                    <p class="text-2xl font-black text-slate-800 group-hover:text-indigo-600 transition-colors">{{ users_list|length }}</p>
+                                    <p id="identityTotalUsersCount" class="text-2xl font-black text-slate-800 group-hover:text-indigo-600 transition-colors">{{ users_stats.total }}</p>
                                     <div class="absolute -right-2 -bottom-2 h-16 w-16 opacity-[0.03] group-hover:opacity-[0.06] transition-opacity">
                                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
                                     </div>
                                 </div>
                                 <div class="relative overflow-hidden rounded-xl border border-slate-200 bg-white p-4 shadow-sm group hover:border-emerald-200 transition-colors">
                                     <p class="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-1">Full Administrators</p>
-                                    <p class="text-2xl font-black text-slate-800 group-hover:text-emerald-600 transition-colors">{{ role_stats.full_admin }}</p>
+                                    <p id="identityFullAdminCount" class="text-2xl font-black text-slate-800 group-hover:text-emerald-600 transition-colors">{{ users_stats.full_admin }}</p>
                                     <div class="absolute -right-2 -bottom-2 h-16 w-16 opacity-[0.03] text-emerald-900 group-hover:opacity-[0.08] transition-opacity">
                                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/></svg>
                                     </div>
                                 </div>
                                 <div class="relative overflow-hidden rounded-xl border border-slate-200 bg-white p-4 shadow-sm group hover:border-cyan-200 transition-colors">
-                                    <p class="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-1">Limited Access</p>
-                                    <p class="text-2xl font-black text-slate-800 group-hover:text-cyan-600 transition-colors">{{ role_stats.limited_access }}</p>
+                                    <p class="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-1">Staff</p>
+                                    <p id="identityStaffCount" class="text-2xl font-black text-slate-800 group-hover:text-cyan-600 transition-colors">{{ users_stats.staff }}</p>
                                     <div class="absolute -right-2 -bottom-2 h-16 w-16 opacity-[0.03] text-cyan-900 group-hover:opacity-[0.08] transition-opacity">
                                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
                                     </div>
@@ -764,13 +799,14 @@
                         <!-- Main Content Area -->
                         <div class="p-5">
                             <!-- Provisioning Form -->
-                            {% if current_role == 'Full Admin' %}
+                            {% if can_manage_users %}
                             <div class="bg-indigo-50/40 rounded-xl border border-indigo-100 p-4 mb-6">
                                 <p class="text-[11px] font-semibold uppercase tracking-wider text-indigo-800 mb-3 flex items-center gap-2">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
                                     Provision New Account
                                 </p>
                                 <form action="/admin/users/add" method="POST" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3 min-w-0">
+                                    <input type="hidden" name="school_year" value="{{ selected_school_year }}">
                                     <div class="relative xl:col-span-1">
                                         <input type="text" name="username" placeholder="Username"
                                             class="w-full min-w-0 border border-indigo-200 bg-white rounded-lg pl-3 pr-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 outline-none transition-shadow placeholder:text-slate-400" required>
@@ -786,8 +822,8 @@
                                     <div class="relative xl:col-span-1">
                                         <select name="role"
                                             class="w-full min-w-0 border border-indigo-200 bg-white rounded-lg pl-3 pr-8 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 outline-none transition-shadow font-medium text-slate-700">
+                                            <option value="Staff" selected>Staff</option>
                                             <option value="Full Admin">Full Admin</option>
-                                            <option value="Limited Access">Limited Access</option>
                                         </select>
                                     </div>
                                     <button
@@ -801,7 +837,7 @@
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                                 </svg>
-                                <p class="text-sm text-amber-800 font-medium">Your account role (Limited Access) intentionally restricts the ability to provision or modify other system accounts.</p>
+                                <p class="text-sm text-amber-800 font-medium">Your account role (Staff) intentionally restricts the ability to provision or modify other system accounts.</p>
                             </div>
                             {% endif %}
 
@@ -814,18 +850,26 @@
                                             <tr class="bg-slate-50 border-b border-slate-200">
                                                 <th class="py-3 px-4 text-[10px] font-bold uppercase tracking-wider text-slate-500">System Identity</th>
                                                 <th class="py-3 px-4 text-[10px] font-bold uppercase tracking-wider text-slate-500 text-right">Assigned Role</th>
+                                                <th class="py-3 px-4 text-[10px] font-bold uppercase tracking-wider text-slate-500 text-right">Actions</th>
                                             </tr>
                                         </thead>
-                                        <tbody class="divide-y divide-slate-100">
+                                        <tbody id="usersRosterBody" class="divide-y divide-slate-100">
                                             {% for user in users_list %}
                                             <tr class="hover:bg-slate-50/50 transition-colors group">
                                                 <td class="py-3 px-4">
                                                     <div class="flex items-center gap-3">
-                                                        <div class="h-8 w-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs ring-2 ring-white shadow-sm">
-                                                            {{ user.username[0]|upper }}
+                                                        <div class="relative h-10 w-10 shrink-0 overflow-hidden rounded-full border border-slate-200 bg-indigo-100 ring-2 ring-white shadow-sm">
+                                                            {% if user.avatarUrl %}
+                                                            <img src="{{ user.avatarUrl }}" alt="{{ user.displayName }} avatar"
+                                                                class="h-full w-full object-cover"
+                                                                onerror="this.classList.add('hidden'); this.nextElementSibling.classList.remove('hidden'); this.nextElementSibling.classList.add('flex');">
+                                                            {% endif %}
+                                                            <span class="absolute inset-0 {% if user.avatarUrl %}hidden{% else %}flex{% endif %} items-center justify-center text-xs font-bold text-indigo-700">
+                                                                {{ user.displayName[0]|upper }}
+                                                            </span>
                                                         </div>
                                                         <div class="min-w-0">
-                                                            <p class="font-bold text-slate-800 tracking-tight leading-tight truncate">{{ user.username }}</p>
+                                                            <p class="font-bold text-slate-800 tracking-tight leading-tight truncate">{{ user.displayName }}</p>
                                                             <p class="text-[11px] text-slate-500 truncate mt-0.5">{{ user.email }}</p>
                                                         </div>
                                                     </div>
@@ -840,10 +884,36 @@
                                                         {{ user.role }}
                                                     </span>
                                                 </td>
+                                                <td class="py-3 px-4 text-right">
+                                                    {% if user.role == 'Staff' %}
+                                                    <div class="flex flex-wrap items-center justify-end gap-2">
+                                                        <button
+                                                            type="button"
+                                                            class="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-[11px] font-semibold text-blue-700 transition hover:bg-blue-100"
+                                                            data-open-staff-password
+                                                            data-user-id="{{ user._id }}"
+                                                            data-display-name="{{ user.displayName }}"
+                                                        >
+                                                            Reset Password
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            class="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-[11px] font-semibold text-rose-700 transition hover:bg-rose-100"
+                                                            data-open-staff-delete
+                                                            data-user-id="{{ user._id }}"
+                                                            data-display-name="{{ user.displayName }}"
+                                                        >
+                                                            Delete Staff
+                                                        </button>
+                                                    </div>
+                                                    {% else %}
+                                                    <span class="text-[11px] font-medium text-slate-400">Protected</span>
+                                                    {% endif %}
+                                                </td>
                                             </tr>
                                             {% else %}
                                             <tr>
-                                                <td colspan="2" class="py-8 text-center text-slate-500 text-sm">
+                                                <td colspan="3" class="py-8 text-center text-slate-500 text-sm">
                                                     No active identities found in the system registry.
                                                 </td>
                                             </tr>
@@ -856,6 +926,7 @@
                     </article>
 
                 </section>
+                {% endif %}
 
             </main>
         </div>
@@ -934,7 +1005,7 @@
                 <div class="border-b border-slate-200 bg-gradient-to-r from-slate-50 to-white px-6 py-5">
                     <div class="flex items-start justify-between gap-4">
                         <div>
-                            <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Admin Account
+                            <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Account Profile
                             </p>
                             <h2 id="profileModalTitle" class="mt-1 text-2xl font-semibold text-slate-900">Personal
                                 Information</h2>
@@ -996,7 +1067,7 @@
                                             Profile Photo
                                         </h3>
                                         <span
-                                            class="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-600">Admin</span>
+                                            class="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-600">Profile</span>
                                     </div>
                                     <div class="mt-4 flex justify-center">
                                         <div
@@ -1215,7 +1286,74 @@
     <div id="profileToast" class="fixed right-4 top-4 z-[80] hidden rounded-xl border px-4 py-3 text-sm shadow-lg">
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    {% if can_manage_users %}
+    <div id="staffDeleteModal" class="fixed inset-0 z-[85] hidden bg-slate-950/45 p-4">
+        <div class="flex min-h-full items-center justify-center">
+            <div class="w-full max-w-md rounded-3xl border border-slate-200 bg-white shadow-2xl">
+                <div class="border-b border-slate-200 px-6 py-5">
+                    <div class="flex items-start justify-between gap-4">
+                        <div>
+                            <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-rose-500">Confirm Delete</p>
+                            <h2 class="mt-2 text-xl font-semibold text-slate-900">Delete Staff Account</h2>
+                            <p class="mt-2 text-sm text-slate-500">This permanently removes the Staff account.</p>
+                        </div>
+                        <button type="button" class="rounded-xl border border-slate-200 bg-white p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700" data-close-staff-modal="staffDeleteModal" aria-label="Close delete modal">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <form id="staffDeleteForm" method="POST" class="px-6 py-5">
+                    <input type="hidden" name="school_year" value="{{ selected_school_year }}">
+                    <p class="text-sm text-slate-700">Delete <span id="staffDeleteName" class="font-semibold text-slate-900">this staff account</span>?</p>
+                    <div class="mt-6 flex items-center justify-end gap-2">
+                        <button type="button" class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100" data-close-staff-modal="staffDeleteModal">Cancel</button>
+                        <button type="submit" class="rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-700">Delete Staff</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div id="staffPasswordModal" class="fixed inset-0 z-[85] hidden bg-slate-950/45 p-4">
+        <div class="flex min-h-full items-center justify-center">
+            <div class="w-full max-w-lg rounded-3xl border border-slate-200 bg-white shadow-2xl">
+                <div class="border-b border-slate-200 px-6 py-5">
+                    <div class="flex items-start justify-between gap-4">
+                        <div>
+                            <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-500">Staff Password</p>
+                            <h2 class="mt-2 text-xl font-semibold text-slate-900">Reset / Change Password</h2>
+                            <p class="mt-2 text-sm text-slate-500">Set a new password for <span id="staffPasswordName" class="font-semibold text-slate-700">this staff account</span>.</p>
+                        </div>
+                        <button type="button" class="rounded-xl border border-slate-200 bg-white p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700" data-close-staff-modal="staffPasswordModal" aria-label="Close password modal">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <form id="staffPasswordForm" method="POST" class="space-y-4 px-6 py-5">
+                    <input type="hidden" name="school_year" value="{{ selected_school_year }}">
+                    <div>
+                        <label for="staffPasswordField" class="text-sm font-semibold text-slate-700">New Password</label>
+                        <input id="staffPasswordField" name="new_password" type="password" minlength="8" maxlength="128" required class="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
+                    </div>
+                    <div>
+                        <label for="staffPasswordConfirmField" class="text-sm font-semibold text-slate-700">Confirm New Password</label>
+                        <input id="staffPasswordConfirmField" name="confirm_password" type="password" minlength="8" maxlength="128" required class="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
+                    </div>
+                    <p class="text-xs text-slate-500">Use at least 3 of these: uppercase, lowercase, number, special character.</p>
+                    <div class="flex items-center justify-end gap-2">
+                        <button type="button" class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100" data-close-staff-modal="staffPasswordModal">Cancel</button>
+                        <button type="submit" class="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700">Save Password</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <script>
         // Initialize client-side camera
         let clientCamera = new ClientCamera();
@@ -1279,7 +1417,7 @@
         let dashboardStatsRefreshTimer = null;
         let dashboardContentRefreshTimer = null;
         let dashboardRealtimeInitialized = false;
-        let dashboardRealtimeSnapshot = { revision: 0, students: 0, gate_logs: 0, sms_logs: 0 };
+        let dashboardRealtimeSnapshot = { revision: 0, students: 0, gate_logs: 0, sms_logs: 0, users: 0 };
         let scanStatusResetTimer = null;
         let scanEventBadgeTimer = null;
         let smsBalanceRefreshTimer = null;
@@ -1906,6 +2044,7 @@
                 students: Number.parseInt(payload?.students || 0, 10) || 0,
                 gate_logs: Number.parseInt(payload?.gate_logs || 0, 10) || 0,
                 sms_logs: Number.parseInt(payload?.sms_logs || 0, 10) || 0,
+                users: Number.parseInt(payload?.users || 0, 10) || 0,
             };
 
             if (!dashboardRealtimeInitialized) {
@@ -1919,6 +2058,7 @@
             const studentsChanged = snapshot.students !== dashboardRealtimeSnapshot.students;
             const gateLogsChanged = snapshot.gate_logs !== dashboardRealtimeSnapshot.gate_logs;
             const smsLogsChanged = snapshot.sms_logs !== dashboardRealtimeSnapshot.sms_logs;
+            const usersChanged = snapshot.users !== dashboardRealtimeSnapshot.users;
             dashboardRealtimeSnapshot = snapshot;
 
             if (studentsChanged || gateLogsChanged || smsLogsChanged) {
@@ -1927,6 +2067,9 @@
             }
             if (smsLogsChanged) {
                 queueSmsBalanceRefresh();
+            }
+            if (usersChanged && window.AppPermissions?.canManageUsers && typeof window.queueIdentityRosterRefresh === 'function') {
+                window.queueIdentityRosterRefresh();
             }
         }
 
@@ -2896,6 +3039,7 @@
     </script>
 
     <script>
+        const alertsEnabled = String(document.body?.dataset?.canManageAlerts || '') === '1';
         const alertsButton = document.getElementById('alertsButton');
         const alertsDropdown = document.getElementById('alertsDropdown');
         const alertsBadge = document.getElementById('alertsBadge');
@@ -2944,6 +3088,7 @@
         }
 
         function isAlertsDropdownOpen() {
+            if (!alertsEnabled || !alertsDropdown) return false;
             return !alertsDropdown.classList.contains('hidden') && !alertsDropdown.classList.contains('ui-dropdown-hidden');
         }
 
@@ -3009,6 +3154,7 @@
         }
 
         function setAlertsLoadingState(isLoading) {
+            if (!alertsLoadingState || !alertsList || !alertsEmptyState) return;
             notificationState.loading = Boolean(isLoading);
             alertsLoadingState.classList.toggle('hidden', !isLoading);
             alertsList.classList.toggle('hidden', isLoading || notificationState.items.length === 0);
@@ -3016,12 +3162,14 @@
         }
 
         function setAlertsError(message) {
+            if (!alertsErrorState) return;
             const hasError = Boolean(message);
             alertsErrorState.textContent = hasError ? message : '';
             alertsErrorState.classList.toggle('hidden', !hasError);
         }
 
         function renderNotifications() {
+            if (!alertsEnabled || !alertsList || !markAlertsReadBtn || !alertsEmptyState) return;
             const items = notificationState.items || [];
             setAlertsLoadingState(notificationState.loading);
             markAlertsReadBtn.disabled = notificationState.loading || notificationState.unread <= 0 || items.length === 0;
@@ -3290,61 +3438,63 @@
             return true;
         }
 
-        alertsButton.addEventListener('click', (event) => {
-            event.stopPropagation();
-            const opened = toggleMenu(alertsButton, alertsDropdown);
-            if (opened) {
-                closeMenu(userMenuButton, userDropdown);
-                loadNotifications({ limit: 12 });
-            }
-        });
-
-        markAlertsReadBtn.addEventListener('click', async () => {
-            if (markAlertsReadBtn.disabled) return;
-            try {
-                const response = await fetch('/api/notifications/mark-read', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                    body: JSON.stringify({ all: true })
-                });
-                const data = await response.json().catch(() => ({}));
-                if (!response.ok || data.status !== 'ok') {
-                    throw new Error(data.message || 'Failed to mark notifications as read.');
-                }
-                notificationState.items = notificationState.items.map((item) => ({ ...item, status: 'read' }));
-                setUnreadCount(data.unread ?? 0);
-                renderNotifications();
-                if (notificationState.selectedId) {
-                    notificationModalStatus.textContent = 'Read';
-                    notificationModalStatus.className = 'rounded-full bg-slate-200 px-2.5 py-1 text-[11px] font-semibold text-slate-700';
-                }
-            } catch (error) {
-                setAlertsError(error.message || 'Failed to mark notifications as read.');
-            }
-        });
-
-        alertsList.addEventListener('click', (event) => {
-            const button = event.target.closest('[data-notification-id]');
-            if (!button) return;
-            event.preventDefault();
-            event.stopPropagation();
-            openNotificationModal(button.dataset.notificationId);
-        });
-
-        if ('EventSource' in window) {
-            const alertsStream = new EventSource('/api/notifications/stream');
-            alertsStream.addEventListener('alerts', event => {
-                try {
-                    const data = JSON.parse(event.data);
-                    setUnreadCount(data.unread ?? 0);
-                    if (data.revision !== notificationState.lastRevision) {
-                        notificationState.lastRevision = data.revision;
-                        queueNotificationRefresh();
-                    }
-                } catch (error) {
-                    console.error('Failed to parse alerts stream event:', error);
+        if (alertsEnabled && alertsButton && alertsDropdown && alertsList && markAlertsReadBtn) {
+            alertsButton.addEventListener('click', (event) => {
+                event.stopPropagation();
+                const opened = toggleMenu(alertsButton, alertsDropdown);
+                if (opened) {
+                    closeMenu(userMenuButton, userDropdown);
+                    loadNotifications({ limit: 12 });
                 }
             });
+
+            markAlertsReadBtn.addEventListener('click', async () => {
+                if (markAlertsReadBtn.disabled) return;
+                try {
+                    const response = await fetch('/api/notifications/mark-read', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                        body: JSON.stringify({ all: true })
+                    });
+                    const data = await response.json().catch(() => ({}));
+                    if (!response.ok || data.status !== 'ok') {
+                        throw new Error(data.message || 'Failed to mark notifications as read.');
+                    }
+                    notificationState.items = notificationState.items.map((item) => ({ ...item, status: 'read' }));
+                    setUnreadCount(data.unread ?? 0);
+                    renderNotifications();
+                    if (notificationState.selectedId) {
+                        notificationModalStatus.textContent = 'Read';
+                        notificationModalStatus.className = 'rounded-full bg-slate-200 px-2.5 py-1 text-[11px] font-semibold text-slate-700';
+                    }
+                } catch (error) {
+                    setAlertsError(error.message || 'Failed to mark notifications as read.');
+                }
+            });
+
+            alertsList.addEventListener('click', (event) => {
+                const button = event.target.closest('[data-notification-id]');
+                if (!button) return;
+                event.preventDefault();
+                event.stopPropagation();
+                openNotificationModal(button.dataset.notificationId);
+            });
+
+            if ('EventSource' in window) {
+                const alertsStream = new EventSource('/api/notifications/stream');
+                alertsStream.addEventListener('alerts', event => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        setUnreadCount(data.unread ?? 0);
+                        if (data.revision !== notificationState.lastRevision) {
+                            notificationState.lastRevision = data.revision;
+                            queueNotificationRefresh();
+                        }
+                    } catch (error) {
+                        console.error('Failed to parse alerts stream event:', error);
+                    }
+                });
+            }
         }
 
         userMenuButton.addEventListener('click', (event) => {
@@ -3358,7 +3508,7 @@
         notificationModalBackdrop.addEventListener('click', closeNotificationModal);
 
         window.addEventListener('click', e => {
-            if (!alertsButton.contains(e.target) && !alertsDropdown.contains(e.target)) {
+            if (alertsEnabled && alertsButton && alertsDropdown && !alertsButton.contains(e.target) && !alertsDropdown.contains(e.target)) {
                 closeMenu(alertsButton, alertsDropdown);
             }
             if (!userMenuButton.contains(e.target) && !userDropdown.contains(e.target)) {
@@ -3372,8 +3522,232 @@
             }
         });
 
-        renderNotifications();
-        queueNotificationRefresh();
+        if (alertsEnabled) {
+            renderNotifications();
+            queueNotificationRefresh();
+        }
+    </script>
+
+    <script>
+        const staffDeleteModal = document.getElementById('staffDeleteModal');
+        const staffDeleteForm = document.getElementById('staffDeleteForm');
+        const staffDeleteName = document.getElementById('staffDeleteName');
+        const staffPasswordModal = document.getElementById('staffPasswordModal');
+        const staffPasswordForm = document.getElementById('staffPasswordForm');
+        const staffPasswordName = document.getElementById('staffPasswordName');
+        const staffPasswordField = document.getElementById('staffPasswordField');
+        const staffPasswordConfirmField = document.getElementById('staffPasswordConfirmField');
+        const usersRosterBody = document.getElementById('usersRosterBody');
+        const identityTotalUsersCount = document.getElementById('identityTotalUsersCount');
+        const identityFullAdminCount = document.getElementById('identityFullAdminCount');
+        const identityStaffCount = document.getElementById('identityStaffCount');
+        let identityRosterRefreshTimer = null;
+        let identityRosterLoading = false;
+
+        function openStaffModal(modal) {
+            if (!modal) return;
+            modal.classList.remove('hidden');
+            modal.setAttribute('aria-hidden', 'false');
+        }
+
+        function closeStaffModal(modal) {
+            if (!modal) return;
+            modal.classList.add('hidden');
+            modal.setAttribute('aria-hidden', 'true');
+        }
+
+        function bindStaffManagementButtons(root = document) {
+            root.querySelectorAll('[data-open-staff-delete]').forEach((button) => {
+                if (button.dataset.boundStaffDelete === '1') return;
+                button.dataset.boundStaffDelete = '1';
+                button.addEventListener('click', () => {
+                    if (!staffDeleteModal || !staffDeleteForm) return;
+                    const userId = button.getAttribute('data-user-id') || '';
+                    const displayName = button.getAttribute('data-display-name') || button.getAttribute('data-username') || 'this staff account';
+                    staffDeleteForm.action = `/admin/users/${encodeURIComponent(userId)}/delete`;
+                    if (staffDeleteName) staffDeleteName.textContent = displayName;
+                    openStaffModal(staffDeleteModal);
+                });
+            });
+
+            root.querySelectorAll('[data-open-staff-password]').forEach((button) => {
+                if (button.dataset.boundStaffPassword === '1') return;
+                button.dataset.boundStaffPassword = '1';
+                button.addEventListener('click', () => {
+                    if (!staffPasswordModal || !staffPasswordForm) return;
+                    const userId = button.getAttribute('data-user-id') || '';
+                    const displayName = button.getAttribute('data-display-name') || button.getAttribute('data-username') || 'this staff account';
+                    staffPasswordForm.action = `/admin/users/${encodeURIComponent(userId)}/password`;
+                    if (staffPasswordName) staffPasswordName.textContent = displayName;
+                    if (staffPasswordField) staffPasswordField.value = '';
+                    if (staffPasswordConfirmField) staffPasswordConfirmField.value = '';
+                    openStaffModal(staffPasswordModal);
+                    staffPasswordField?.focus();
+                });
+            });
+        }
+
+        function escapeIdentityHtml(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function renderIdentityAvatar(user) {
+            const displayName = escapeIdentityHtml(user?.displayName || user?.username || 'User');
+            const initials = escapeIdentityHtml(getInitials(user?.displayName || user?.username || 'User'));
+            const avatarUrl = String(user?.avatarUrl || '').trim();
+            const fallbackClass = avatarUrl
+                ? 'absolute inset-0 hidden items-center justify-center text-xs font-bold text-indigo-700'
+                : 'absolute inset-0 flex items-center justify-center text-xs font-bold text-indigo-700';
+            const imageMarkup = avatarUrl
+                ? `<img src="${escapeIdentityHtml(avatarUrl)}" alt="${displayName} avatar" class="h-full w-full object-cover" onerror="this.classList.add('hidden'); this.nextElementSibling.classList.remove('hidden'); this.nextElementSibling.classList.add('flex');">`
+                : '';
+            return `
+                <div class="relative h-10 w-10 shrink-0 overflow-hidden rounded-full border border-slate-200 bg-indigo-100 ring-2 ring-white shadow-sm">
+                    ${imageMarkup}
+                    <span class="${fallbackClass}">${initials}</span>
+                </div>
+            `;
+        }
+
+        function renderIdentityRoster(users, stats) {
+            if (!usersRosterBody) return;
+
+            if (identityTotalUsersCount) identityTotalUsersCount.textContent = String(stats?.total ?? (Array.isArray(users) ? users.length : 0));
+            if (identityFullAdminCount) identityFullAdminCount.textContent = String(stats?.full_admin ?? 0);
+            if (identityStaffCount) identityStaffCount.textContent = String(stats?.staff ?? 0);
+
+            if (!Array.isArray(users) || users.length === 0) {
+                usersRosterBody.innerHTML = `
+                    <tr>
+                        <td colspan="3" class="py-8 text-center text-slate-500 text-sm">
+                            No active identities found in the system registry.
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            usersRosterBody.innerHTML = users.map((user) => {
+                const displayName = escapeIdentityHtml(user?.displayName || user?.username || 'User');
+                const email = escapeIdentityHtml(user?.email || '');
+                const rawRole = String(user?.role || 'Staff');
+                const role = escapeIdentityHtml(rawRole);
+                const userId = escapeIdentityHtml(String(user?._id || ''));
+                const roleBadgeClass = rawRole === 'Full Admin'
+                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-200/50'
+                    : 'bg-slate-100 text-slate-700 border border-slate-200/50';
+                const roleIcon = rawRole === 'Full Admin'
+                    ? '<svg xmlns="http://www.w3.org/2000/svg" class="mr-1 h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" /></svg>'
+                    : '';
+                const actionsMarkup = rawRole === 'Staff'
+                    ? `
+                        <div class="flex flex-wrap items-center justify-end gap-2">
+                            <button
+                                type="button"
+                                class="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-[11px] font-semibold text-blue-700 transition hover:bg-blue-100"
+                                data-open-staff-password
+                                data-user-id="${userId}"
+                                data-display-name="${displayName}"
+                            >
+                                Reset Password
+                            </button>
+                            <button
+                                type="button"
+                                class="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-[11px] font-semibold text-rose-700 transition hover:bg-rose-100"
+                                data-open-staff-delete
+                                data-user-id="${userId}"
+                                data-display-name="${displayName}"
+                            >
+                                Delete Staff
+                            </button>
+                        </div>
+                    `
+                    : '<span class="text-[11px] font-medium text-slate-400">Protected</span>';
+
+                return `
+                    <tr class="group transition-colors hover:bg-slate-50/50">
+                        <td class="px-4 py-3">
+                            <div class="flex items-center gap-3">
+                                ${renderIdentityAvatar(user)}
+                                <div class="min-w-0">
+                                    <p class="truncate font-bold leading-tight tracking-tight text-slate-800">${displayName}</p>
+                                    <p class="mt-0.5 truncate text-[11px] text-slate-500">${email}</p>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-4 py-3 text-right">
+                            <span class="inline-flex items-center rounded-md px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${roleBadgeClass}">
+                                ${roleIcon}
+                                ${role}
+                            </span>
+                        </td>
+                        <td class="px-4 py-3 text-right">
+                            ${actionsMarkup}
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            bindStaffManagementButtons(usersRosterBody);
+        }
+
+        async function refreshIdentityRoster({ silent = false } = {}) {
+            if (!window.AppPermissions?.canManageUsers || !usersRosterBody || identityRosterLoading) return;
+            identityRosterLoading = true;
+            try {
+                const response = await fetch('/api/admin/users/roster', {
+                    headers: { 'Accept': 'application/json' }
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok || data.status !== 'ok') {
+                    throw new Error(data.message || 'Failed to load identity roster.');
+                }
+                renderIdentityRoster(Array.isArray(data.users) ? data.users : [], data.stats || {});
+            } catch (error) {
+                if (!silent) {
+                    console.error('Failed to refresh identity roster:', error);
+                }
+            } finally {
+                identityRosterLoading = false;
+            }
+        }
+
+        function queueIdentityRosterRefresh() {
+            if (!window.AppPermissions?.canManageUsers || !usersRosterBody) return;
+            if (identityRosterRefreshTimer) return;
+            identityRosterRefreshTimer = window.setTimeout(() => {
+                identityRosterRefreshTimer = null;
+                refreshIdentityRoster({ silent: true });
+            }, 280);
+        }
+
+        window.queueIdentityRosterRefresh = queueIdentityRosterRefresh;
+
+        bindStaffManagementButtons();
+
+        document.querySelectorAll('[data-close-staff-modal]').forEach((button) => {
+            button.addEventListener('click', () => {
+                const modalId = button.getAttribute('data-close-staff-modal');
+                closeStaffModal(document.getElementById(modalId));
+            });
+        });
+
+        [staffDeleteModal, staffPasswordModal].forEach((modal) => {
+            modal?.addEventListener('click', (event) => {
+                if (event.target === modal) {
+                    closeStaffModal(modal);
+                }
+            });
+        });
+
+        if (window.AppPermissions?.canManageUsers && usersRosterBody) {
+            refreshIdentityRoster({ silent: true });
+        }
     </script>
 
     <script>

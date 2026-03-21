@@ -97,6 +97,42 @@
     return getServerTheme() || getLocalTheme() || getSystemTheme();
   }
 
+  function hideUnauthorizedSidebarLinks() {
+    if (!window.AppPermissions || typeof window.AppPermissions !== "object") return;
+    const permissions = window.AppPermissions || {};
+    const hideLinks = (selectors) => {
+      selectors.forEach((selector) => {
+        document.querySelectorAll(selector).forEach((link) => {
+          link.classList.add("hidden");
+        });
+      });
+    };
+
+    if (!permissions.canViewLogs) {
+      hideLinks(['aside a[href="/gate-logs"]', 'aside a[href="/sms-logs"]']);
+    }
+    if (!permissions.canViewAnalytics) {
+      hideLinks(['aside a[href="/analytics"]', 'aside a[href="/analytics#reports-charts"]']);
+    }
+    if (!permissions.canManageAlerts) {
+      hideLinks(['aside a[href="/dashboard#alertsButton"]']);
+    }
+    if (!permissions.canManageUsers) {
+      hideLinks([
+        'aside a[href="/dashboard#user-management"]',
+        'aside a[href="/admin/archive-summary"]',
+        'aside a[href^="/admin/archive-summary?"]',
+      ]);
+    }
+
+    document.querySelectorAll("aside nav section").forEach((section) => {
+      const visibleLinks = Array.from(section.querySelectorAll("a")).filter((link) => !link.classList.contains("hidden"));
+      if (!visibleLinks.length) {
+        section.classList.add("hidden");
+      }
+    });
+  }
+
   function updateToggleButtons(theme) {
     document.querySelectorAll("[data-theme-toggle]").forEach((btn) => {
       const sunIcon = btn.querySelector('[data-theme-icon="sun"]');
@@ -812,6 +848,7 @@
     setupPageTransitions();
     ensureLogoutModal();
     observeSelectInsertions();
+    hideUnauthorizedSidebarLinks();
     syncThemeFromServerIfNeeded();
     initDevAutoReload();
     bindSchoolYearSync();

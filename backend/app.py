@@ -35,10 +35,13 @@ from config import (
     student_enrollment_collection_name,
     students,
     attendance_logs,
+    attendance_logs_archive,
     sms_logs,
+    sms_logs_archive,
     otp_requests,
     users,
     alerts,
+    alerts_archive,
     login_history,
     failed_scans,
     sections,
@@ -47,6 +50,7 @@ from config import (
     audit_logs,
     login_attempts,
     attendance_corrections,
+    attendance_corrections_archive,
     scheduled_reports,
     scheduled_report_runs,
     anomaly_rules,
@@ -258,6 +262,8 @@ ANOMALY_ALLOWED_SEVERITIES = {"info", "warn", "high"}
 ANOMALY_DEFAULT_COOLDOWN_MINUTES = env_int("ANOMALY_DEFAULT_COOLDOWN_MINUTES", 60, minimum=5, maximum=1440)
 BACKGROUND_JOB_INTERVAL_SECONDS = env_int("BACKGROUND_JOB_INTERVAL_SECONDS", 60, minimum=15, maximum=600)
 ENABLE_BACKGROUND_JOBS = env_bool("ENABLE_BACKGROUND_JOBS", True)
+ALERT_NOTIFICATION_CLEANUP_ENABLED = env_bool("ALERT_NOTIFICATION_CLEANUP_ENABLED", True)
+ALERT_NOTIFICATION_RETENTION_MONTHS = env_int("ALERT_NOTIFICATION_RETENTION_MONTHS", 1, minimum=1, maximum=24)
 CONTENT_SECURITY_POLICY = "; ".join([
     "default-src 'self'",
     "base-uri 'self'",
@@ -313,6 +319,10 @@ scan_state = {
 
 alert_lock = threading.Lock()
 alert_revision = 0
+alert_cleanup_lock = threading.Lock()
+alert_cleanup_state = {
+    "last_checked_date": "",
+}
 data_change_lock = threading.Lock()
 data_change_revision = 0
 data_change_domains = {
@@ -320,6 +330,7 @@ data_change_domains = {
     "sections": 0,
     "gate_logs": 0,
     "sms_logs": 0,
+    "users": 0,
 }
 
 sms_balance_lock = threading.Lock()
@@ -334,9 +345,13 @@ sms_balance_cache = {
     "checked_ts": 0.0,
 }
 
+ROLE_FULL_ADMIN = "Full Admin"
+ROLE_STAFF = "Staff"
+LEGACY_LIMITED_ACCESS_ROLE = "Limited Access"
+
 ROLE_PERMISSIONS = {
-    "Full Admin": {"dashboard", "scan", "students_read", "students_write", "logs", "analytics", "users_manage", "alerts_manage"},
-    "Limited Access": {"dashboard", "scan", "students_read", "logs", "analytics", "alerts_manage"},
+    ROLE_FULL_ADMIN: {"dashboard", "scan", "students_read", "students_write", "face_register", "logs", "analytics", "users_manage", "alerts_manage"},
+    ROLE_STAFF: {"dashboard", "scan", "students_read", "face_register"},
 }
 password_reset_tokens = users.database["password_reset_tokens"]
 sms_templates = users.database["sms_templates"]
@@ -364,13 +379,28 @@ def hash_password(password):
     return generate_password_hash(password, method=PASSWORD_HASH_METHOD)
 
 
+def normalize_role_value(value, default=ROLE_STAFF):
+    normalized = str(value or "").strip()
+    if normalized == LEGACY_LIMITED_ACCESS_ROLE:
+        normalized = ROLE_STAFF
+    if normalized in ROLE_PERMISSIONS:
+        return normalized
+    return default
+
+
+def normalize_account_role(value, username=""):
+    username_text = str(username or "").strip().lower()
+    default_role = ROLE_FULL_ADMIN if username_text == "admin" else ROLE_STAFF
+    return normalize_role_value(value, default=default_role)
+
+
 def post_login_redirect(role):
     # Role-based redirect map can be extended when distinct staff pages exist.
     role_routes = {
-        "Full Admin": "dashboard",
-        "Limited Access": "dashboard",
+        ROLE_FULL_ADMIN: "dashboard",
+        ROLE_STAFF: "dashboard",
     }
-    return url_for(role_routes.get(role, "dashboard"))
+    return url_for(role_routes.get(normalize_role_value(role), "dashboard"))
 
 
 def validate_email_format(value):
@@ -921,7 +951,7 @@ def normalize_profile_user_doc(user_doc):
 
     return {
         "username": username,
-        "role": user_doc.get("role", "Limited Access"),
+        "role": normalize_account_role(user_doc.get("role"), username),
         "fullName": full_name,
         "email": email,
         "phone": (user_doc.get("phone") or "").strip(),
@@ -942,6 +972,50 @@ def current_user_profile():
     if not user_doc:
         return None, None
     return user_doc, normalize_profile_user_doc(user_doc)
+
+
+def serialize_dashboard_identity_user(user_doc):
+    profile = normalize_profile_user_doc(user_doc)
+    if not profile:
+        return None
+
+    username = str(profile.get("username") or "").strip()
+    display_name = str(profile.get("fullName") or "").strip() or username or "User"
+    return {
+        "_id": str(user_doc.get("_id") or ""),
+        "username": username,
+        "displayName": display_name,
+        "email": str(profile.get("email") or "").strip(),
+        "role": normalize_account_role(profile.get("role"), username),
+        "avatarUrl": str(profile.get("avatarUrl") or "").strip(),
+    }
+
+
+def build_dashboard_users_list():
+    rows = []
+    for user_doc in users.find({}, {"password": 0, "password_hash": 0}).sort("username", 1):
+        username = str(user_doc.get("username") or "").strip()
+        if username.lower() == "admin":
+            continue
+        serialized = serialize_dashboard_identity_user(user_doc)
+        if serialized:
+            rows.append(serialized)
+    return rows
+
+
+def build_dashboard_user_stats(users_list):
+    stats = {
+        "total": len(users_list or []),
+        "full_admin": 0,
+        "staff": 0,
+    }
+    for user in users_list or []:
+        role_name = normalize_account_role(user.get("role"), user.get("username"))
+        if role_name == ROLE_FULL_ADMIN:
+            stats["full_admin"] += 1
+        else:
+            stats["staff"] += 1
+    return stats
 
 
 def generate_csrf_token():
@@ -1019,12 +1093,15 @@ def inject_dev_runtime_flags():
 
 
 def current_role():
-    return session.get("role", "Limited Access")
+    normalized = normalize_account_role(session.get("role"), session.get("admin"))
+    if has_request_context() and session.get("admin") and session.get("role") != normalized:
+        session["role"] = normalized
+    return normalized
 
 
 def has_permission(permission):
     perms = ROLE_PERMISSIONS.get(current_role(), set())
-    return permission in perms or current_role() == "Full Admin"
+    return permission in perms or current_role() == ROLE_FULL_ADMIN
 
 
 def require_permission(permission, api=False):
@@ -1093,6 +1170,7 @@ def csrf_and_background_guard():
         return None
 
     get_csrf_token()
+    cleanup_notification_alerts()
     start_background_jobs_if_needed()
 
     if request.method.upper() not in CSRF_ALLOWED_METHODS:
@@ -1150,6 +1228,20 @@ def now_local():
 
 def now_iso():
     return now_local().isoformat(timespec="seconds")
+
+
+def month_start_local(dt=None):
+    value = dt or now_local()
+    return value.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+
+def month_start_months_back(months_back=0, dt=None):
+    base = month_start_local(dt)
+    safe_months_back = max(0, int(months_back or 0))
+    absolute_month = (base.year * 12) + (base.month - 1) - safe_months_back
+    year = absolute_month // 12
+    month = (absolute_month % 12) + 1
+    return base.replace(year=year, month=month)
 
 
 def build_school_year_label(start_year):
@@ -1285,6 +1377,46 @@ def school_year_date_strings(school_year=""):
     return start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d")
 
 
+def is_archived_school_year(label):
+    normalized = normalize_school_year_value(label)
+    return bool(normalized) and normalized != get_current_school_year_label()
+
+
+def resolve_school_year_storage(active_collection, archive_collection, school_year=""):
+    school_year_label = normalize_school_year_value(school_year) or get_current_school_year_label()
+    return (
+        archive_collection if is_archived_school_year(school_year_label) else active_collection,
+        school_year_label,
+        is_archived_school_year(school_year_label),
+    )
+
+
+def get_attendance_logs_storage(school_year=""):
+    return resolve_school_year_storage(attendance_logs, attendance_logs_archive, school_year)
+
+
+def get_sms_logs_storage(school_year=""):
+    return resolve_school_year_storage(sms_logs, sms_logs_archive, school_year)
+
+
+def get_alerts_storage(school_year=""):
+    return resolve_school_year_storage(alerts, alerts_archive, school_year)
+
+
+def get_attendance_corrections_storage(school_year=""):
+    return resolve_school_year_storage(attendance_corrections, attendance_corrections_archive, school_year)
+
+
+def find_record_in_active_or_archive(active_collection, archive_collection, object_id):
+    document = active_collection.find_one({"_id": object_id})
+    if document:
+        return document, active_collection, False
+    document = archive_collection.find_one({"_id": object_id})
+    if document:
+        return document, archive_collection, True
+    return None, None, False
+
+
 def school_year_contains_date(school_year="", value=None):
     start_date, end_date = school_year_date_bounds(school_year)
     if not start_date or not end_date or value is None:
@@ -1387,8 +1519,18 @@ def ensure_school_year_scope_defaults():
         date_keys=["date"],
         timestamp_keys=["timestamp"],
     )
+    attendance_archive_updated = backfill_collection_school_year(
+        attendance_logs_archive,
+        date_keys=["date"],
+        timestamp_keys=["timestamp"],
+    )
     sms_updated = backfill_collection_school_year(
         sms_logs,
+        date_keys=["date"],
+        timestamp_keys=["timestamp", "createdAt", "updatedAt"],
+    )
+    sms_archive_updated = backfill_collection_school_year(
+        sms_logs_archive,
         date_keys=["date"],
         timestamp_keys=["timestamp", "createdAt", "updatedAt"],
     )
@@ -1397,17 +1539,113 @@ def ensure_school_year_scope_defaults():
         timestamp_keys=["timestamp", "created_at"],
         patch_meta=True,
     )
+    alerts_archive_updated = backfill_collection_school_year(
+        alerts_archive,
+        timestamp_keys=["timestamp", "created_at"],
+        patch_meta=True,
+    )
     corrections_updated = backfill_collection_school_year(
         attendance_corrections,
         timestamp_keys=["log_timestamp", "requested_at", "requestedAt", "reviewed_at", "reviewedAt"],
     )
-    total_updated = attendance_updated + sms_updated + alerts_updated + corrections_updated
+    corrections_archive_updated = backfill_collection_school_year(
+        attendance_corrections_archive,
+        timestamp_keys=["log_timestamp", "requested_at", "requestedAt", "reviewed_at", "reviewedAt"],
+    )
+    total_updated = (
+        attendance_updated
+        + attendance_archive_updated
+        + sms_updated
+        + sms_archive_updated
+        + alerts_updated
+        + alerts_archive_updated
+        + corrections_updated
+        + corrections_archive_updated
+    )
     if total_updated:
         print(
             "[INFO] Backfilled school_year fields. "
-            f"Attendance: {attendance_updated}. SMS: {sms_updated}. "
-            f"Alerts: {alerts_updated}. Corrections: {corrections_updated}."
+            f"Attendance active/archive: {attendance_updated}/{attendance_archive_updated}. "
+            f"SMS active/archive: {sms_updated}/{sms_archive_updated}. "
+            f"Alerts active/archive: {alerts_updated}/{alerts_archive_updated}. "
+            f"Corrections active/archive: {corrections_updated}/{corrections_archive_updated}."
         )
+
+
+def migrate_non_current_school_year_records(active_collection, archive_collection, collection_label):
+    current_school_year = get_current_school_year_label()
+    moved_count = 0
+    cursor = active_collection.find({"school_year": {"$nin": ["", None, current_school_year]}})
+    for row in cursor:
+        try:
+            archive_collection.replace_one({"_id": row["_id"]}, row, upsert=True)
+            delete_result = active_collection.delete_one({"_id": row["_id"]})
+            moved_count += int(delete_result.deleted_count or 0)
+        except Exception as exc:
+            print(f"[WARNING] Failed archiving {collection_label} record {row.get('_id')}: {exc}")
+    if moved_count:
+        print(
+            f"[INFO] Archived {moved_count} {collection_label} record(s) "
+            f"outside the current school year {current_school_year}."
+        )
+    return moved_count
+
+
+def verify_legacy_enrollment_collection_mirrored(collection_name):
+    if collection_name not in db.list_collection_names():
+        return True
+    collection = db[collection_name]
+    if collection.count_documents({}, limit=1) == 0:
+        return True
+
+    for row in collection.find({}, {"school_year": 1, "student_id": 1, "lrn": 1}):
+        school_year_label = normalize_school_year_value(row.get("school_year"))
+        student_id = normalize_lrn_value(row.get("student_id") or row.get("lrn"))
+        if not school_year_label or not student_id:
+            return False
+        if get_school_year_enrollment_collection(school_year_label).count_documents({"student_id": student_id}, limit=1) == 0:
+            return False
+    return True
+
+
+def cleanup_obsolete_collections():
+    dropped = []
+
+    for collection_name in ("student_enrollments", "Attendance"):
+        if collection_name not in db.list_collection_names():
+            continue
+        collection = db[collection_name]
+        if collection.count_documents({}, limit=1) == 0:
+            try:
+                collection.drop()
+                dropped.append(collection_name)
+            except Exception as exc:
+                print(f"[WARNING] Failed dropping empty obsolete collection {collection_name}: {exc}")
+
+    legacy_backup_name = "student_enrollments_legacy"
+    if verify_legacy_enrollment_collection_mirrored(legacy_backup_name):
+        if legacy_backup_name in db.list_collection_names():
+            try:
+                db[legacy_backup_name].drop()
+                dropped.append(legacy_backup_name)
+            except Exception as exc:
+                print(f"[WARNING] Failed dropping mirrored legacy collection {legacy_backup_name}: {exc}")
+
+    if dropped:
+        print(f"[INFO] Dropped obsolete MongoDB collection(s): {', '.join(sorted(dropped))}.")
+
+
+def archive_historical_school_year_records():
+    moved_total = 0
+    moved_total += migrate_non_current_school_year_records(attendance_logs, attendance_logs_archive, "attendance_logs")
+    moved_total += migrate_non_current_school_year_records(sms_logs, sms_logs_archive, "sms_logs")
+    moved_total += migrate_non_current_school_year_records(alerts, alerts_archive, "alerts")
+    moved_total += migrate_non_current_school_year_records(
+        attendance_corrections,
+        attendance_corrections_archive,
+        "attendance_corrections",
+    )
+    return moved_total
 
 
 def get_school_year_enrollment_collection(school_year=""):
@@ -2037,6 +2275,7 @@ def create_alert(level, message, category="system", meta=None):
         normalize_school_year_value(normalized_meta.get("school_year"))
         or derive_school_year_label_from_value(timestamp)
     )
+    alerts_collection, school_year_label, _ = get_alerts_storage(school_year_label)
     if school_year_label:
         normalized_meta.setdefault("school_year", school_year_label)
     payload = {
@@ -2055,11 +2294,53 @@ def create_alert(level, message, category="system", meta=None):
         "created_at": timestamp,
     }
     try:
-        alerts.insert_one(payload)
+        alerts_collection.insert_one(payload)
         with alert_lock:
             alert_revision += 1
     except Exception as exc:
         print(f"[ERROR] Failed to insert alert: {exc}")
+
+
+def cleanup_notification_alerts(force=False):
+    global alert_revision
+    if not ALERT_NOTIFICATION_CLEANUP_ENABLED:
+        return 0
+
+    current_dt = now_local()
+    current_day_key = current_dt.strftime("%Y-%m-%d")
+    with alert_cleanup_lock:
+        if not force and alert_cleanup_state.get("last_checked_date") == current_day_key:
+            return 0
+        alert_cleanup_state["last_checked_date"] = current_day_key
+
+    cutoff_dt = month_start_months_back(ALERT_NOTIFICATION_RETENTION_MONTHS - 1, current_dt)
+    cutoff_iso = cutoff_dt.isoformat(timespec="seconds")
+    cleanup_query = {
+        "$or": [
+            {"created_at": {"$lt": cutoff_iso}},
+            {"timestamp": {"$lt": cutoff_iso}},
+        ]
+    }
+
+    removed_total = 0
+    try:
+        removed_total += int(alerts.delete_many(cleanup_query).deleted_count or 0)
+    except Exception as exc:
+        print(f"[WARNING] Failed cleaning active notification alerts: {exc}")
+
+    try:
+        removed_total += int(alerts_archive.delete_many(cleanup_query).deleted_count or 0)
+    except Exception as exc:
+        print(f"[WARNING] Failed cleaning archived notification alerts: {exc}")
+
+    if removed_total > 0:
+        with alert_lock:
+            alert_revision += 1
+        print(
+            f"[INFO] Removed {removed_total} notification alert(s) older than {cutoff_iso} "
+            f"(retention={ALERT_NOTIFICATION_RETENTION_MONTHS} month(s))."
+        )
+    return removed_total
 
 
 def unread_notifications_query(school_year=""):
@@ -2152,10 +2433,11 @@ def notification_summary(limit=12, school_year=""):
         safe_limit = 12
     safe_limit = max(1, min(safe_limit, 50))
     school_year_label = normalize_school_year_value(school_year)
+    alerts_collection, school_year_label, _ = get_alerts_storage(school_year_label)
     base_query = {"school_year": school_year_label} if school_year_label else {}
-    docs = list(alerts.find(base_query).sort([("timestamp", -1), ("created_at", -1)]).limit(safe_limit))
+    docs = list(alerts_collection.find(base_query).sort([("timestamp", -1), ("created_at", -1)]).limit(safe_limit))
     notifications = [normalize_notification_doc(doc) for doc in docs]
-    unread_count = alerts.count_documents(unread_notifications_query(school_year_label))
+    unread_count = alerts_collection.count_documents(unread_notifications_query(school_year_label))
     return {"notifications": notifications, "unread": unread_count}
 
 
@@ -2167,6 +2449,7 @@ def data_change_snapshot():
             "sections": int(data_change_domains.get("sections", 0)),
             "gate_logs": int(data_change_domains.get("gate_logs", 0)),
             "sms_logs": int(data_change_domains.get("sms_logs", 0)),
+            "users": int(data_change_domains.get("users", 0)),
         }
 
 
@@ -2186,6 +2469,7 @@ def signal_data_change(*domains):
             "sections": int(data_change_domains.get("sections", 0)),
             "gate_logs": int(data_change_domains.get("gate_logs", 0)),
             "sms_logs": int(data_change_domains.get("sms_logs", 0)),
+            "users": int(data_change_domains.get("users", 0)),
         }
 
 
@@ -2193,8 +2477,12 @@ def sidebar_context(current_page, school_year=""):
     unread = 0
     theme = "light"
     selected_school_year = resolve_selected_school_year(school_year)
+    role_name = current_role()
+    can_manage_alerts = has_permission("alerts_manage")
     try:
-        unread = alerts.count_documents(unread_notifications_query(selected_school_year))
+        if can_manage_alerts:
+            alerts_collection, selected_school_year, _ = get_alerts_storage(selected_school_year)
+            unread = alerts_collection.count_documents(unread_notifications_query(selected_school_year))
     except Exception:
         unread = 0
 
@@ -2210,12 +2498,271 @@ def sidebar_context(current_page, school_year=""):
     return {
         "current_page": current_page,
         "current_user": display_user,
-        "current_role": session.get("role", "Limited Access"),
+        "current_role": role_name,
+        "is_full_admin": role_name == ROLE_FULL_ADMIN,
+        "can_manage_students": has_permission("students_write"),
+        "can_register_faces": has_permission("face_register"),
+        "can_view_logs": has_permission("logs"),
+        "can_view_analytics": has_permission("analytics"),
+        "can_manage_users": has_permission("users_manage"),
+        "can_manage_alerts": can_manage_alerts,
         "alerts_unread": unread,
         "current_theme": theme,
         "selected_school_year": selected_school_year,
         "current_school_year": get_current_school_year_label(),
         "school_year_query": urlencode({"school_year": selected_school_year}) if selected_school_year else "",
+    }
+
+
+def safe_count_documents(collection, query=None):
+    try:
+        return int(collection.count_documents(query or {}))
+    except Exception:
+        return 0
+
+
+def distinct_school_year_labels_for_collection(collection):
+    labels = set()
+    try:
+        for raw_value in collection.distinct("school_year"):
+            normalized = normalize_school_year_value(raw_value)
+            if normalized:
+                labels.add(normalized)
+    except Exception:
+        return set()
+    return labels
+
+
+def active_storage_mismatch_query(current_school_year):
+    return {
+        "$or": [
+            {"school_year": {"$exists": False}},
+            {"school_year": ""},
+            {"school_year": None},
+            {"school_year": {"$ne": current_school_year}},
+        ]
+    }
+
+
+def build_archive_summary_payload(selected_school_year=""):
+    selected_school_year = resolve_selected_school_year(selected_school_year)
+    current_school_year = get_current_school_year_label()
+    school_year_labels = set(list_student_enrollment_school_year_labels())
+    school_year_labels.add(current_school_year)
+
+    for collection in (
+        sections,
+        attendance_logs,
+        attendance_logs_archive,
+        sms_logs,
+        sms_logs_archive,
+        alerts,
+        alerts_archive,
+        attendance_corrections,
+        attendance_corrections_archive,
+    ):
+        school_year_labels.update(distinct_school_year_labels_for_collection(collection))
+
+    ordered_labels = sorted(school_year_labels, key=school_year_sort_key)
+    school_year_rows = []
+
+    current_student_collection = db[student_enrollment_collection_name(current_school_year)]
+    current_student_count = safe_count_documents(current_student_collection)
+    archived_student_count = 0
+
+    for label in ordered_labels:
+        is_current = label == current_school_year
+        student_collection_name_value = student_enrollment_collection_name(label)
+        student_collection = db[student_collection_name_value]
+        student_count = safe_count_documents(student_collection)
+        section_count = safe_count_documents(sections, {"school_year": label})
+
+        gate_active = safe_count_documents(attendance_logs, {"school_year": label})
+        gate_archive = safe_count_documents(attendance_logs_archive, {"school_year": label})
+        sms_active = safe_count_documents(sms_logs, {"school_year": label})
+        sms_archive = safe_count_documents(sms_logs_archive, {"school_year": label})
+        alerts_active = safe_count_documents(alerts, {"school_year": label})
+        alerts_archive_count = safe_count_documents(alerts_archive, {"school_year": label})
+        corrections_active = safe_count_documents(attendance_corrections, {"school_year": label})
+        corrections_archive = safe_count_documents(attendance_corrections_archive, {"school_year": label})
+
+        misplaced_total = (
+            gate_archive
+            + sms_archive
+            + alerts_archive_count
+            + corrections_archive
+            if is_current
+            else gate_active + sms_active + alerts_active + corrections_active
+        )
+
+        if not is_current:
+            archived_student_count += student_count
+
+        school_year_rows.append({
+            "label": label,
+            "is_current": is_current,
+            "is_selected": label == selected_school_year,
+            "workspace_label": "Current Active Year" if is_current else "Archived School Year",
+            "student_collection": student_collection_name_value,
+            "students": student_count,
+            "sections": section_count,
+            "gate_active": gate_active,
+            "gate_archive": gate_archive,
+            "gate_total": gate_active + gate_archive,
+            "sms_active": sms_active,
+            "sms_archive": sms_archive,
+            "sms_total": sms_active + sms_archive,
+            "alerts_active": alerts_active,
+            "alerts_archive": alerts_archive_count,
+            "alerts_total": alerts_active + alerts_archive_count,
+            "corrections_active": corrections_active,
+            "corrections_archive": corrections_archive,
+            "corrections_total": corrections_active + corrections_archive,
+            "misplaced_total": misplaced_total,
+            "student_page_url": url_for("students_page", school_year=label),
+            "gate_logs_url": url_for("gate_logs_page", school_year=label),
+            "sms_logs_url": url_for("sms_logs_page", school_year=label),
+            "analytics_url": url_for("analytics", school_year=label),
+        })
+
+    active_storage_total = (
+        safe_count_documents(attendance_logs)
+        + safe_count_documents(sms_logs)
+        + safe_count_documents(alerts)
+        + safe_count_documents(attendance_corrections)
+        + current_student_count
+        + safe_count_documents(sections, {"school_year": current_school_year})
+    )
+    archived_storage_total = (
+        safe_count_documents(attendance_logs_archive)
+        + safe_count_documents(sms_logs_archive)
+        + safe_count_documents(alerts_archive)
+        + safe_count_documents(attendance_corrections_archive)
+        + archived_student_count
+        + safe_count_documents(sections, {"school_year": {"$ne": current_school_year}})
+    )
+
+    storage_health_rows = []
+    for label, active_collection, archive_collection in (
+        ("Attendance Logs", attendance_logs, attendance_logs_archive),
+        ("SMS Logs", sms_logs, sms_logs_archive),
+        ("Alerts", alerts, alerts_archive),
+        ("Attendance Corrections", attendance_corrections, attendance_corrections_archive),
+    ):
+        active_mismatches = safe_count_documents(active_collection, active_storage_mismatch_query(current_school_year))
+        archive_current = safe_count_documents(archive_collection, {"school_year": current_school_year})
+        storage_health_rows.append({
+            "label": label,
+            "active_mismatches": active_mismatches,
+            "archive_current": archive_current,
+            "issue_count": active_mismatches + archive_current,
+        })
+
+    collection_inventory = [
+        {
+            "name": "students",
+            "scope": "Shared Master",
+            "category": "Profiles",
+            "count": safe_count_documents(students),
+            "details": "Master student identity records shared across school years.",
+        },
+        {
+            "name": "sections",
+            "scope": "Mixed by school year",
+            "category": "Structure",
+            "count": safe_count_documents(sections),
+            "details": "Section definitions partitioned logically by the school_year field.",
+        },
+        {
+            "name": "school_years",
+            "scope": "System Metadata",
+            "category": "Registry",
+            "count": safe_count_documents(school_years),
+            "details": "Declared school years and the current active year flag.",
+        },
+        {
+            "name": "attendance_logs",
+            "scope": "Active",
+            "category": "Gate Logs",
+            "count": safe_count_documents(attendance_logs),
+            "details": f"Operational gate logs for the current school year {current_school_year}.",
+        },
+        {
+            "name": "attendance_logs_archive",
+            "scope": "Archive",
+            "category": "Gate Logs",
+            "count": safe_count_documents(attendance_logs_archive),
+            "details": "Historical gate logs migrated out of the active workspace.",
+        },
+        {
+            "name": "sms_logs",
+            "scope": "Active",
+            "category": "SMS Logs",
+            "count": safe_count_documents(sms_logs),
+            "details": f"Operational SMS logs for the current school year {current_school_year}.",
+        },
+        {
+            "name": "sms_logs_archive",
+            "scope": "Archive",
+            "category": "SMS Logs",
+            "count": safe_count_documents(sms_logs_archive),
+            "details": "Historical SMS logs retained for reference.",
+        },
+        {
+            "name": "alerts",
+            "scope": "Active",
+            "category": "Alerts",
+            "count": safe_count_documents(alerts),
+            "details": f"Active alert stream for the current school year {current_school_year}.",
+        },
+        {
+            "name": "alerts_archive",
+            "scope": "Archive",
+            "category": "Alerts",
+            "count": safe_count_documents(alerts_archive),
+            "details": "Archived alert history for prior school years.",
+        },
+        {
+            "name": "attendance_corrections",
+            "scope": "Active",
+            "category": "Corrections",
+            "count": safe_count_documents(attendance_corrections),
+            "details": f"Correction requests for the current school year {current_school_year}.",
+        },
+        {
+            "name": "attendance_corrections_archive",
+            "scope": "Archive",
+            "category": "Corrections",
+            "count": safe_count_documents(attendance_corrections_archive),
+            "details": "Historical attendance correction requests.",
+        },
+    ]
+
+    for row in school_year_rows:
+        collection_inventory.append({
+            "name": row["student_collection"],
+            "scope": "Current Year" if row["is_current"] else "Archived Year",
+            "category": "Enrollments",
+            "count": row["students"],
+            "details": f"Student enrollment records for {row['label']}.",
+        })
+
+    collection_inventory.sort(key=lambda row: (row["category"], row["name"]))
+
+    return {
+        "generated_at_label": now_local().strftime("%B %d, %Y %I:%M:%S %p"),
+        "archive_totals": {
+            "school_year_count": len(school_year_rows),
+            "archived_year_count": sum(1 for row in school_year_rows if not row["is_current"]),
+            "active_storage_total": active_storage_total,
+            "archived_storage_total": archived_storage_total,
+            "storage_issue_total": sum(row["issue_count"] for row in storage_health_rows),
+            "current_student_count": current_student_count,
+            "archived_student_count": archived_student_count,
+        },
+        "school_year_rows": school_year_rows,
+        "storage_health_rows": storage_health_rows,
+        "collection_inventory": collection_inventory,
     }
 
 
@@ -3007,6 +3554,7 @@ def evaluate_all_anomaly_rules(trigger="manual", max_rules=50):
 def background_jobs_worker_loop():
     while True:
         try:
+            cleanup_notification_alerts()
             run_due_scheduled_reports(max_reports=3)
             evaluate_all_anomaly_rules(trigger="scheduler", max_rules=50)
         except Exception as exc:
@@ -3240,6 +3788,7 @@ def log_skipped_sms(student_id="", student_name="", parent_contact="", message="
         normalize_school_year_value(metadata_payload.get("school_year"))
         or derive_school_year_label_from_value(date_str)
     )
+    sms_collection, school_year_label, _ = get_sms_logs_storage(school_year_label)
     raw_to = str(parent_contact or "").strip()
     normalized_to = ""
     if raw_to:
@@ -3283,7 +3832,7 @@ def log_skipped_sms(student_id="", student_name="", parent_contact="", message="
         "time": time_str,
     }
     try:
-        sms_logs.insert_one(doc)
+        sms_collection.insert_one(doc)
         signal_data_change("sms_logs")
     except Exception as exc:
         print(f"[ERROR] Failed to persist skipped SMS log: {exc}")
@@ -3305,6 +3854,7 @@ def send_sms(to_number, message, sms_type="transactional", metadata=None, studen
         normalize_school_year_value(metadata_payload.get("school_year"))
         or derive_school_year_label_from_value(date_str)
     )
+    sms_collection, school_year_label, _ = get_sms_logs_storage(school_year_label)
     try:
         retry_count = max(int(metadata_payload.get("retry_count", 0) or 0), 0)
     except Exception:
@@ -3322,7 +3872,7 @@ def send_sms(to_number, message, sms_type="transactional", metadata=None, studen
         if not persist:
             return
         try:
-            sms_logs.insert_one({
+            sms_collection.insert_one({
                 "to": raw_to,
                 "message": msg,
                 "type": (sms_type or "transactional").strip().lower() or "transactional",
@@ -3400,7 +3950,7 @@ def send_sms(to_number, message, sms_type="transactional", metadata=None, studen
             "time": time_str,
         }
         try:
-            queued_doc_id = sms_logs.insert_one(queued_doc).inserted_id
+            queued_doc_id = sms_collection.insert_one(queued_doc).inserted_id
         except Exception as exc:
             print(f"[ERROR] Failed to persist sending SMS log: {exc}")
 
@@ -3453,7 +4003,7 @@ def send_sms(to_number, message, sms_type="transactional", metadata=None, studen
                 "lastRetryError": None,
             })
         try:
-            sms_logs.update_one({"_id": queued_doc_id}, {"$set": update_doc})
+            sms_collection.update_one({"_id": queued_doc_id}, {"$set": update_doc})
             signal_data_change("sms_logs")
         except Exception as exc:
             print(f"[ERROR] Failed to update SMS log status: {exc}")
@@ -3483,7 +4033,7 @@ def ensure_default_admin_user():
             users.insert_one({
                 "username": "admin",
                 "password_hash": hash_password("admin123"),
-                "role": "Full Admin",
+                "role": ROLE_FULL_ADMIN,
                 "fullName": "System Administrator",
                 "email": "admin@chs.local",
                 "phone": "",
@@ -3501,8 +4051,8 @@ def ensure_default_admin_user():
             if "password_hash" not in admin:
                 legacy_pwd = admin.get("password", "admin123")
                 updates["password_hash"] = hash_password(legacy_pwd)
-            if "role" not in admin:
-                updates["role"] = "Full Admin"
+            if normalize_account_role(admin.get("role"), "admin") != ROLE_FULL_ADMIN:
+                updates["role"] = ROLE_FULL_ADMIN
             if "fullName" not in admin:
                 updates["fullName"] = "System Administrator"
             if "email" not in admin:
@@ -3525,6 +4075,32 @@ def ensure_default_admin_user():
                 users.update_one({"_id": admin["_id"]}, {"$set": updates})
     except Exception as exc:
         print(f"[ERROR] Failed ensuring default admin user: {exc}")
+
+
+def migrate_user_roles():
+    try:
+        updated = now_iso()
+        users.update_many(
+            {"role": LEGACY_LIMITED_ACCESS_ROLE},
+            {"$set": {"role": ROLE_STAFF, "updated_at": updated, "updatedAt": updated}},
+        )
+        users.update_many(
+            {
+                "username": {"$ne": "admin"},
+                "$or": [
+                    {"role": {"$exists": False}},
+                    {"role": ""},
+                    {"role": {"$nin": [ROLE_FULL_ADMIN, ROLE_STAFF, LEGACY_LIMITED_ACCESS_ROLE]}},
+                ],
+            },
+            {"$set": {"role": ROLE_STAFF, "updated_at": updated, "updatedAt": updated}},
+        )
+        users.update_one(
+            {"username": "admin"},
+            {"$set": {"role": ROLE_FULL_ADMIN, "updated_at": updated, "updatedAt": updated}},
+        )
+    except Exception as exc:
+        print(f"[ERROR] Failed migrating user roles: {exc}")
 
 
 def migrate_plaintext_user_passwords():
@@ -3664,6 +4240,7 @@ def log_attendance_and_sms(student):
     date_str = now.strftime("%Y-%m-%d")
     time_str = now.strftime("%H:%M:%S")
     school_year_label = derive_school_year_label_from_value(date_str) or get_current_school_year_label()
+    attendance_collection, school_year_label, _ = get_attendance_logs_storage(school_year_label)
     session_info = resolve_gate_session(now)
     status = session_info["status"]
     gate_action = session_info["gate_action"]
@@ -3678,7 +4255,7 @@ def log_attendance_and_sms(student):
 
     dedupe_query = {"student_id": student_id, "date": date_str, "session": session_name}
 
-    existing_record = attendance_logs.find_one(dedupe_query)
+    existing_record = attendance_collection.find_one(dedupe_query)
     if existing_record:
         existing_status = existing_record.get("status", status)
         existing_gate_action = existing_record.get("gate_action", gate_action)
@@ -3709,10 +4286,10 @@ def log_attendance_and_sms(student):
         "verification_label": verification_label,
     }
     try:
-        attendance_logs.insert_one(attendance_doc)
+        attendance_collection.insert_one(attendance_doc)
         signal_data_change("gate_logs")
     except DuplicateKeyError:
-        existing_record = attendance_logs.find_one(dedupe_query) or attendance_doc
+        existing_record = attendance_collection.find_one(dedupe_query) or attendance_doc
         return {
             "student_id": student_id,
             "status": existing_record.get("status", status),
@@ -4060,6 +4637,12 @@ def generate_frames():
 def compute_dashboard_data(args, school_year=""):
     school_year_label = resolve_selected_school_year(school_year or args.get("school_year", ""))
     enrollment_collection = get_school_year_enrollment_collection(school_year_label)
+    attendance_collection, school_year_label, _ = get_attendance_logs_storage(school_year_label)
+    sms_collection, school_year_label, _ = get_sms_logs_storage(school_year_label)
+    alerts_collection, school_year_label, _ = get_alerts_storage(school_year_label)
+    current_role_name = current_role()
+    can_manage_alerts = has_permission("alerts_manage")
+    is_full_admin = current_role_name == ROLE_FULL_ADMIN
     today_date = now_local().date()
     today = today_date.strftime("%Y-%m-%d")
     total_students = enrollment_collection.count_documents({"school_year": school_year_label})
@@ -4072,16 +4655,16 @@ def compute_dashboard_data(args, school_year=""):
         "$or": [{"gender": "Female"}, {"sex": "Female"}],
     })
     attendance_today_query = {"school_year": school_year_label, "date": today}
-    present_today_ids = attendance_logs.distinct("student_id", attendance_today_query)
+    present_today_ids = attendance_collection.distinct("student_id", attendance_today_query)
     present_today = len([sid for sid in present_today_ids if sid])
-    sms_sent_today = sms_logs.count_documents({
+    sms_sent_today = sms_collection.count_documents({
         "school_year": school_year_label,
         "date": today,
         "status": sms_status_mongo_filter("sent"),
     })
-    late_today = attendance_logs.count_documents({**attendance_today_query, "status": "Late"})
+    late_today = attendance_collection.count_documents({**attendance_today_query, "status": "Late"})
     session_counts = {"Morning In": 0, "Noon Out": 0, "Afternoon In": 0, "Afternoon Out": 0}
-    for row in attendance_logs.aggregate([
+    for row in attendance_collection.aggregate([
         {"$match": attendance_today_query},
         {"$group": {"_id": "$session", "count": {"$sum": 1}}},
     ]):
@@ -4089,19 +4672,26 @@ def compute_dashboard_data(args, school_year=""):
         if session_name in session_counts:
             session_counts[session_name] = row.get("count", 0)
 
-    unread_alerts = alerts.count_documents(unread_notifications_query(school_year_label))
-    alert_docs = [
-        normalize_notification_doc(doc)
-        for doc in alerts.find({"school_year": school_year_label}).sort([("timestamp", -1), ("created_at", -1)]).limit(25)
-    ]
+    unread_alerts = 0
+    alert_docs = []
+    if can_manage_alerts:
+        unread_alerts = alerts_collection.count_documents(unread_notifications_query(school_year_label))
+        alert_docs = [
+            normalize_notification_doc(doc)
+            for doc in alerts_collection.find({"school_year": school_year_label}).sort([("timestamp", -1), ("created_at", -1)]).limit(25)
+        ]
 
-    users_list = list(users.find({}, {"password": 0, "password_hash": 0}).sort("username", 1))
-    for u in users_list:
-        u["_id"] = str(u["_id"])
+    users_list = []
+    users_stats = {"total": 0, "full_admin": 0, "staff": 0}
+    login_rows = []
+    if is_full_admin:
+        users_list = build_dashboard_users_list()
+        users_stats = build_dashboard_user_stats(users_list)
 
-    login_rows = list(login_history.find().sort("timestamp", -1).limit(20))
-    for r in login_rows:
-        r["_id"] = str(r["_id"])
+        login_rows = list(login_history.find().sort("timestamp", -1).limit(20))
+        for r in login_rows:
+            r["_id"] = str(r["_id"])
+            r["role"] = normalize_role_value(r.get("role"), ROLE_STAFF)
 
     q = args.get("q", "").strip()
     log_type = args.get("log_type", "all")
@@ -4159,11 +4749,11 @@ def compute_dashboard_data(args, school_year=""):
     gate_results = []
     sms_results = []
     if log_type in ("all", "gate"):
-        gate_results = list(attendance_logs.find(gate_query).sort("timestamp", -1).limit(20))
+        gate_results = list(attendance_collection.find(gate_query).sort("timestamp", -1).limit(20))
         for g in gate_results:
             g["_id"] = str(g["_id"])
     if log_type in ("all", "sms"):
-        sms_results = list(sms_logs.find(sms_query).sort("timestamp", -1).limit(20))
+        sms_results = list(sms_collection.find(sms_query).sort("timestamp", -1).limit(20))
         for s in sms_results:
             s["_id"] = str(s["_id"])
 
@@ -4179,6 +4769,7 @@ def compute_dashboard_data(args, school_year=""):
         "alerts_unread": unread_alerts,
         "alert_rows": alert_docs,
         "users_list": users_list,
+        "users_stats": users_stats,
         "login_rows": login_rows,
         "search_students": students_result,
         "search_gate_logs": gate_results,
@@ -4194,6 +4785,7 @@ def compute_dashboard_data(args, school_year=""):
 
 
 ensure_default_admin_user()
+migrate_user_roles()
 migrate_plaintext_user_passwords()
 ensure_user_theme_defaults()
 ensure_user_profile_defaults()
@@ -4258,7 +4850,7 @@ def login():
                 password_ok = check_password_hash(stored_hash, password)
 
             if password_ok:
-                role = user.get("role", "Limited Access")
+                role = normalize_account_role(user.get("role"), username)
                 session.clear()
                 session.permanent = remember_me
                 session["admin"] = username
@@ -4488,6 +5080,8 @@ def dashboard():
     selected_school_year = resolve_selected_school_year(request.args.get("school_year", ""))
     payload = compute_dashboard_data(request.args, selected_school_year)
     payload.update(sidebar_context("dashboard", selected_school_year))
+    payload["message"] = request.args.get("message", "").strip()
+    payload["message_type"] = request.args.get("message_type", "success").strip() or "success"
     return render_template("dashboard.html", **payload)
 
 
@@ -4572,12 +5166,26 @@ def developers_page():
     )
 
 
+@app.route("/admin/archive-summary")
+@require_permission("users_manage")
+def admin_archive_summary_page():
+    selected_school_year = resolve_selected_school_year(request.args.get("school_year", ""))
+    payload = build_archive_summary_payload(selected_school_year)
+    return render_template(
+        "archive_summary.html",
+        **payload,
+        **sidebar_context("archive_summary", selected_school_year),
+    )
+
+
 @app.route("/api/dashboard/stats")
 @require_permission("dashboard", api=True)
 def dashboard_stats_api():
     school_year_label = resolve_selected_school_year(request.args.get("school_year", ""))
     today = now_local().strftime("%Y-%m-%d")
     enrollment_collection = get_school_year_enrollment_collection(school_year_label)
+    attendance_collection, school_year_label, _ = get_attendance_logs_storage(school_year_label)
+    sms_collection, school_year_label, _ = get_sms_logs_storage(school_year_label)
     total_students = enrollment_collection.count_documents({"school_year": school_year_label})
     total_male_students = enrollment_collection.count_documents({
         "school_year": school_year_label,
@@ -4587,9 +5195,9 @@ def dashboard_stats_api():
         "school_year": school_year_label,
         "$or": [{"gender": "Female"}, {"sex": "Female"}],
     })
-    present_today_ids = attendance_logs.distinct("student_id", {"school_year": school_year_label, "date": today})
+    present_today_ids = attendance_collection.distinct("student_id", {"school_year": school_year_label, "date": today})
     present_today = len([sid for sid in present_today_ids if sid])
-    sms_sent_today = sms_logs.count_documents({
+    sms_sent_today = sms_collection.count_documents({
         "school_year": school_year_label,
         "date": today,
         "status": sms_status_mongo_filter("sent"),
@@ -4641,6 +5249,20 @@ def audit_recent_api():
             "details": doc.get("details") or {},
         })
     return jsonify({"status": "ok", "rows": rows})
+
+
+@app.route("/api/admin/users/roster", methods=["GET"])
+@require_permission("users_manage", api=True)
+def admin_users_roster_api():
+    if current_role() != ROLE_FULL_ADMIN:
+        return jsonify({"status": "error", "message": "Only Full Admin can view the identities roster."}), 403
+
+    users_list = build_dashboard_users_list()
+    return jsonify({
+        "status": "ok",
+        "users": users_list,
+        "stats": build_dashboard_user_stats(users_list),
+    })
 
 
 @app.route("/api/profile", methods=["GET"])
@@ -4712,6 +5334,7 @@ def profile_update_api():
         update_payload["avatarUrl"] = ""
 
     users.update_one({"_id": user_doc["_id"]}, {"$set": update_payload})
+    signal_data_change("users")
     refreshed = users.find_one({"_id": user_doc["_id"]})
     return jsonify({"status": "ok", "profile": normalize_profile_user_doc(refreshed)})
 
@@ -4802,6 +5425,7 @@ def profile_photo_upload_api():
         {"_id": user_doc["_id"]},
         {"$set": {"avatarUrl": avatar_url, "updatedAt": updated, "updated_at": updated}},
     )
+    signal_data_change("users")
     refreshed = users.find_one({"_id": user_doc["_id"]})
 
     return jsonify({
@@ -5455,6 +6079,7 @@ def api_scan_session_mode():
 def mark_notifications_read_in_db(object_ids=None, mark_all=False, school_year=""):
     global alert_revision
     school_year_label = normalize_school_year_value(school_year)
+    alerts_collection, school_year_label, _ = get_alerts_storage(school_year_label)
 
     update_payload = {
         "$set": {
@@ -5465,7 +6090,7 @@ def mark_notifications_read_in_db(object_ids=None, mark_all=False, school_year="
     }
     modified = 0
     if mark_all:
-        result = alerts.update_many(unread_notifications_query(school_year_label), update_payload)
+        result = alerts_collection.update_many(unread_notifications_query(school_year_label), update_payload)
         modified = int(result.modified_count or 0)
     elif object_ids:
         update_query = {
@@ -5477,7 +6102,7 @@ def mark_notifications_read_in_db(object_ids=None, mark_all=False, school_year="
         }
         if school_year_label:
             update_query["school_year"] = school_year_label
-        result = alerts.update_many(
+        result = alerts_collection.update_many(
             update_query,
             update_payload,
         )
@@ -5505,12 +6130,13 @@ def notifications_list_api():
 @require_permission("alerts_manage", api=True)
 def notification_detail_api(notification_id):
     school_year_label = resolve_selected_school_year(request.args.get("school_year", ""))
+    alerts_collection, school_year_label, _ = get_alerts_storage(school_year_label)
     try:
         object_id = ObjectId(notification_id)
     except Exception:
         return jsonify({"status": "error", "message": "Notification not found."}), 404
 
-    doc = alerts.find_one({"_id": object_id, "school_year": school_year_label})
+    doc = alerts_collection.find_one({"_id": object_id, "school_year": school_year_label})
     if not doc:
         return jsonify({"status": "error", "message": "Notification not found."}), 404
     return jsonify({"status": "ok", "notification": normalize_notification_doc(doc)})
@@ -5525,10 +6151,11 @@ def notifications_mark_read_api():
     )
     if data.get("all"):
         mark_notifications_read_in_db(mark_all=True, school_year=school_year_label)
+        alerts_collection, school_year_label, _ = get_alerts_storage(school_year_label)
         return jsonify({
             "status": "ok",
             "school_year": school_year_label,
-            "unread": alerts.count_documents(unread_notifications_query(school_year_label)),
+            "unread": alerts_collection.count_documents(unread_notifications_query(school_year_label)),
         })
 
     ids = data.get("ids", [])
@@ -5543,10 +6170,11 @@ def notifications_mark_read_api():
         return jsonify({"status": "error", "message": "No valid notification IDs provided."}), 400
 
     mark_notifications_read_in_db(object_ids=object_ids, school_year=school_year_label)
+    alerts_collection, school_year_label, _ = get_alerts_storage(school_year_label)
     return jsonify({
         "status": "ok",
         "school_year": school_year_label,
-        "unread": alerts.count_documents(unread_notifications_query(school_year_label)),
+        "unread": alerts_collection.count_documents(unread_notifications_query(school_year_label)),
     })
 
 
@@ -5561,7 +6189,8 @@ def mark_alerts_read():
 @require_permission("alerts_manage", api=True)
 def unread_alert_count():
     school_year_label = resolve_selected_school_year(request.args.get("school_year", ""))
-    unread = alerts.count_documents(unread_notifications_query(school_year_label))
+    alerts_collection, school_year_label, _ = get_alerts_storage(school_year_label)
+    unread = alerts_collection.count_documents(unread_notifications_query(school_year_label))
     return jsonify({"unread": unread, "school_year": school_year_label})
 
 
@@ -5570,6 +6199,7 @@ def unread_alert_count():
 @require_permission("alerts_manage", api=True)
 def alerts_stream():
     school_year_label = resolve_selected_school_year(request.args.get("school_year", ""))
+    alerts_collection, school_year_label, _ = get_alerts_storage(school_year_label)
     def generate():
         last_seen = -1
         while True:
@@ -5578,7 +6208,7 @@ def alerts_stream():
                     current_rev = alert_revision
 
                 if current_rev != last_seen:
-                    unread = alerts.count_documents(unread_notifications_query(school_year_label))
+                    unread = alerts_collection.count_documents(unread_notifications_query(school_year_label))
                     payload = json.dumps({
                         "revision": current_rev,
                         "unread": unread,
@@ -5634,15 +6264,28 @@ def data_changes_stream():
 # =====================================
 # USER MANAGEMENT
 # =====================================
+def dashboard_management_redirect(message="", message_type="success", school_year=""):
+    params = {}
+    school_year_label = resolve_selected_school_year(school_year or request.values.get("school_year", ""))
+    if school_year_label:
+        params["school_year"] = school_year_label
+    if message:
+        params["message"] = message
+    if message_type:
+        params["message_type"] = message_type
+    return redirect(f"{url_for('dashboard', **params)}#user-management")
+
+
 @app.route("/admin/users/add", methods=["POST"])
 @require_permission("users_manage")
 def add_user():
+    if current_role() != ROLE_FULL_ADMIN:
+        return dashboard_management_redirect("Only Full Admin can manage system accounts.", "error")
+
     username = request.form.get("username", "").strip()
     password = request.form.get("password", "")
     email = normalize_email_value(request.form.get("email", ""))
-    role = request.form.get("role", "Limited Access")
-    if role not in ROLE_PERMISSIONS:
-        role = "Limited Access"
+    role = normalize_account_role(request.form.get("role", ROLE_STAFF), username)
 
     if not username or not password or not email:
         create_alert("warning", "User creation requires username, password, and email.", "system")
@@ -5654,7 +6297,7 @@ def add_user():
             target_id=username,
             details={"reason": "missing_fields"},
         )
-        return redirect(url_for("dashboard"))
+        return dashboard_management_redirect("Username, password, and email are required.", "error")
 
     if not validate_email_format(email):
         create_alert("warning", f"User creation skipped: invalid email format '{email}'.", "system")
@@ -5666,7 +6309,7 @@ def add_user():
             target_id=username,
             details={"reason": "invalid_email"},
         )
-        return redirect(url_for("dashboard"))
+        return dashboard_management_redirect("Enter a valid email address.", "error")
 
     if users.count_documents({"username": username}) > 0:
         create_alert("warning", f"User creation skipped: {username} already exists.", "system")
@@ -5678,7 +6321,7 @@ def add_user():
             target_id=username,
             details={"reason": "username_exists"},
         )
-        return redirect(url_for("dashboard"))
+        return dashboard_management_redirect(f"Username '{username}' already exists.", "error")
 
     duplicate_email_user = users.find_one({
         "email": {"$regex": f"^{re.escape(email)}$", "$options": "i"},
@@ -5693,7 +6336,11 @@ def add_user():
             target_id=username,
             details={"reason": "email_exists"},
         )
-        return redirect(url_for("dashboard"))
+        return dashboard_management_redirect(f"Email '{email}' is already in use.", "error")
+
+    password_error, _ = validate_password_reset_input(password, password)
+    if password_error:
+        return dashboard_management_redirect(password_error, "error")
 
     created = now_iso()
     users.insert_one({
@@ -5712,6 +6359,7 @@ def add_user():
         "updated_at": created,
         "updatedAt": created,
     })
+    signal_data_change("users")
     create_alert("info", f"New user '{username}' added with role {role} and email {email}.", "system")
     log_audit_event(
         action="admin.user_create",
@@ -5721,7 +6369,107 @@ def add_user():
         target_id=username,
         details={"role": role, "email": email},
     )
-    return redirect(url_for("dashboard"))
+    return dashboard_management_redirect(f"Account '{username}' created successfully.", "success")
+
+
+@app.route("/admin/users/<user_id>/delete", methods=["POST"])
+@require_permission("users_manage")
+def delete_staff_user(user_id):
+    if current_role() != ROLE_FULL_ADMIN:
+        return dashboard_management_redirect("Only Full Admin can delete Staff accounts.", "error")
+
+    school_year_label = request.form.get("school_year", "")
+    try:
+        user_oid = ObjectId(str(user_id))
+    except Exception:
+        return dashboard_management_redirect("Invalid Staff account.", "error", school_year_label)
+
+    user_doc = users.find_one({"_id": user_oid})
+    if not user_doc:
+        return dashboard_management_redirect("Staff account not found.", "error", school_year_label)
+
+    username = str(user_doc.get("username") or "").strip()
+    role_name = normalize_account_role(user_doc.get("role"), username)
+    if role_name != ROLE_STAFF:
+        return dashboard_management_redirect("Only Staff accounts can be deleted here.", "error", school_year_label)
+    if username.lower() == str(session.get("admin") or "").strip().lower():
+        return dashboard_management_redirect("You cannot delete your own account.", "error", school_year_label)
+
+    users.delete_one({"_id": user_oid})
+    signal_data_change("users")
+    user_email = normalize_email_value(user_doc.get("email", ""))
+    if user_email:
+        password_reset_tokens.delete_many({"email": user_email})
+
+    create_alert("warning", f"Staff account '{username}' was deleted by {session.get('admin', 'system')}.", "security")
+    log_audit_event(
+        action="admin.user_delete",
+        outcome="success",
+        severity="warn",
+        target_type="user",
+        target_id=username,
+        details={"role": role_name},
+    )
+    return dashboard_management_redirect(f"Staff account '{username}' deleted.", "success", school_year_label)
+
+
+@app.route("/admin/users/<user_id>/password", methods=["POST"])
+@require_permission("users_manage")
+def reset_staff_user_password(user_id):
+    if current_role() != ROLE_FULL_ADMIN:
+        return dashboard_management_redirect("Only Full Admin can change Staff passwords.", "error")
+
+    school_year_label = request.form.get("school_year", "")
+    try:
+        user_oid = ObjectId(str(user_id))
+    except Exception:
+        return dashboard_management_redirect("Invalid Staff account.", "error", school_year_label)
+
+    user_doc = users.find_one({"_id": user_oid})
+    if not user_doc:
+        return dashboard_management_redirect("Staff account not found.", "error", school_year_label)
+
+    username = str(user_doc.get("username") or "").strip()
+    role_name = normalize_account_role(user_doc.get("role"), username)
+    if role_name != ROLE_STAFF:
+        return dashboard_management_redirect("Only Staff accounts can be updated here.", "error", school_year_label)
+
+    new_password = request.form.get("new_password", "")
+    confirm_password = request.form.get("confirm_password", "")
+    validation_error, _ = validate_password_reset_input(new_password, confirm_password)
+    if validation_error:
+        log_audit_event(
+            action="admin.user_password_reset",
+            outcome="failed",
+            severity="warn",
+            target_type="user",
+            target_id=username,
+            details={"reason": "validation_failed"},
+        )
+        return dashboard_management_redirect(validation_error, "error", school_year_label)
+
+    updated = now_iso()
+    users.update_one(
+        {"_id": user_oid},
+        {
+            "$set": {
+                "password_hash": hash_password(new_password),
+                "updated_at": updated,
+                "updatedAt": updated,
+            },
+            "$unset": {"password": ""},
+        },
+    )
+    create_alert("info", f"Password updated for Staff account '{username}'.", "security")
+    log_audit_event(
+        action="admin.user_password_reset",
+        outcome="success",
+        severity="info",
+        target_type="user",
+        target_id=username,
+        details={"role": role_name},
+    )
+    return dashboard_management_redirect(f"Password updated for Staff account '{username}'.", "success", school_year_label)
 
 
 # =====================================
@@ -6506,6 +7254,9 @@ cleanup_accidental_current_school_year_seed()
 for _school_year_row in list_school_year_docs():
     cleanup_empty_school_year_section_mismatches(_school_year_row.get("label"))
 ensure_school_year_scope_defaults()
+archive_historical_school_year_records()
+cleanup_obsolete_collections()
+cleanup_notification_alerts(force=True)
 
 
 def build_students_stats_payload(school_year=""):
@@ -6612,7 +7363,7 @@ def api_school_years():
 
 
 @app.route("/api/students/reenrollment-candidates", methods=["GET"])
-@require_permission("students_read", api=True)
+@require_permission("students_write", api=True)
 def api_students_reenrollment_candidates():
     source_school_year = normalize_school_year_value(request.args.get("source_school_year", ""))
     target_school_year = resolve_selected_school_year(request.args.get("target_school_year", ""))
@@ -7123,7 +7874,7 @@ def format_export_sort_label(sort_by):
 
 
 @app.route("/students/export_pdf", methods=["GET"])
-@require_permission("students_read")
+@require_permission("students_write")
 def students_export_pdf():
     selected_school_year = resolve_selected_school_year(request.args.get("school_year", ""))
     query, q_value, grade_level, section_value, face_status, school_year_label = build_students_query(
@@ -7828,7 +8579,7 @@ def api_students_import():
 
 
 @app.route("/api/students/import/template", methods=["GET"])
-@require_permission("students_read", api=True)
+@require_permission("students_write", api=True)
 def api_students_import_template():
     try:
         template_bytes = build_student_import_template_bytes()
@@ -8099,13 +8850,13 @@ def save_face_registration(student_id, is_update=False):
 
 
 @app.route("/api/students/<id>/face/register", methods=["POST"])
-@require_permission("students_write", api=True)
+@require_permission("face_register", api=True)
 def api_student_face_register(id):
     return save_face_registration(id, is_update=False)
 
 
 @app.route("/api/students/<id>/face/update", methods=["PUT"])
-@require_permission("students_write", api=True)
+@require_permission("face_register", api=True)
 def api_student_face_update(id):
     return save_face_registration(id, is_update=True)
 
@@ -8299,17 +9050,18 @@ def build_sms_logs_summary_rows(rows):
 @require_permission("logs")
 def gate_logs_page():
     query, sort_spec, filters_payload, selected_school_year = build_gate_logs_query(request.args)
+    logs_collection, selected_school_year, archived_view = get_attendance_logs_storage(selected_school_year)
     try:
         page = max(int(request.args.get("page", "1")), 1)
     except ValueError:
         page = 1
 
     per_page = 10
-    total_filtered = attendance_logs.count_documents(query)
+    total_filtered = logs_collection.count_documents(query)
     pagination = build_pagination_payload(page, per_page, total_filtered, filters_payload, "gate_logs_page")
     skip = (pagination["page"] - 1) * per_page
 
-    rows = list(attendance_logs.find(query).sort(sort_spec).skip(skip).limit(per_page))
+    rows = list(logs_collection.find(query).sort(sort_spec).skip(skip).limit(per_page))
     photo_map = build_student_photo_map([row.get("student_id", "") for row in rows])
     logs = []
     for row in rows:
@@ -8330,9 +9082,9 @@ def gate_logs_page():
 
     stats = {
         "total_entries": total_filtered,
-        "total_in": attendance_logs.count_documents({**query, "gate_action": "IN"}),
-        "total_out": attendance_logs.count_documents({**query, "gate_action": "OUT"}),
-        "late_count": attendance_logs.count_documents({**query, "status": "Late"}),
+        "total_in": logs_collection.count_documents({**query, "gate_action": "IN"}),
+        "total_out": logs_collection.count_documents({**query, "gate_action": "OUT"}),
+        "late_count": logs_collection.count_documents({**query, "status": "Late"}),
     }
 
     return render_template(
@@ -8342,6 +9094,7 @@ def gate_logs_page():
         filters=filters_payload,
         pagination=pagination,
         export_query=urlencode({k: v for k, v in filters_payload.items() if v not in ("", None)}),
+        archived_view=archived_view,
         **sidebar_context("gate_logs", selected_school_year),
     )
 
@@ -8350,7 +9103,8 @@ def gate_logs_page():
 @require_permission("logs")
 def gate_logs_export():
     query, sort_spec, filters_payload, selected_school_year = build_gate_logs_query(request.args)
-    rows = list(attendance_logs.find(query).sort(sort_spec).limit(5000))
+    logs_collection, selected_school_year, _ = get_attendance_logs_storage(selected_school_year)
+    rows = list(logs_collection.find(query).sort(sort_spec).limit(5000))
     generated_at_label = now_local().strftime("%B %d, %Y %I:%M:%S %p")
     metadata_items = [
         ("Generated At", generated_at_label),
@@ -8471,6 +9225,9 @@ def gate_logs_export():
 @require_permission("logs", api=True)
 def gate_logs_latest():
     school_year_label = resolve_selected_school_year(request.args.get("school_year", ""))
+    logs_collection, school_year_label, archived_view = get_attendance_logs_storage(school_year_label)
+    if archived_view:
+        return jsonify({"status": "ok", "school_year": school_year_label, "logs": []})
     since_id = request.args.get("since_id", "").strip()
     query = {"school_year": school_year_label}
     if since_id:
@@ -8479,7 +9236,7 @@ def gate_logs_latest():
         except Exception:
             pass
 
-    rows = list(attendance_logs.find(query).sort("_id", -1).limit(10))
+    rows = list(logs_collection.find(query).sort("_id", -1).limit(10))
     rows.reverse()
     photo_map = build_student_photo_map([row.get("student_id", "") for row in rows])
 
@@ -8507,6 +9264,7 @@ def gate_logs_latest():
 @require_permission("logs", api=True)
 def gate_logs_corrections_api():
     school_year_label = resolve_selected_school_year(request.args.get("school_year", ""))
+    corrections_collection, school_year_label, archived_view = get_attendance_corrections_storage(school_year_label)
     if request.method == "GET":
         status_filter = (request.args.get("status", "pending") or "").strip().lower()
         mine_only = (request.args.get("mine", "") or "").strip().lower() in {"1", "true", "yes"}
@@ -8525,10 +9283,13 @@ def gate_logs_corrections_api():
         elif mine_only:
             query["requested_by"] = session.get("admin", "")
 
-        docs = list(attendance_corrections.find(query).sort("requestedAt", -1).limit(limit_value))
+        docs = list(corrections_collection.find(query).sort("requestedAt", -1).limit(limit_value))
         rows = [serialize_attendance_correction(doc) for doc in docs]
-        pending_count = attendance_corrections.count_documents({"school_year": school_year_label, "status": "pending"})
+        pending_count = corrections_collection.count_documents({"school_year": school_year_label, "status": "pending"})
         return jsonify({"status": "ok", "school_year": school_year_label, "rows": rows, "pending_count": pending_count})
+
+    if archived_view:
+        return jsonify({"status": "error", "message": "Archived school years are read-only."}), 403
 
     payload = request.get_json(silent=True) or {}
     log_id = str(payload.get("log_id") or "").strip()
@@ -8547,7 +9308,7 @@ def gate_logs_corrections_api():
     except Exception:
         return jsonify({"status": "error", "message": "Invalid gate log ID."}), 400
 
-    row = attendance_logs.find_one({"_id": log_oid})
+    row = attendance_logs.find_one({"_id": log_oid, "school_year": school_year_label})
     if not row:
         return jsonify({"status": "error", "message": "Gate log entry not found."}), 404
 
@@ -8556,6 +9317,7 @@ def gate_logs_corrections_api():
 
     existing_pending = attendance_corrections.find_one({
         "attendance_log_id": str(log_oid),
+        "school_year": school_year_label,
         "status": "pending",
     })
     if existing_pending:
@@ -8626,9 +9388,15 @@ def gate_logs_correction_review_api(correction_id):
     if decision not in {"approve", "reject"}:
         return jsonify({"status": "error", "message": "Decision must be approve or reject."}), 400
 
-    correction = attendance_corrections.find_one({"_id": correction_oid})
+    correction, correction_collection, archived_correction = find_record_in_active_or_archive(
+        attendance_corrections,
+        attendance_corrections_archive,
+        correction_oid,
+    )
     if not correction:
         return jsonify({"status": "error", "message": "Correction request not found."}), 404
+    if archived_correction or is_archived_school_year(correction.get("school_year")):
+        return jsonify({"status": "error", "message": "Archived school years are read-only."}), 403
     if str(correction.get("status") or "").lower() != "pending":
         return jsonify({"status": "error", "message": "Correction request is already reviewed."}), 409
 
@@ -8667,7 +9435,7 @@ def gate_logs_correction_review_api(correction_id):
         signal_data_change("gate_logs")
 
     update_doc["applied"] = applied
-    attendance_corrections.update_one({"_id": correction_oid}, {"$set": update_doc})
+    correction_collection.update_one({"_id": correction_oid}, {"$set": update_doc})
     create_alert(
         "info",
         f"Correction {decision}d for {correction.get('student_name') or correction.get('student_id')}.",
@@ -8704,7 +9472,17 @@ def gate_logs_delete(id):
         return jsonify({"status": "error", "message": "Only Full Admin can delete gate logs."}), 403
 
     try:
-        result = attendance_logs.delete_one({"_id": ObjectId(id)})
+        log_oid = ObjectId(id)
+        row, target_collection, archived_row = find_record_in_active_or_archive(
+            attendance_logs,
+            attendance_logs_archive,
+            log_oid,
+        )
+        if not row:
+            return jsonify({"status": "error", "message": "Gate log not found."}), 404
+        if archived_row or is_archived_school_year(row.get("school_year")):
+            return jsonify({"status": "error", "message": "Archived school years are read-only."}), 403
+        result = target_collection.delete_one({"_id": log_oid})
         if result.deleted_count == 0:
             return jsonify({"status": "error", "message": "Gate log not found."}), 404
         signal_data_change("gate_logs")
@@ -8739,6 +9517,7 @@ def simulate_gate(student_id):
     date_str = now.strftime("%Y-%m-%d")
     time_str = now.strftime("%H:%M:%S")
     school_year_label = derive_school_year_label_from_value(date_str) or get_current_school_year_label()
+    attendance_collection, school_year_label, _ = get_attendance_logs_storage(school_year_label)
     session_info = resolve_gate_session(now)
     status = session_info["status"]
     gate_action = session_info["gate_action"]
@@ -8750,11 +9529,11 @@ def simulate_gate(student_id):
         "date": date_str,
         "session": session_name,
     }
-    existing_record = attendance_logs.find_one(dedupe_query)
+    existing_record = attendance_collection.find_one(dedupe_query)
     duplicate = existing_record is not None
 
     if not duplicate:
-        attendance_logs.insert_one({
+        attendance_collection.insert_one({
             "student_id": student.get("student_id", ""),
             "student_name": student.get("name", ""),
             "school_year": school_year_label,
@@ -8788,17 +9567,18 @@ def simulate_gate(student_id):
 @require_permission("logs")
 def sms_logs_page():
     query, sort_spec, filters_payload, selected_school_year = build_sms_logs_query(request.args)
+    logs_collection, selected_school_year, archived_view = get_sms_logs_storage(selected_school_year)
     try:
         page = max(int(request.args.get("page", "1")), 1)
     except ValueError:
         page = 1
 
     per_page = 10
-    total_filtered = sms_logs.count_documents(query)
+    total_filtered = logs_collection.count_documents(query)
     pagination = build_pagination_payload(page, per_page, total_filtered, filters_payload, "sms_logs_page")
     skip = (pagination["page"] - 1) * per_page
 
-    rows = list(sms_logs.find(query).sort(sort_spec).skip(skip).limit(per_page))
+    rows = list(logs_collection.find(query).sort(sort_spec).skip(skip).limit(per_page))
     logs = []
     for row in rows:
         status_value = str(row.get("status", "") or "")
@@ -8818,8 +9598,8 @@ def sms_logs_page():
 
     stats = {
         "total_logs": total_filtered,
-        "sent_count": sms_logs.count_documents({**query, "status": sms_status_mongo_filter("sent")}),
-        "failed_count": sms_logs.count_documents({**query, "status": sms_status_mongo_filter("failed")}),
+        "sent_count": logs_collection.count_documents({**query, "status": sms_status_mongo_filter("sent")}),
+        "failed_count": logs_collection.count_documents({**query, "status": sms_status_mongo_filter("failed")}),
     }
     sms_template = get_attendance_sms_template_payload()
 
@@ -8832,6 +9612,7 @@ def sms_logs_page():
         filters=filters_payload,
         pagination=pagination,
         export_query=urlencode({k: v for k, v in filters_payload.items() if v not in ("", None)}),
+        archived_view=archived_view,
         **sidebar_context("sms_logs", selected_school_year),
     )
 
@@ -8897,7 +9678,8 @@ def sms_logs_template_update():
 @require_permission("logs")
 def sms_logs_export():
     query, sort_spec, filters_payload, selected_school_year = build_sms_logs_query(request.args)
-    rows = list(sms_logs.find(query).sort(sort_spec).limit(5000))
+    logs_collection, selected_school_year, _ = get_sms_logs_storage(selected_school_year)
+    rows = list(logs_collection.find(query).sort(sort_spec).limit(5000))
     generated_at_label = now_local().strftime("%B %d, %Y %I:%M:%S %p")
     metadata_items = [
         ("Generated At", generated_at_label),
@@ -9017,9 +9799,11 @@ def sms_logs_resend(id):
     except Exception:
         return jsonify({"status": "error", "message": "Invalid SMS log id."}), 400
 
-    original = sms_logs.find_one({"_id": sms_log_id})
+    original, _, archived_log = find_record_in_active_or_archive(sms_logs, sms_logs_archive, sms_log_id)
     if not original:
         return jsonify({"status": "error", "message": "SMS log not found."}), 404
+    if archived_log or is_archived_school_year(original.get("school_year")):
+        return jsonify({"status": "error", "message": "Archived school years are read-only."}), 403
 
     parent_contact = original.get("parent_contact", "")
     message = original.get("message", "")
@@ -9086,10 +9870,35 @@ def sms_logs_resend(id):
 # =====================================
 # ANALYTICS
 # =====================================
-@app.route("/analytics")
-@require_permission("analytics")
-def analytics():
-    selected_school_year = resolve_selected_school_year(request.args.get("school_year", ""))
+def next_month_start(value):
+    base = value.replace(day=28) + timedelta(days=4)
+    return base.replace(day=1)
+
+
+def build_daily_analytics_buckets(start_date, end_date):
+    bucket_keys = []
+    display_labels = []
+    cursor = start_date
+    while cursor <= end_date:
+        bucket_keys.append(cursor.strftime("%Y-%m-%d"))
+        display_labels.append(cursor.strftime("%b %d"))
+        cursor += timedelta(days=1)
+    return bucket_keys, display_labels
+
+
+def build_monthly_analytics_buckets(start_date, end_date):
+    bucket_keys = []
+    display_labels = []
+    cursor = start_date.replace(day=1)
+    end_month = end_date.replace(day=1)
+    while cursor <= end_month:
+        bucket_keys.append(cursor.strftime("%Y-%m"))
+        display_labels.append(cursor.strftime("%b %Y"))
+        cursor = next_month_start(cursor)
+    return bucket_keys, display_labels
+
+
+def resolve_analytics_range(selected_school_year, range_type, requested_start="", requested_end=""):
     today = now_local().date()
     school_year_start, school_year_end = school_year_date_bounds(selected_school_year)
     range_anchor = today
@@ -9099,20 +9908,37 @@ def analytics():
         elif range_anchor > school_year_end:
             range_anchor = school_year_end
 
-    range_type = request.args.get("range", "month").strip().lower()
+    normalized_range = str(range_type or "month").strip().lower()
+    if normalized_range not in {"week", "month", "year", "custom"}:
+        normalized_range = "month"
 
-    if range_type == "week":
-        start_date = range_anchor - timedelta(days=6)
+    if normalized_range == "week":
+        start_date = range_anchor - timedelta(days=range_anchor.weekday())
         end_date = range_anchor
-    elif range_type == "custom":
-        start_date = parse_date_or_none(request.args.get("start_date")) or (range_anchor - timedelta(days=29))
-        end_date = parse_date_or_none(request.args.get("end_date")) or range_anchor
+        granularity = "daily"
+        view_label = "Weekly"
+        view_description = "Daily totals for the current week window."
+    elif normalized_range == "year":
+        start_date = school_year_start or range_anchor.replace(month=1, day=1)
+        end_date = range_anchor
+        granularity = "monthly"
+        view_label = "Yearly"
+        view_description = f"Monthly totals across school year {selected_school_year}."
+    elif normalized_range == "custom":
+        start_date = parse_date_or_none(requested_start) or (range_anchor - timedelta(days=29))
+        end_date = parse_date_or_none(requested_end) or range_anchor
         if start_date > end_date:
             start_date, end_date = end_date, start_date
+        granularity = "daily"
+        view_label = "Custom"
+        view_description = "Daily totals for the custom date range."
     else:
-        range_type = "month"
-        start_date = range_anchor - timedelta(days=29)
+        normalized_range = "month"
+        start_date = range_anchor.replace(day=1)
         end_date = range_anchor
+        granularity = "daily"
+        view_label = "Monthly"
+        view_description = "Daily totals for the current month window."
 
     if school_year_start and start_date < school_year_start:
         start_date = school_year_start
@@ -9121,46 +9947,82 @@ def analytics():
     if start_date > end_date:
         start_date = end_date
 
-    labels = []
-    cursor = start_date
-    while cursor <= end_date:
-        labels.append(cursor.strftime("%Y-%m-%d"))
-        cursor += timedelta(days=1)
+    return {
+        "range_type": normalized_range,
+        "start_date": start_date,
+        "end_date": end_date,
+        "granularity": granularity,
+        "view_label": view_label,
+        "view_description": view_description,
+        "summary_label": f"{start_date.strftime('%B %d, %Y')} to {end_date.strftime('%B %d, %Y')}",
+        "range_anchor": range_anchor,
+    }
 
+
+@app.route("/analytics")
+@require_permission("analytics")
+def analytics():
+    selected_school_year = resolve_selected_school_year(request.args.get("school_year", ""))
+    attendance_collection, selected_school_year, archived_view = get_attendance_logs_storage(selected_school_year)
+    sms_collection, selected_school_year, _ = get_sms_logs_storage(selected_school_year)
+    range_payload = resolve_analytics_range(
+        selected_school_year,
+        request.args.get("range", "month"),
+        requested_start=request.args.get("start_date"),
+        requested_end=request.args.get("end_date"),
+    )
+    range_type = range_payload["range_type"]
+    start_date = range_payload["start_date"]
+    end_date = range_payload["end_date"]
+    granularity = range_payload["granularity"]
     start_str = start_date.strftime("%Y-%m-%d")
     end_str = end_date.strftime("%Y-%m-%d")
-    attendance_pipeline = [
-        {"$match": {"school_year": selected_school_year, "date": {"$gte": start_str, "$lte": end_str}}},
-        {"$group": {"_id": "$date", "count": {"$sum": 1}}},
-    ]
-    sms_pipeline = [
-        {
-            "$match": {
-                "school_year": selected_school_year,
-                "date": {"$gte": start_str, "$lte": end_str},
-                "status": sms_status_mongo_filter("sent"),
-            }
-        },
-        {"$group": {"_id": "$date", "count": {"$sum": 1}}},
-    ]
 
-    attendance_map = {row["_id"]: row["count"] for row in attendance_logs.aggregate(attendance_pipeline)}
-    sms_map = {row["_id"]: row["count"] for row in sms_logs.aggregate(sms_pipeline)}
-    gate_series = [attendance_map.get(day, 0) for day in labels]
-    sms_series = [sms_map.get(day, 0) for day in labels]
+    if granularity == "monthly":
+        bucket_keys, chart_labels = build_monthly_analytics_buckets(start_date, end_date)
+        attendance_pipeline = [
+            {"$match": {"school_year": selected_school_year, "date": {"$gte": start_str, "$lte": end_str}}},
+            {"$group": {"_id": {"$substrBytes": ["$date", 0, 7]}, "count": {"$sum": 1}}},
+        ]
+        sms_pipeline = [
+            {
+                "$match": {
+                    "school_year": selected_school_year,
+                    "date": {"$gte": start_str, "$lte": end_str},
+                    "status": sms_status_mongo_filter("sent"),
+                }
+            },
+            {"$group": {"_id": {"$substrBytes": ["$date", 0, 7]}, "count": {"$sum": 1}}},
+        ]
+    else:
+        bucket_keys, chart_labels = build_daily_analytics_buckets(start_date, end_date)
+        attendance_pipeline = [
+            {"$match": {"school_year": selected_school_year, "date": {"$gte": start_str, "$lte": end_str}}},
+            {"$group": {"_id": "$date", "count": {"$sum": 1}}},
+        ]
+        sms_pipeline = [
+            {
+                "$match": {
+                    "school_year": selected_school_year,
+                    "date": {"$gte": start_str, "$lte": end_str},
+                    "status": sms_status_mongo_filter("sent"),
+                }
+            },
+            {"$group": {"_id": "$date", "count": {"$sum": 1}}},
+        ]
+
+    attendance_map = {row["_id"]: row["count"] for row in attendance_collection.aggregate(attendance_pipeline)}
+    sms_map = {row["_id"]: row["count"] for row in sms_collection.aggregate(sms_pipeline)}
+    gate_series = [attendance_map.get(bucket_key, 0) for bucket_key in bucket_keys]
+    sms_series = [sms_map.get(bucket_key, 0) for bucket_key in bucket_keys]
 
     total_gate_entries = sum(gate_series)
     total_sms_sent = sum(sms_series)
 
-    today_str = today.strftime("%Y-%m-%d")
-    present_today_ids = set(attendance_logs.distinct("student_id", {"school_year": selected_school_year, "date": today_str}))
-    present_today_count = len([sid for sid in present_today_ids if sid])
-    late_today_count = attendance_logs.count_documents({"school_year": selected_school_year, "date": today_str, "status": "Late"})
-
     enrollment_collection = get_school_year_enrollment_collection(selected_school_year)
     total_students = enrollment_collection.count_documents({"school_year": selected_school_year})
-    late_ids = set(attendance_logs.distinct("student_id", {"school_year": selected_school_year, "date": end_str, "status": "Late"}))
-    present_ids_all = set(attendance_logs.distinct("student_id", {"school_year": selected_school_year, "date": end_str}))
+    late_ids = set(attendance_collection.distinct("student_id", {"school_year": selected_school_year, "date": end_str, "status": "Late"}))
+    present_ids_all = set(attendance_collection.distinct("student_id", {"school_year": selected_school_year, "date": end_str}))
     present_ids = set([sid for sid in present_ids_all if sid]) - set([sid for sid in late_ids if sid])
     late_ids = set([sid for sid in late_ids if sid])
     absent_count = max(total_students - len(present_ids) - len(late_ids), 0)
@@ -9169,6 +10031,23 @@ def analytics():
         "present": len(present_ids),
         "late": len(late_ids),
         "absent": absent_count,
+    }
+
+    chart_meta = {
+        "view_label": range_payload["view_label"],
+        "view_description": range_payload["view_description"],
+        "summary_label": range_payload["summary_label"],
+        "granularity_label": "Monthly" if granularity == "monthly" else "Daily",
+        "gate_title": "Monthly Gate Entries" if granularity == "monthly" else "Daily Gate Entries",
+        "gate_subtitle": "Attendance totals grouped by month for the selected school year."
+        if granularity == "monthly"
+        else "Attendance flow from gate scans within the selected range.",
+        "sms_title": "SMS Logs Sent Per Month" if granularity == "monthly" else "SMS Logs Sent Per Day",
+        "sms_subtitle": "Delivered guardian notification totals grouped by month."
+        if granularity == "monthly"
+        else "Delivered guardian notification totals within the selected range.",
+        "attendance_subtitle": f"Present, absent, and late breakdown based on {end_date.strftime('%B %d, %Y')}.",
+        "attendance_reference_label": end_date.strftime("%B %d, %Y"),
     }
 
     return render_template(
@@ -9182,13 +10061,15 @@ def analytics():
         stats={
             "total_gate_entries": total_gate_entries,
             "total_sms_sent": total_sms_sent,
-            "present_today": present_today_count,
-            "late_today": late_today_count,
+            "present_on_reference": len(present_ids),
+            "late_on_reference": len(late_ids),
         },
-        chart_labels=labels,
+        chart_labels=chart_labels,
         gate_series=gate_series,
         sms_series=sms_series,
         attendance_distribution=attendance_distribution,
+        chart_meta=chart_meta,
+        archived_view=archived_view,
         grade_options=list(GRADE_LEVEL_OPTIONS),
         **sidebar_context("analytics", selected_school_year),
     )

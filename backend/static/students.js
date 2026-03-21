@@ -236,6 +236,8 @@
   const getSelectedSchoolYear = () => String(state.schoolYear.selected || state.schoolYear.current || "").trim();
   const getCurrentSchoolYear = () => String(state.schoolYear.current || "").trim();
   const isArchivedView = () => Boolean(state.schoolYear.archivedView);
+  const canManageStudents = () => String(document.body?.dataset?.canManageStudents || "") === "1";
+  const canRegisterFaces = () => String(document.body?.dataset?.canRegisterFaces || "") === "1";
 
   const applySchoolYearViewState = () => {
     const archived = isArchivedView();
@@ -253,9 +255,9 @@
       refs.schoolYearModeBadge.textContent = archived ? "Archived View" : "Current School Year";
       refs.schoolYearModeBadge.className = `inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${archived ? "border-amber-200 bg-amber-50 text-amber-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`;
     }
-    if (refs.openAddBtn) refs.openAddBtn.disabled = archived;
-    if (refs.openAddSectionBtn) refs.openAddSectionBtn.disabled = archived;
-    if (refs.openReenrollBtn) refs.openReenrollBtn.disabled = archived || !hasSourceYears;
+    if (refs.openAddBtn) refs.openAddBtn.disabled = archived || !canManageStudents();
+    if (refs.openAddSectionBtn) refs.openAddSectionBtn.disabled = archived || !canManageStudents();
+    if (refs.openReenrollBtn) refs.openReenrollBtn.disabled = archived || !hasSourceYears || !canManageStudents();
     if (refs.reenrollTargetYearLabel) refs.reenrollTargetYearLabel.textContent = selectedYear || "-";
     if (refs.reenrollTargetYearBadge) refs.reenrollTargetYearBadge.textContent = selectedYear || "-";
   };
@@ -477,7 +479,7 @@
       state.reenroll.sourceSchoolYear = newestOption;
       refs.reenrollSourceYearSelect.value = newestOption;
     }
-    if (refs.openReenrollBtn) refs.openReenrollBtn.disabled = isArchivedView() || options.length === 0;
+    if (refs.openReenrollBtn) refs.openReenrollBtn.disabled = isArchivedView() || options.length === 0 || !canManageStudents();
   };
 
   const setSchoolYearFormAlert = (message = "") => {
@@ -1360,9 +1362,11 @@
         : '<div class="h-10 w-10 rounded-lg border border-dashed border-slate-300 text-[10px] text-slate-400 flex items-center justify-center">No Photo</div>';
 
       const studentLrn = student.lrn || student.student_id || "";
-      const actionsMarkup = archivedView
-        ? '<span class="inline-flex rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-500">Read Only Archive</span>'
-        : `<div class="flex items-center justify-end gap-2">
+      let actionsMarkup = '<span class="inline-flex rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-500">No Actions</span>';
+      if (archivedView) {
+        actionsMarkup = '<span class="inline-flex rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-500">Read Only Archive</span>';
+      } else if (canManageStudents()) {
+        actionsMarkup = `<div class="flex items-center justify-end gap-2">
             <div class="relative group">
               <button type="button" data-act="edit" data-id="${esc(student._id)}" class="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-100" aria-label="Edit Student">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -1381,8 +1385,13 @@
               <span class="pointer-events-none absolute -top-9 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-[10px] text-white opacity-0 group-hover:opacity-100 transition">Delete Student</span>
             </div>
 
+            ${canRegisterFaces() ? `<button type="button" data-act="face" data-id="${esc(student._id)}" data-mode="${faceMode}" class="rounded-lg ${faceActionClass} px-2.5 py-1.5 text-xs font-semibold text-white">${faceActionText}</button>` : ""}
+          </div>`;
+      } else if (canRegisterFaces()) {
+        actionsMarkup = `<div class="flex items-center justify-end">
             <button type="button" data-act="face" data-id="${esc(student._id)}" data-mode="${faceMode}" class="rounded-lg ${faceActionClass} px-2.5 py-1.5 text-xs font-semibold text-white">${faceActionText}</button>
           </div>`;
+      }
 
       return `<tr class="hover:bg-slate-50" data-id="${esc(student._id)}">
         <td class="px-4 py-3">${photo}</td>
@@ -1778,6 +1787,10 @@
   };
 
   const confirmDelete = async () => {
+    if (!canManageStudents()) {
+      showToast("Staff access is limited to face registration only.", true);
+      return;
+    }
     if (isArchivedView()) {
       showToast("Archived school years are read-only.", true);
       return;
@@ -2077,6 +2090,10 @@
     });
 
     refs.createSchoolYearBtn?.addEventListener("click", () => {
+      if (!canManageStudents()) {
+        showToast("Staff access is limited to face registration only.", true);
+        return;
+      }
       setSchoolYearFormAlert("");
       refs.schoolYearForm?.reset();
       if (refs.schoolYearLabel) refs.schoolYearLabel.value = suggestNextSchoolYearLabel();
@@ -2087,6 +2104,10 @@
 
     refs.schoolYearForm?.addEventListener("submit", async (event) => {
       event.preventDefault();
+      if (!canManageStudents()) {
+        setSchoolYearFormAlert("Staff access is limited to face registration only.");
+        return;
+      }
       const validation = validateSchoolYearLabel(refs.schoolYearLabel?.value || "");
       if (!validation.valid) {
         setSchoolYearFormAlert(validation.message);
@@ -2114,6 +2135,10 @@
     });
 
     refs.openReenrollBtn?.addEventListener("click", async () => {
+      if (!canManageStudents()) {
+        showToast("Staff access is limited to face registration only.", true);
+        return;
+      }
       if (isArchivedView()) {
         showToast("Archived school years are read-only.", true);
         return;
@@ -2133,6 +2158,10 @@
     });
 
     refs.reloadReenrollCandidatesBtn?.addEventListener("click", () => {
+      if (!canManageStudents()) {
+        showToast("Staff access is limited to face registration only.", true);
+        return;
+      }
       loadReenrollCandidates();
     });
 
@@ -2194,6 +2223,10 @@
     });
 
     refs.reenrollSubmitBtn?.addEventListener("click", async () => {
+      if (!canManageStudents()) {
+        showToast("Staff access is limited to face registration only.", true);
+        return;
+      }
       if (isArchivedView()) {
         showToast("Archived school years are read-only.", true);
         return;
@@ -2208,6 +2241,10 @@
 
     refs.reenrollAssignmentForm?.addEventListener("submit", async (event) => {
       event.preventDefault();
+      if (!canManageStudents()) {
+        setReenrollAssignmentAlert("Staff access is limited to face registration only.", true);
+        return;
+      }
       if (isArchivedView()) {
         showToast("Archived school years are read-only.", true);
         return;
@@ -2306,6 +2343,10 @@
     });
 
     refs.openAddBtn.addEventListener("click", () => {
+      if (!canManageStudents()) {
+        showToast("Staff access is limited to face registration only.", true);
+        return;
+      }
       if (isArchivedView()) {
         showToast("Archived school years are read-only.", true);
         return;
@@ -2334,6 +2375,10 @@
     });
 
     refs.openAddSectionBtn?.addEventListener("click", () => {
+      if (!canManageStudents()) {
+        showToast("Staff access is limited to face registration only.", true);
+        return;
+      }
       if (isArchivedView()) {
         showToast("Archived school years are read-only.", true);
         return;
@@ -2345,6 +2390,10 @@
 
     refs.addSectionForm?.addEventListener("submit", async (event) => {
       event.preventDefault();
+      if (!canManageStudents()) {
+        showToast("Staff access is limited to face registration only.", true);
+        return;
+      }
       if (isArchivedView()) {
         showToast("Archived school years are read-only.", true);
         return;
@@ -2410,6 +2459,10 @@
 
     refs.addImportForm?.addEventListener("submit", async (event) => {
       event.preventDefault();
+      if (!canManageStudents()) {
+        showToast("Staff access is limited to face registration only.", true, { title: "Import Error" });
+        return;
+      }
       if (isArchivedView()) {
         showToast("Archived school years are read-only.", true, { title: "Import Error" });
         return;
@@ -2503,6 +2556,10 @@
 
     refs.addForm.addEventListener("submit", async (event) => {
       event.preventDefault();
+      if (!canManageStudents()) {
+        showToast("Staff access is limited to face registration only.", true);
+        return;
+      }
       if (isArchivedView()) {
         showToast("Archived school years are read-only.", true);
         return;
@@ -2546,6 +2603,10 @@
 
     refs.editForm.addEventListener("submit", async (event) => {
       event.preventDefault();
+      if (!canManageStudents()) {
+        showToast("Staff access is limited to face registration only.", true);
+        return;
+      }
       if (isArchivedView()) {
         showToast("Archived school years are read-only.", true);
         return;
@@ -2582,9 +2643,27 @@
         event.stopPropagation();
         const studentId = actionButton.dataset.id;
         const action = actionButton.dataset.act;
-        if (action === "edit") openEditModal(studentId);
-        if (action === "delete") openDeleteModal(studentId, actionButton.dataset.name || "Selected student");
-        if (action === "face") openFaceModal(studentId, actionButton.dataset.mode);
+        if (action === "edit") {
+          if (!canManageStudents()) {
+            showToast("Staff access is limited to face registration only.", true);
+            return;
+          }
+          openEditModal(studentId);
+        }
+        if (action === "delete") {
+          if (!canManageStudents()) {
+            showToast("Staff access is limited to face registration only.", true);
+            return;
+          }
+          openDeleteModal(studentId, actionButton.dataset.name || "Selected student");
+        }
+        if (action === "face") {
+          if (!canRegisterFaces()) {
+            showToast("Face registration is not available for this account.", true);
+            return;
+          }
+          openFaceModal(studentId, actionButton.dataset.mode);
+        }
       }
     });
 
