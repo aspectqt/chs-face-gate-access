@@ -22,6 +22,8 @@ ATTENDANCE_LOGS_ARCHIVE_COLLECTION_NAME = "attendance_logs_archive"
 SMS_LOGS_ARCHIVE_COLLECTION_NAME = "sms_logs_archive"
 ALERTS_ARCHIVE_COLLECTION_NAME = "alerts_archive"
 ATTENDANCE_CORRECTIONS_ARCHIVE_COLLECTION_NAME = "attendance_corrections_archive"
+EARLY_TIMEOUT_REQUESTS_ARCHIVE_COLLECTION_NAME = "early_timeout_requests_archive"
+CALENDAR_EVENTS_ARCHIVE_COLLECTION_NAME = "calendar_events_archive"
 
 # Core collections
 students = db["students"]
@@ -51,7 +53,9 @@ anomaly_rules = db["anomaly_rules"]
 anomaly_events = db["anomaly_events"]
 system_settings = db["system_settings"]
 calendar_events = db["calendar_events"]
+calendar_events_archive = db[CALENDAR_EVENTS_ARCHIVE_COLLECTION_NAME]
 early_timeout_requests = db["early_timeout_requests"]
+early_timeout_requests_archive = db[EARLY_TIMEOUT_REQUESTS_ARCHIVE_COLLECTION_NAME]
 
 
 def _safe_create_index(collection, keys, **kwargs):

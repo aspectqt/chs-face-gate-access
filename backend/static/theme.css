@@ -7,6 +7,13 @@
   --app-text-soft: #475569;
   --app-border: #cbd5e1;
   --app-shadow: 0 10px 35px rgba(15, 23, 42, 0.08);
+
+  /* Sidebar pill variables (adjustable server-side in theme.css) */
+  --sidebar-pill-width: 6px;
+  --sidebar-pill-height: 36px;
+  --sidebar-pill-left: 0.6rem;
+  --sidebar-pill-blur: 6px;
+  --sidebar-pill-radius: 9999px;
 }
 
 html[data-theme="dark"] {
@@ -18,6 +25,13 @@ html[data-theme="dark"] {
   --app-text-soft: #94a3b8;
   --app-border: #334155;
   --app-shadow: 0 14px 42px rgba(2, 6, 23, 0.55);
+
+  /* Dark-mode sidebar pill defaults (can be overridden) */
+  --sidebar-pill-width: 6px;
+  --sidebar-pill-height: 36px;
+  --sidebar-pill-left: 0.6rem;
+  --sidebar-pill-blur: 6px;
+  --sidebar-pill-radius: 9999px;
 }
 
 html {

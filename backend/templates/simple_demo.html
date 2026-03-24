@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Enhanced Scanning Test</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .camera-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+        
+        .face-box {
+            border: 3px solid #10b981;
+            border-radius: 8px;
+            position: absolute;
+            transition: all 0.1s ease-out;
+        }
+        
+        .face-label {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            white-space: nowrap;
+            top: -25px;
+            left: 0;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div class="max-w-4xl mx-auto p-6">
+        <h1 class="text-2xl font-bold mb-6">Simple Enhanced Scanning Test</h1>
+        
+        <div class="bg-white rounded-lg shadow-lg p-4">
+            <div class="mb-4">
+                <button id="startBtn" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
+                    Start Demo Mode
+                </button>
+                <button id="stopBtn" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 ml-2" disabled>
+                    Stop Demo
+                </button>
+            </div>
+            
+            <div class="relative bg-gray-900 rounded-lg overflow-hidden" style="aspect-ratio: 16/9;">
+                <video id="videoFeed" class="hidden w-full h-full object-cover" autoplay playsinline style="transform: scaleX(-1);"></video>
+                <canvas id="cameraOverlay" class="camera-overlay"></canvas>
+                <div id="placeholder" class="flex items-center justify-center h-full">
+                    <p class="text-white text-center">
+                        <span class="block text-lg font-semibold">Camera Ready</span>
+                        <span class="block text-sm text-gray-400 mt-2">Click "Start Demo Mode" to see green boxes</span>
+                    </p>
+                </div>
+            </div>
+            
+            <div class="mt-4 grid grid-cols-2 gap-4">
+                <div class="bg-gray-50 p-3 rounded">
+                    <h3 class="font-semibold text-sm">Status</h3>
+                    <p id="status" class="text-sm text-gray-600">Idle</p>
+                </div>
+                <div class="bg-gray-50 p-3 rounded">
+                    <h3 class="font-semibold text-sm">Demo Faces</h3>
+                    <p id="faceCount" class="text-sm text-gray-600">0</p>
+                </div>
+            </div>
+            
+            <div class="mt-4 bg-green-50 p-3 rounded">
+                <h3 class="font-semibold text-sm mb-2">Demo Mode Features:</h3>
+                <ul class="text-sm text-gray-600 space-y-1">
+                    <li>✅ Shows green boxes even with 1 person</li>
+                    <li>✅ Displays student names</li>
+                    <li>✅ Shows confidence scores</li>
+                    <li>✅ Works without face photos</li>
+                    <li>✅ Updates in real-time</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let demoInterval = null;
+        let isDemoRunning = false;
+        
+        // UI Elements
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const video = document.getElementById('videoFeed');
+        const placeholder = document.getElementById('placeholder');
+        const overlay = document.getElementById('cameraOverlay');
+        const status = document.getElementById('status');
+        const faceCount = document.getElementById('faceCount');
+        
+        // Demo data
+        const demoStudents = [
+            { student_id: "120526180006", name: "ARADAN, LOUIS MIGUEL SITOY" },
+            { student_id: "120507180005", name: "AUJERO, IYAN ARDIENTE" },
+            { student_id: "120508130014", name: "BALIGASA, RICKY AURILIO" }
+        ];
+        
+        // Start camera
+        async function startCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: 1280, height: 720 },
+                    audio: false
+                });
+                
+                video.srcObject = stream;
+                await video.play();
+                
+                placeholder.classList.add('hidden');
+                video.classList.remove('hidden');
+                overlay.classList.remove('hidden');
+                
+                return true;
+            } catch (error) {
+                console.error('Camera error:', error);
+                status.textContent = 'Camera error: ' + error.message;
+                return false;
+            }
+        }
+        
+        // Draw demo faces
+        function drawDemoFaces() {
+            if (!isDemoRunning) return;
+            
+            const ctx = overlay.getContext('2d');
+            const rect = overlay.getBoundingClientRect();
+            
+            // Clear overlay
+            ctx.clearRect(0, 0, rect.width, rect.height);
+            
+            // Generate random number of faces (1-3)
+            const numFaces = Math.floor(Math.random() * 3) + 1;
+            const faces = [];
+            
+            for (let i = 0; i < numFaces; i++) {
+                const student = demoStudents[Math.floor(Math.random() * demoStudents.length)];
+                
+                // Random face position
+                const x = Math.random() * (rect.width - 150) + 50;
+                const y = Math.random() * (rect.height - 200) + 50;
+                const width = Math.random() * 50 + 100;
+                const height = Math.random() * 50 + 120;
+                
+                faces.push({ x, y, width, height, student });
+                
+                // Draw green bounding box
+                ctx.strokeStyle = '#10b981';
+                ctx.lineWidth = 3;
+                ctx.strokeRect(x, y, width, height);
+                
+                // Draw corner accents
+                const cornerLength = 15;
+                ctx.beginPath();
+                // Top-left
+                ctx.moveTo(x, y + cornerLength);
+                ctx.lineTo(x, y);
+                ctx.lineTo(x + cornerLength, y);
+                // Top-right
+                ctx.moveTo(x + width - cornerLength, y);
+                ctx.lineTo(x + width, y);
+                ctx.lineTo(x + width, y + cornerLength);
+                // Bottom-left
+                ctx.moveTo(x, y + height - cornerLength);
+                ctx.lineTo(x, y + height);
+                ctx.lineTo(x + cornerLength, y + height);
+                // Bottom-right
+                ctx.moveTo(x + width - cornerLength, y + height);
+                ctx.lineTo(x + width, y + height);
+                ctx.lineTo(x + width, y + height - cornerLength);
+                ctx.stroke();
+                
+                // Draw student name
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+                ctx.font = '14px system-ui';
+                const textWidth = ctx.measureText(student.name).width;
+                ctx.fillRect(x, y - 25, textWidth + 12, 20);
+                
+                ctx.fillStyle = '#ffffff';
+                ctx.fillText(student.name, x + 6, y - 10);
+                
+                // Draw confidence score
+                const confidence = (Math.random() * 0.15 + 0.85).toFixed(2);
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.fillRect(x, y + height + 2, 60, 18);
+                
+                ctx.fillStyle = '#ffffff';
+                ctx.font = '11px system-ui';
+                ctx.fillText(`${(confidence * 100).toFixed(1)}%`, x + 4, y + height + 14);
+            }
+            
+            // Update UI
+            faceCount.textContent = numFaces;
+            status.textContent = `${numFaces} face(s) detected - Demo Mode`;
+            
+            // Voice feedback for first face
+            if (faces.length > 0 && Math.random() > 0.7) { // 30% chance of voice
+                speakName(faces[0].student.name);
+            }
+        }
+        
+        // Voice feedback
+        function speakName(name) {
+            if ('speechSynthesis' in window) {
+                const utterance = new SpeechSynthesisUtterance(`${name} recognized`);
+                utterance.rate = 1.0;
+                utterance.pitch = 1.0;
+                utterance.volume = 0.8;
+                window.speechSynthesis.speak(utterance);
+            }
+        }
+        
+        // Start button
+        startBtn.addEventListener('click', async () => {
+            status.textContent = 'Starting camera...';
+            
+            const cameraReady = await startCamera();
+            if (cameraReady) {
+                isDemoRunning = true;
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                
+                // Start demo loop
+                demoInterval = setInterval(drawDemoFaces, 2000); // Update every 2 seconds
+                drawDemoFaces(); // Draw immediately
+            }
+        });
+        
+        // Stop button
+        stopBtn.addEventListener('click', () => {
+            isDemoRunning = false;
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            
+            // Stop demo loop
+            if (demoInterval) {
+                clearInterval(demoInterval);
+                demoInterval = null;
+            }
+            
+            // Stop camera
+            if (video.srcObject) {
+                video.srcObject.getTracks().forEach(track => track.stop());
+                video.srcObject = null;
+            }
+            
+            // Clear overlay
+            const ctx = overlay.getContext('2d');
+            ctx.clearRect(0, 0, overlay.width, overlay.height);
+            
+            // Update UI
+            placeholder.classList.remove('hidden');
+            video.classList.add('hidden');
+            overlay.classList.add('hidden');
+            status.textContent = 'Demo stopped';
+            faceCount.textContent = '0';
+        });
+        
+        // Update overlay size
+        function updateOverlaySize() {
+            const rect = video.getBoundingClientRect();
+            overlay.width = rect.width;
+            overlay.height = rect.height;
+        }
+        
+        // Handle resize
+        window.addEventListener('resize', updateOverlaySize);
+        video.addEventListener('loadedmetadata', updateOverlaySize);
+    </script>
+</body>
+</html>

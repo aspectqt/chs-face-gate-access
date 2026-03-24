@@ -15,7 +15,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap"
         rel="stylesheet">
     {% include 'partials/theme_assets.html' %}
-    <script src="{{ url_for('static', filename='client_camera.js') }}"></script>
+    <script src="{{ url_for('static', filename='enhanced_client_camera.js') }}"></script>
     <style>
         :root {
             --dash-card-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
@@ -526,6 +526,7 @@
                                             </div>
                                             <video id="videoFeed" class="hidden h-full w-full object-cover" autoplay playsinline style="transform: scaleX(-1);"
                                                 title="Client device camera stream"></video>
+                                            <canvas id="cameraOverlay" class="hidden absolute top-0 left-0 w-full h-full pointer-events-none z-10"></canvas>
                                             <div id="scanOverlay"
                                                 class="hidden absolute bottom-0 left-0 right-0 border-t border-white/10 bg-black/70 px-4 py-2.5 text-sm text-white text-center backdrop-blur-sm z-20">
                                                 No active verification event.
@@ -1428,9 +1429,10 @@
     {% endif %}
 
     <script>
-        // Initialize client-side camera
-        let clientCamera = new ClientCamera();
+        // Initialize enhanced client-side camera
+        let clientCamera = new EnhancedClientCamera();
         
+        // Setup enhanced camera callbacks
         clientCamera.onError = function(message) {
             console.error('[Camera Error]', message);
             showScanEventBadge('error', message);
@@ -1442,8 +1444,34 @@
         clientCamera.onSuccess = function(message) {
             console.log('[Camera Success]', message);
         };
+        
+        // Enhanced face detection callbacks
+        clientCamera.onFaceDetected = function(data) {
+            console.log('[Face Detection]', data);
+            // Update face count in UI if needed
+            if (data.count > 0) {
+                setScanState('scanning', `Status: ${data.count} face(s) detected`);
+            }
+        };
+        
+        clientCamera.onFaceRecognized = function(data) {
+            console.log('[Face Recognition]', data);
+            // Show recognition overlay with student name
+            showRecognitionSuccess(data.name, data.student_id);
+        };
+        
+        clientCamera.onMultipleFaces = function(data) {
+            console.log('[Multiple Faces]', data);
+            showScanEventBadge('warning', `${data.count} faces detected`);
+        };
+        
+        clientCamera.onVoiceFeedback = function(name, studentId) {
+            console.log('[Voice Feedback]', name);
+            // Voice feedback is handled automatically by the enhanced camera
+        };
 
         const video = document.getElementById('videoFeed');
+        const cameraOverlay = document.getElementById('cameraOverlay');
         const statusText = document.getElementById('status');
         const scanOverlay = document.getElementById('scanOverlay');
         const scanPlaceholder = document.getElementById('scanPlaceholder');
@@ -1496,6 +1524,85 @@
         let smsBalanceRefreshTimer = null;
         let smsBalancePollTimer = null;
         let smsBalanceLoading = false;
+
+        // School year variables for disabling scanning console
+        const selectedSchoolYear = "{{ selected_school_year }}";
+        const currentSchoolYear = "{{ current_school_year }}";
+
+        function isPreviousYearSelected() {
+            return selectedSchoolYear !== currentSchoolYear;
+        }
+
+        function updateScanningConsoleForYear() {
+            const gateConsoleCard = document.getElementById('gateConsoleCard');
+            const startBtn = document.getElementById('startBtn');
+            const stopBtn = document.getElementById('stopBtn');
+            const scanPlaceholder = document.getElementById('scanPlaceholder');
+            const video = document.getElementById('video');
+            const scanOverlay = document.getElementById('scanOverlay');
+            
+            if (isPreviousYearSelected()) {
+                // Disable scanning console for previous years
+                if (startBtn) {
+                    startBtn.disabled = true;
+                    startBtn.classList.add('opacity-60', 'cursor-not-allowed');
+                }
+                if (stopBtn) {
+                    stopBtn.disabled = true;
+                    stopBtn.classList.add('opacity-60', 'cursor-not-allowed');
+                }
+                
+                // Show disabled message
+                if (scanPlaceholder && !scanPlaceholder.classList.contains('hidden')) {
+                    scanPlaceholder.innerHTML = `
+                        <div>
+                            <p class="text-sm font-semibold text-slate-100">Scanning Disabled</p>
+                            <p class="mt-2 text-xs text-slate-400">Gate scanning is not available for archived school years.</p>
+                            <p class="mt-1 text-xs text-slate-500">Selected year: <span class="font-semibold text-amber-300">${selectedSchoolYear}</span></p>
+                        </div>
+                    `;
+                }
+                
+                // Add visual indicator to the console card
+                if (gateConsoleCard) {
+                    gateConsoleCard.classList.add('opacity-75', 'border-amber-200');
+                    const title = gateConsoleCard.querySelector('h2');
+                    if (title) {
+                        title.innerHTML = 'Gate Scanning Console <span class="text-xs font-normal text-amber-600">(Archived Year)</span>';
+                    }
+                }
+                
+                // Stop any active scanning
+                if (isScanning) {
+                    stopScanning();
+                }
+            } else {
+                // Enable scanning console for current year
+                if (startBtn) {
+                    startBtn.disabled = false;
+                    startBtn.classList.remove('opacity-60', 'cursor-not-allowed');
+                }
+                
+                // Reset placeholder to original state
+                if (scanPlaceholder && !scanPlaceholder.classList.contains('hidden')) {
+                    scanPlaceholder.innerHTML = `
+                        <div>
+                            <p class="text-sm font-semibold text-slate-100">Webcam is idle</p>
+                            <p class="mt-2 text-xs text-slate-400">Click <span class="font-semibold text-emerald-300">Start Scan</span> to open the camera.</p>
+                        </div>
+                    `;
+                }
+                
+                // Remove visual indicators
+                if (gateConsoleCard) {
+                    gateConsoleCard.classList.remove('opacity-75', 'border-amber-200');
+                    const title = gateConsoleCard.querySelector('h2');
+                    if (title) {
+                        title.textContent = 'Gate Scanning Console';
+                    }
+                }
+            }
+        }
 
         function getCurrentSessionLabel(now = new Date()) {
             const minutes = now.getHours() * 60 + now.getMinutes();
@@ -1699,8 +1806,15 @@
         }
 
         function setScanButtons() {
-            startBtn.disabled = isScanning;
-            stopBtn.disabled = !isScanning;
+            // Check if previous year is selected and disable buttons accordingly
+            if (isPreviousYearSelected()) {
+                startBtn.disabled = true;
+                stopBtn.disabled = true;
+            } else {
+                startBtn.disabled = isScanning;
+                stopBtn.disabled = !isScanning;
+            }
+            
             startBtn.classList.toggle('opacity-60', startBtn.disabled);
             stopBtn.classList.toggle('opacity-60', stopBtn.disabled);
             startBtn.classList.toggle('cursor-not-allowed', startBtn.disabled);
@@ -1881,6 +1995,35 @@
             utterance.volume = 1.0;
             window.speechSynthesis.cancel();
             window.speechSynthesis.speak(utterance);
+        }
+
+        function showRecognitionSuccess(studentName, studentId) {
+            // Update the name overlay
+            const scanNameText = document.getElementById('scanNameText');
+            const scanNameOverlay = document.getElementById('scanNameOverlay');
+            
+            if (scanNameText && scanNameOverlay) {
+                scanNameText.textContent = studentName;
+                scanNameOverlay.classList.remove('hidden');
+                
+                // Hide after 2 seconds
+                setTimeout(() => {
+                    scanNameOverlay.classList.add('hidden');
+                }, 2000);
+            }
+            
+            // Show success event badge
+            showScanEventBadge('success', `${studentName} verified`);
+            
+            // Update status
+            setScanState('success', `Status: ${studentName} Verified`);
+            
+            // Reset status after 3 seconds
+            setTimeout(() => {
+                if (isScanning) {
+                    setScanState('scanning', `Status: Scanning (${scanSessionModeLabel(scanSessionMode)})`);
+                }
+            }, 3000);
         }
 
         function playNotificationTone() {
@@ -2353,6 +2496,37 @@
             }
         }
 
+        function stopScanning() {
+            if (!isScanning) return;
+            
+            // Stop frame processing and camera
+            stopFrameProcessing();
+            clientCamera.stop();
+            
+            // Update UI state
+            isScanning = false;
+            setScanButtons();
+            
+            // Cleanup UI elements
+            const video = document.getElementById('video');
+            const scanPlaceholder = document.getElementById('scanPlaceholder');
+            const scanOverlay = document.getElementById('scanOverlay');
+            
+            if (video) video.classList.add('hidden');
+            if (scanPlaceholder) scanPlaceholder.classList.remove('hidden');
+            if (scanOverlay) scanOverlay.classList.add('hidden');
+            
+            setScanState('idle', 'Status: Idle');
+            showScanEventBadge('info', 'Scan stopped due to school year change.');
+            
+            // Stop event polling
+            stopPollingEvents();
+            applyGateStatusDefaults();
+            
+            // Notify server
+            fetch('/stop_scan', { method: 'POST' }).catch(() => null);
+        }
+
         if (sessionModeSelect) {
             sessionModeSelect.addEventListener('change', () => {
                 const selectedMode = (sessionModeSelect.value || 'auto').trim();
@@ -2367,6 +2541,13 @@
 
         startBtn.addEventListener('click', async () => {
             if (isScanning) return;
+            
+            // Check if previous year is selected
+            if (isPreviousYearSelected()) {
+                showScanEventBadge('error', `Gate scanning is not available for archived school year: ${selectedSchoolYear}`);
+                setScanState('error', 'Status: Scanning disabled for archived years');
+                return;
+            }
             
             // Initialize client camera first
             const cameraReady = await clientCamera.initialize('videoFeed');
@@ -2395,6 +2576,7 @@
                 applyGateStatusDefaults();
                 scanPlaceholder.classList.add('hidden');
                 video.classList.remove('hidden');
+                cameraOverlay.classList.remove('hidden');
                 scanOverlay.classList.remove('hidden');
                 if (data.scan_session_mode) {
                     applyScanSessionMode(data.scan_session_mode, data.effective_session || null);
@@ -2431,6 +2613,7 @@
             
             // Cleanup UI elements
             video.classList.add('hidden');
+            cameraOverlay.classList.add('hidden');
             scanPlaceholder.classList.remove('hidden');
             scanOverlay.classList.add('hidden');
             setScanState('idle', 'Status: Idle');
@@ -2473,6 +2656,7 @@
                 headers: csrfToken ? { 'X-CSRF-Token': csrfToken } : {},
             }).catch(() => null);
         });
+        updateScanningConsoleForYear();
         setScanButtons();
         setScanState('idle', 'Status: Idle');
         applyGateStatusDefaults();
@@ -3873,10 +4057,14 @@
             if (window.location.hash === '#gate-scanning') {
                 setTimeout(() => {
                     const startBtn = document.getElementById('startBtn');
-                    if (startBtn && !isScanning) {
+                    if (startBtn && !isScanning && !isPreviousYearSelected()) {
                         console.log('[Scanner] Auto-starting scan due to URL hash...');
                         startBtn.click();
                         // Scroll to scanner if not already there
+                        document.getElementById('gate-scanning')?.scrollIntoView({ behavior: 'smooth' });
+                    } else if (isPreviousYearSelected()) {
+                        console.log('[Scanner] Auto-start disabled - archived school year selected');
+                        // Scroll to scanner to show disabled state
                         document.getElementById('gate-scanning')?.scrollIntoView({ behavior: 'smooth' });
                     }
                 }, 1000); 

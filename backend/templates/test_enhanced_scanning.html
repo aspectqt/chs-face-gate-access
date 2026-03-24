@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enhanced Scanning Test</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .camera-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+        
+        .face-box {
+            border: 3px solid #10b981;
+            border-radius: 8px;
+            position: absolute;
+            transition: all 0.1s ease-out;
+        }
+        
+        .face-label {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            white-space: nowrap;
+            top: -25px;
+            left: 0;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div class="max-w-4xl mx-auto p-6">
+        <h1 class="text-2xl font-bold mb-6">Enhanced Scanning System Test</h1>
+        
+        <div class="bg-white rounded-lg shadow-lg p-4">
+            <div class="mb-4">
+                <button id="startBtn" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
+                    Start Enhanced Scanning
+                </button>
+                <button id="stopBtn" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 ml-2" disabled>
+                    Stop Scanning
+                </button>
+            </div>
+            
+            <div class="relative bg-gray-900 rounded-lg overflow-hidden" style="aspect-ratio: 16/9;">
+                <video id="videoFeed" class="hidden w-full h-full object-cover" autoplay playsinline style="transform: scaleX(-1);"></video>
+                <canvas id="cameraOverlay" class="camera-overlay"></canvas>
+                <div id="placeholder" class="flex items-center justify-center h-full">
+                    <p class="text-white text-center">
+                        <span class="block text-lg font-semibold">Camera Ready</span>
+                        <span class="block text-sm text-gray-400 mt-2">Click "Start Enhanced Scanning" to begin</span>
+                    </p>
+                </div>
+            </div>
+            
+            <div class="mt-4 grid grid-cols-2 gap-4">
+                <div class="bg-gray-50 p-3 rounded">
+                    <h3 class="font-semibold text-sm">Status</h3>
+                    <p id="status" class="text-sm text-gray-600">Idle</p>
+                </div>
+                <div class="bg-gray-50 p-3 rounded">
+                    <h3 class="font-semibold text-sm">Faces Detected</h3>
+                    <p id="faceCount" class="text-sm text-gray-600">0</p>
+                </div>
+            </div>
+            
+            <div class="mt-4 bg-blue-50 p-3 rounded">
+                <h3 class="font-semibold text-sm mb-2">Features Tested:</h3>
+                <ul class="text-sm text-gray-600 space-y-1">
+                    <li>✅ Enhanced Camera Initialization</li>
+                    <li>✅ Multi-face Detection & Tracking</li>
+                    <li>✅ Green Bounding Boxes</li>
+                    <li>✅ Student Name Display</li>
+                    <li>✅ Voice Feedback with Duplicate Prevention</li>
+                    <li>✅ Real-time Performance Metrics</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Enhanced Client Camera -->
+    <script src="/static/enhanced_client_camera.js"></script>
+    
+    <script>
+        let enhancedCamera = new EnhancedClientCamera();
+        let isScanning = false;
+        
+        // Setup callbacks
+        enhancedCamera.onError = (message) => {
+            console.error('Camera Error:', message);
+            document.getElementById('status').textContent = 'Error: ' + message;
+        };
+        
+        enhancedCamera.onSuccess = (message) => {
+            console.log('Camera Success:', message);
+            document.getElementById('status').textContent = 'Camera initialized successfully';
+        };
+        
+        enhancedCamera.onFaceDetected = (data) => {
+            console.log('Face Detected:', data);
+            document.getElementById('faceCount').textContent = data.count || 0;
+            document.getElementById('status').textContent = `${data.count} face(s) detected`;
+        };
+        
+        enhancedCamera.onFaceRecognized = (data) => {
+            console.log('Face Recognized:', data);
+            document.getElementById('status').textContent = `${data.name} recognized!`;
+            
+            // Show success notification
+            showNotification(`${data.name} verified!`, 'success');
+        };
+        
+        enhancedCamera.onMultipleFaces = (data) => {
+            console.log('Multiple Faces:', data);
+            document.getElementById('status').textContent = `${data.count} faces detected`;
+            showNotification(`${data.count} faces detected`, 'warning');
+        };
+        
+        enhancedCamera.onVoiceFeedback = (name, studentId) => {
+            console.log('Voice Feedback:', name);
+            // Voice feedback is handled automatically
+        };
+        
+        // UI Elements
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const video = document.getElementById('videoFeed');
+        const placeholder = document.getElementById('placeholder');
+        const overlay = document.getElementById('cameraOverlay');
+        
+        // Start button
+        startBtn.addEventListener('click', async () => {
+            try {
+                document.getElementById('status').textContent = 'Initializing camera...';
+                
+                // Initialize enhanced camera
+                const success = await enhancedCamera.initialize('videoFeed', {
+                    video: {
+                        width: { ideal: 1280, max: 1280 },
+                        height: { ideal: 720, max: 720 },
+                        facingMode: 'user',
+                        frameRate: { ideal: 30, max: 30 }
+                    },
+                    audio: false
+                });
+                
+                if (success) {
+                    isScanning = true;
+                    startBtn.disabled = true;
+                    stopBtn.disabled = false;
+                    placeholder.classList.add('hidden');
+                    video.classList.remove('hidden');
+                    overlay.classList.remove('hidden');
+                    document.getElementById('status').textContent = 'Enhanced scanning active';
+                    
+                    // Start server scan session
+                    await fetch('/start_scan', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ session_mode: 'auto' })
+                    });
+                }
+            } catch (error) {
+                console.error('Start error:', error);
+                document.getElementById('status').textContent = 'Error: ' + error.message;
+            }
+        });
+        
+        // Stop button
+        stopBtn.addEventListener('click', () => {
+            try {
+                isScanning = false;
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+                
+                // Stop camera
+                enhancedCamera.stop();
+                
+                // Stop server scan session
+                fetch('/stop_scan', { method: 'POST' });
+                
+                // Update UI
+                placeholder.classList.remove('hidden');
+                video.classList.add('hidden');
+                overlay.classList.add('hidden');
+                document.getElementById('status').textContent = 'Scanning stopped';
+                document.getElementById('faceCount').textContent = '0';
+            } catch (error) {
+                console.error('Stop error:', error);
+            }
+        });
+        
+        // Notification function
+        function showNotification(message, type = 'info') {
+            const colors = {
+                success: 'bg-green-500',
+                warning: 'bg-yellow-500',
+                error: 'bg-red-500',
+                info: 'bg-blue-500'
+            };
+            
+            const notification = document.createElement('div');
+            notification.className = `fixed top-4 right-4 ${colors[type]} text-white px-4 py-2 rounded shadow-lg z-50`;
+            notification.textContent = message;
+            
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.remove();
+            }, 3000);
+        }
+        
+        // Auto-start test
+        window.addEventListener('load', () => {
+            console.log('Enhanced Scanning Test Page Loaded');
+            document.getElementById('status').textContent = 'Ready to test enhanced features';
+        });
+    </script>
+</body>
+</html>

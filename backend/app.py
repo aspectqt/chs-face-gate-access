@@ -58,7 +58,9 @@ from config import (
     anomaly_events,
     system_settings,
     calendar_events,
+    calendar_events_archive,
     early_timeout_requests,
+    early_timeout_requests_archive,
 )
 import json
 from PIL import Image
@@ -231,6 +233,8 @@ PREDEFINED_SECTIONS_BY_GRADE = {
     "Grade 8": ["ELNAR", "FERRATER", "FLORES", "SARNE", "TRACES"],
     "Grade 9": ["NUIQUE", "PALENCIA", "RUBIO"],
     "Grade 10": ["BORROMEO", "FEROLINO", "PONSICA", "SY"],
+    "Grade 11": ["ABEJO", "CABILES", "DAGAMI", "ESTRELLA"],
+    "Grade 12": ["BSINT"],
 }
 PREDEFINED_SECTION_LOOKUP = {
     section.lower(): {"grade_level": grade_level, "section": section}
@@ -244,6 +248,8 @@ STUDENT_IMPORT_TEMPLATE_SAMPLE_ROWS = [
     ["120508130014", "BALIGASA,RICKY, AURILIO", "M", "AVILA", "Grade 7"],
     ["120507180026", "ALFONSO,CHADITH, GAUDIA", "F", "AVILA", "Grade 7"],
     ["120526180025", "BANDICO,REXCYN MAE, QUILAT", "F", "AVILA", "Grade 7"],
+    ["120511180001", "SANTOS,JUAN, DELA CRUZ", "M", "ABEJO", "Grade 11"],
+    ["120511180002", "REYES,MARIA, SANTOS", "F", "BSINT", "Grade 12"],
 ]
 OTP_CODE_LENGTH = env_int("OTP_CODE_LENGTH", 6, minimum=4, maximum=10)
 OTP_EXPIRES_MINUTES = env_int("OTP_EXPIRES_MINUTES", 5, minimum=1, maximum=30)
@@ -1180,6 +1186,11 @@ def csrf_and_background_guard():
     if request.method.upper() not in CSRF_ALLOWED_METHODS:
         return None
 
+    # Exempt enhanced scanning endpoints from CSRF check
+    exempt_endpoints = {"detect_faces", "recognize_face"}
+    if request.endpoint in exempt_endpoints:
+        return None
+
     expected = session.get(CSRF_SESSION_KEY, "").strip()
     provided = extract_csrf_token_from_request()
     if not expected or not provided or not secrets.compare_digest(expected, provided):
@@ -1283,10 +1294,34 @@ def school_year_sort_key(label):
     return (0, -int(normalized.split("-", 1)[0]))
 
 
-def ensure_school_year_exists(label, set_current=False, created_by="system"):
+def ensure_school_year_exists(label, set_current=False, created_by="system", allow_create=True):
     normalized = normalize_school_year_value(label)
     if not normalized:
         raise ValueError("Invalid school year format. Use YYYY-YYYY.")
+
+    # Check if school year already exists
+    existing = school_years.find_one({"label": normalized})
+    if existing:
+        # Update existing school year
+        now_value = now_iso()
+        school_years.update_one(
+            {"label": normalized},
+            {"$set": {"updated_at": now_value}}
+        )
+        if set_current and not existing.get("is_current"):
+            school_years.update_many(
+                {"label": {"$ne": normalized}, "is_current": True},
+                {"$set": {"is_current": False, "updated_at": now_value}}
+            )
+            school_years.update_one(
+                {"label": normalized},
+                {"$set": {"is_current": True, "updated_at": now_value}}
+            )
+        return existing
+    
+    # Only create if allowed
+    if not allow_create:
+        return None
 
     start_year, end_year = [int(part) for part in normalized.split("-", 1)]
     now_value = now_iso()
@@ -1325,20 +1360,20 @@ def ensure_school_year_exists(label, set_current=False, created_by="system"):
     }
 
 
-def ensure_default_school_year():
+def ensure_default_school_year(allow_create=True):
     current_doc = school_years.find_one({"is_current": True})
     if current_doc:
         return normalize_school_year_value(current_doc.get("label")) or derive_default_school_year_label()
+    if not allow_create:
+        return derive_default_school_year_label()
     label = derive_default_school_year_label()
-    ensure_school_year_exists(label, set_current=True, created_by="system")
+    ensure_school_year_exists(label, set_current=True, created_by="system", allow_create=allow_create)
     return label
 
 
 def list_school_year_docs():
     docs = list(school_years.find().sort("start_year", -1))
-    if not docs:
-        ensure_default_school_year()
-        docs = list(school_years.find().sort("start_year", -1))
+    # Don't auto-create default school year - return empty list if none exist
     normalized_docs = []
     for doc in docs:
         label = normalize_school_year_value(doc.get("label"))
@@ -1358,12 +1393,45 @@ def list_school_year_docs():
 
 
 def get_current_school_year_doc():
-    label = ensure_default_school_year()
-    return school_years.find_one({"label": label}) or {"label": label, "is_current": True}
+    # Try to find existing current school year
+    current_doc = school_years.find_one({"is_current": True})
+    if current_doc:
+        return current_doc
+    
+    # Don't auto-create - return None if no school year exists
+    return None
 
 
 def get_current_school_year_label():
-    return normalize_school_year_value((get_current_school_year_doc() or {}).get("label")) or derive_default_school_year_label()
+    current_doc = school_years.find_one({"is_current": True})
+    if current_doc:
+        return normalize_school_year_value(current_doc.get("label"))
+    
+    # If no current school year exists, check if any school years exist at all
+    any_year = school_years.find_one({}, sort=[("label", -1)])
+    if any_year:
+        return normalize_school_year_value(any_year.get("label"))
+    
+    # Fallback to current calendar year
+    now = now_local()
+    return f"{now.year}-{now.year + 1}"
+
+
+def get_school_year_for_date(date_obj):
+    """Derive school year label from a date object."""
+    if isinstance(date_obj, str):
+        from datetime import datetime
+        try:
+            date_obj = datetime.strptime(date_obj, "%Y-%m-%d")
+        except ValueError:
+            return ""
+    
+    year = date_obj.year
+    # School years typically start in June (month 6)
+    if date_obj.month >= 6:
+        return f"{year}-{year + 1}"
+    else:
+        return f"{year - 1}-{year}"
 
 
 def school_year_date_bounds(school_year=""):
@@ -1409,6 +1477,14 @@ def get_alerts_storage(school_year=""):
 
 def get_attendance_corrections_storage(school_year=""):
     return resolve_school_year_storage(attendance_corrections, attendance_corrections_archive, school_year)
+
+
+def get_early_timeout_requests_storage(school_year=""):
+    return resolve_school_year_storage(early_timeout_requests, early_timeout_requests_archive, school_year)
+
+
+def get_calendar_events_storage(school_year=""):
+    return resolve_school_year_storage(calendar_events, calendar_events_archive, school_year)
 
 
 def find_record_in_active_or_archive(active_collection, archive_collection, object_id):
@@ -1503,6 +1579,7 @@ def backfill_collection_school_year(collection, date_keys=None, timestamp_keys=N
             school_year_label,
             set_current=is_current_school_year(school_year_label),
             created_by="system",
+            allow_create=False,
         )
 
         update_doc = {"school_year": school_year_label}
@@ -1649,12 +1726,31 @@ def archive_historical_school_year_records():
         attendance_corrections_archive,
         "attendance_corrections",
     )
+    moved_total += migrate_non_current_school_year_records(
+        early_timeout_requests,
+        early_timeout_requests_archive,
+        "early_timeout_requests",
+    )
+    moved_total += migrate_non_current_school_year_records(
+        calendar_events,
+        calendar_events_archive,
+        "calendar_events",
+    )
     return moved_total
 
 
 def get_school_year_enrollment_collection(school_year=""):
     school_year_label = normalize_school_year_value(school_year) or get_current_school_year_label()
-    ensure_school_year_exists(school_year_label, set_current=is_current_school_year(school_year_label), created_by="system")
+    
+    # Check if school year exists before creating/accessing collection
+    if not school_years.find_one({"label": school_year_label}):
+        # Return a reference to a non-existent collection that will be empty
+        # This prevents errors while maintaining the expectation that deleted data stays deleted
+        collection_name = student_enrollment_collection_name(school_year_label)
+        return db[collection_name]
+    
+    # Don't auto-create school year when accessing collection
+    ensure_school_year_exists(school_year_label, set_current=is_current_school_year(school_year_label), created_by="system", allow_create=False)
     return get_student_enrollment_collection(school_year_label)
 
 
@@ -1727,7 +1823,7 @@ def migrate_legacy_student_enrollments():
             skipped += 1
             continue
 
-        ensure_school_year_exists(school_year_label, set_current=is_current_school_year(school_year_label), created_by="system")
+        ensure_school_year_exists(school_year_label, set_current=is_current_school_year(school_year_label), created_by="system", allow_create=False)
         collection = get_school_year_enrollment_collection(school_year_label)
         enrollment_doc = dict(row)
         enrollment_doc["school_year"] = school_year_label
@@ -1798,7 +1894,7 @@ def resolve_selected_school_year(explicit_value=""):
         requested = normalize_school_year_value(session.get(SCHOOL_YEAR_SESSION_KEY, ""))
     if not requested:
         requested = get_current_school_year_label()
-    ensure_school_year_exists(requested, set_current=is_current_school_year(requested), created_by="system")
+    ensure_school_year_exists(requested, set_current=is_current_school_year(requested), created_by="system", allow_create=False)
     return remember_selected_school_year(requested)
 
 
@@ -2147,9 +2243,13 @@ def get_default_schedule():
         "afternoon_end": "17:00"
     }
 
+
 def get_active_schedule(date_obj):
     date_str = date_obj.strftime("%Y-%m-%d")
-    event = calendar_events.find_one({"date": date_str})
+    school_year = get_school_year_for_date(date_obj)
+    calendar_collection, _, _ = get_calendar_events_storage(school_year)
+    
+    event = calendar_collection.find_one({"date": date_str})
     if event:
         if event.get("custom_schedule"):
             return {
@@ -2160,13 +2260,18 @@ def get_active_schedule(date_obj):
         return {
             "type": event.get("type", "event"),
             "special_condition": event.get("special_condition"),
-            "schedule": get_default_schedule()
         }
     return {
         "type": "regular",
-        "special_condition": None,
-        "schedule": get_default_schedule()
+        "special_condition": "",
+        "schedule": {
+            "morning_start": "07:00",
+            "morning_end": "12:00",
+            "afternoon_start": "13:00",
+            "afternoon_end": "17:00"
+        }
     }
+
 
 def parse_time_str(time_str):
     if not time_str: return None
@@ -2175,6 +2280,7 @@ def parse_time_str(time_str):
         return dtime(hour=int(parts[0]), minute=int(parts[1]))
     except:
         return None
+
 
 def session_info_for_time(dt):
     active_sched = get_active_schedule(dt)
@@ -2620,6 +2726,10 @@ def build_archive_summary_payload(selected_school_year=""):
         alerts_archive,
         attendance_corrections,
         attendance_corrections_archive,
+        early_timeout_requests,
+        early_timeout_requests_archive,
+        calendar_events,
+        calendar_events_archive,
     ):
         school_year_labels.update(distinct_school_year_labels_for_collection(collection))
 
@@ -2645,14 +2755,20 @@ def build_archive_summary_payload(selected_school_year=""):
         alerts_archive_count = safe_count_documents(alerts_archive, {"school_year": label})
         corrections_active = safe_count_documents(attendance_corrections, {"school_year": label})
         corrections_archive = safe_count_documents(attendance_corrections_archive, {"school_year": label})
+        eto_active = safe_count_documents(early_timeout_requests, {"school_year": label})
+        eto_archive = safe_count_documents(early_timeout_requests_archive, {"school_year": label})
+        calendar_active = safe_count_documents(calendar_events, {"school_year": label})
+        calendar_archive = safe_count_documents(calendar_events_archive, {"school_year": label})
 
         misplaced_total = (
             gate_archive
             + sms_archive
             + alerts_archive_count
             + corrections_archive
+            + eto_archive
+            + calendar_archive
             if is_current
-            else gate_active + sms_active + alerts_active + corrections_active
+            else gate_active + sms_active + alerts_active + corrections_active + eto_active + calendar_active
         )
 
         if not is_current:
@@ -2678,6 +2794,12 @@ def build_archive_summary_payload(selected_school_year=""):
             "corrections_active": corrections_active,
             "corrections_archive": corrections_archive,
             "corrections_total": corrections_active + corrections_archive,
+            "eto_active": eto_active,
+            "eto_archive": eto_archive,
+            "eto_total": eto_active + eto_archive,
+            "calendar_active": calendar_active,
+            "calendar_archive": calendar_archive,
+            "calendar_total": calendar_active + calendar_archive,
             "misplaced_total": misplaced_total,
             "student_page_url": url_for("students_page", school_year=label),
             "gate_logs_url": url_for("gate_logs_page", school_year=label),
@@ -5168,6 +5290,19 @@ def dashboard():
     return render_template("dashboard.html", **payload)
 
 
+@app.route("/test_enhanced_scanning")
+@require_permission("scan")
+def test_enhanced_scanning():
+    """Enhanced scanning test page"""
+    return render_template("test_enhanced_scanning.html")
+
+
+@app.route("/simple_demo")
+def simple_demo():
+    """Simple demo page that shows green boxes without server dependencies"""
+    return render_template("simple_demo.html")
+
+
 @app.route("/developers")
 @require_permission("dashboard")
 def developers_page():
@@ -6081,6 +6216,95 @@ def process_scan_frame():
         
     except Exception as exc:
         error_msg = f"Failed to process frame: {str(exc)}"
+        print(f"[ERROR] {error_msg}")
+        return jsonify({"status": "error", "message": error_msg}), 500
+
+
+@app.route("/detect_faces", methods=["POST"])
+@require_permission("scan", api=True)
+def detect_faces():
+    """
+    Enhanced face detection endpoint for multi-face scanning.
+    Optimized for high-performance real-time face detection.
+    """
+    try:
+        # Import enhanced face processor
+        from enhanced_face_processor import face_processor, detect_faces_endpoint
+        
+        # Use enhanced face processor
+        result = detect_faces_endpoint()
+        return result
+        
+    except ImportError:
+        # Fallback to basic face detection if enhanced processor not available
+        return jsonify({
+            "status": "error", 
+            "message": "Enhanced face processor not available"
+        }), 503
+    except Exception as exc:
+        error_msg = f"Face detection error: {str(exc)}"
+        print(f"[ERROR] {error_msg}")
+        return jsonify({"status": "error", "message": error_msg}), 500
+
+
+@app.route("/recognize_face", methods=["POST"])
+@require_permission("scan", api=True)
+def recognize_face():
+    """
+    Enhanced face recognition endpoint with caching and duplicate prevention.
+    Optimized for high-volume face recognition with performance tracking.
+    """
+    try:
+        # Import enhanced face processor
+        from enhanced_face_processor import face_processor, recognize_face_endpoint
+        
+        # Use enhanced face processor
+        result = recognize_face_endpoint()
+        return result
+        
+    except ImportError:
+        # Fallback to basic recognition if enhanced processor not available
+        return jsonify({
+            "status": "error", 
+            "message": "Enhanced face processor not available"
+        }), 503
+    except Exception as exc:
+        error_msg = f"Face recognition error: {str(exc)}"
+        print(f"[ERROR] {error_msg}")
+        return jsonify({"status": "error", "message": error_msg}), 500
+
+
+@app.route("/face_metrics", methods=["GET"])
+@require_permission("scan", api=True)
+def face_metrics():
+    """
+    Endpoint for real-time performance metrics of face processing system.
+    """
+    try:
+        # Import enhanced face processor
+        from enhanced_face_processor import face_processor
+        
+        # Get metrics from enhanced processor
+        result = face_processor.get_metrics_endpoint()
+        return result
+        
+    except ImportError:
+        # Return basic metrics if enhanced processor not available
+        with scan_lock:
+            return jsonify({
+                "status": "ok",
+                "metrics": {
+                    "detections": scan_state.get("events_processed", 0),
+                    "recognitions": len(scan_state.get("events", [])),
+                    "fps": 0,
+                    "active_tracks": 0,
+                    "average_processing_time": 0,
+                    "cache_size": 0,
+                    "known_faces": len(scan_state.get("known_encodings", []))
+                }
+            })
+    except Exception as exc:
+        error_msg = f"Metrics error: {str(exc)}"
         print(f"[ERROR] {error_msg}")
         return jsonify({"status": "error", "message": error_msg}), 500
 
@@ -7134,8 +7358,17 @@ def upsert_manual_section(grade_value, section_value, created_by="", school_year
     }
 
 
-def ensure_predefined_sections(school_year=""):
+def ensure_predefined_sections(school_year="", allow_create=True):
     school_year_label = normalize_school_year_value(school_year) or get_current_school_year_label()
+    
+    # Only create sections if school year exists and creation is allowed
+    if not allow_create:
+        return
+        
+    # Check if school year actually exists before creating sections
+    if not school_years.find_one({"label": school_year_label}):
+        return
+        
     for grade_level, section_values in PREDEFINED_SECTIONS_BY_GRADE.items():
         for section_name in section_values:
             try:
@@ -7325,18 +7558,18 @@ def ensure_student_face_defaults():
         print(f"[WARNING] Could not ensure face_registered defaults: {exc}")
 
 
-ensure_default_school_year()
-ensure_sections_school_year_defaults()
+# Only ensure basic system structure, don't auto-create data that was intentionally deleted
 ensure_indexes()
-ensure_predefined_sections()
 ensure_student_lrn_defaults()
 ensure_student_face_defaults()
-migrate_legacy_student_enrollments()
-ensure_student_enrollment_defaults()
+# Only migrate legacy data if it exists, don't force creation
+if student_enrollments.count_documents({}, limit=1) > 0:
+    migrate_legacy_student_enrollments()
+# Only cleanup accidental duplicates, don't restore deleted data
 cleanup_accidental_current_school_year_seed()
 for _school_year_row in list_school_year_docs():
     cleanup_empty_school_year_section_mismatches(_school_year_row.get("label"))
-ensure_school_year_scope_defaults()
+# Don't run school year scope defaults at startup as it can recreate deleted school years
 archive_historical_school_year_records()
 cleanup_obsolete_collections()
 cleanup_notification_alerts(force=True)
@@ -10698,7 +10931,10 @@ def api_eto_submit():
         "review_note": None,
         "attendance_log_id": None,
     }
-    result = early_timeout_requests.insert_one(doc)
+    
+    # Get the appropriate storage for the school year
+    eto_collection, _, _ = get_early_timeout_requests_storage(sy)
+    result = eto_collection.insert_one(doc)
     return jsonify({"status": "ok", "message": f"Early time-out request submitted for {student_name}.", "request_id": str(result.inserted_id)})
 
 
@@ -10710,6 +10946,7 @@ def api_eto_list():
     date_filter = request.args.get("date", "").strip()
     student_q = request.args.get("q", "").strip()
     limit = min(int(request.args.get("limit", 50)), 200)
+    school_year = request.args.get("school_year", "").strip()
 
     query = {}
     if status_filter in ("pending", "approved", "denied"):
@@ -10721,15 +10958,18 @@ def api_eto_list():
         pat = {"$regex": _re.escape(student_q), "$options": "i"}
         query["$or"] = [{"student_name": pat}, {"student_id": pat}]
 
+    # Get the appropriate storage collection based on school year
+    eto_collection, _, _ = get_early_timeout_requests_storage(school_year)
+
     rows = []
     try:
-        for doc in early_timeout_requests.find(query).sort("requested_at", -1).limit(limit):
+        for doc in eto_collection.find(query).sort("requested_at", -1).limit(limit):
             doc["_id"] = str(doc["_id"])
             rows.append(doc)
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
-    pending_count = int(early_timeout_requests.count_documents({"status": "pending"}))
+    pending_count = int(eto_collection.count_documents({"status": "pending"}))
     return jsonify({"status": "ok", "rows": rows, "pending_count": pending_count})
 
 
@@ -10743,7 +10983,11 @@ def api_eto_approve(request_id):
     except Exception:
         return jsonify({"status": "error", "message": "Invalid request ID."}), 400
 
-    eto = early_timeout_requests.find_one({"_id": oid})
+    # Get school year from request or use current
+    school_year = request.args.get("school_year", "") or request.form.get("school_year", "")
+    eto_collection, _, _ = get_early_timeout_requests_storage(school_year)
+    
+    eto = eto_collection.find_one({"_id": oid})
     if not eto:
         return jsonify({"status": "error", "message": "Request not found."}), 404
     if eto.get("status") != "pending":
@@ -10756,7 +11000,15 @@ def api_eto_approve(request_id):
     date_str = eto.get("date") or now.strftime("%Y-%m-%d")
     time_str = now.strftime("%I:%M %p")
     reviewer = session.get("admin", "admin")
-
+    
+    # Use the school year from the ETO request or derive it from date
+    eto_school_year = eto.get("school_year") or resolve_selected_school_year("")
+    if not eto_school_year:
+        # Derive school year from the ETO date
+        from datetime import datetime
+        eto_date = datetime.strptime(date_str, "%Y-%m-%d")
+        eto_school_year = get_school_year_for_date(eto_date)
+    
     # Write attendance log entry for the early exit
     log_entry = {
         "student_id": eto["student_id"],
@@ -10775,14 +11027,17 @@ def api_eto_approve(request_id):
         "date": date_str,
         "time": time_str,
         "timestamp": now_str,
-        "school_year": eto.get("school_year", get_current_school_year_label()),
+        "school_year": eto_school_year,
         "gate_action": "OUT",
     }
-    log_result = attendance_logs.insert_one(log_entry)
+    
+    # Get the appropriate attendance storage for the school year
+    attendance_collection, _, _ = get_attendance_logs_storage(eto_school_year)
+    log_result = attendance_collection.insert_one(log_entry)
     log_id = str(log_result.inserted_id)
 
     # Update ETO request status
-    early_timeout_requests.update_one(
+    eto_collection.update_one(
         {"_id": oid},
         {"$set": {
             "status": "approved",
@@ -10790,6 +11045,7 @@ def api_eto_approve(request_id):
             "reviewed_at": now_str,
             "review_note": review_note,
             "attendance_log_id": log_id,
+            "school_year": eto_school_year,  # Ensure school_year is set
         }}
     )
     return jsonify({
@@ -10809,7 +11065,11 @@ def api_eto_deny(request_id):
     except Exception:
         return jsonify({"status": "error", "message": "Invalid request ID."}), 400
 
-    eto = early_timeout_requests.find_one({"_id": oid})
+    # Get school year from request or use current
+    school_year = request.args.get("school_year", "") or request.form.get("school_year", "")
+    eto_collection, _, _ = get_early_timeout_requests_storage(school_year)
+    
+    eto = eto_collection.find_one({"_id": oid})
     if not eto:
         return jsonify({"status": "error", "message": "Request not found."}), 404
     if eto.get("status") != "pending":
@@ -10819,14 +11079,18 @@ def api_eto_deny(request_id):
     review_note = str(data.get("review_note") or "").strip()
     now = now_local()
     reviewer = session.get("admin", "admin")
+    
+    # Ensure school year is set
+    eto_school_year = eto.get("school_year") or resolve_selected_school_year(school_year)
 
-    early_timeout_requests.update_one(
+    eto_collection.update_one(
         {"_id": oid},
         {"$set": {
             "status": "denied",
             "reviewed_by": reviewer,
             "reviewed_at": now.isoformat(),
             "review_note": review_note,
+            "school_year": eto_school_year,  # Ensure school_year is set
         }}
     )
     return jsonify({
@@ -10899,6 +11163,10 @@ def api_get_calendar_events():
     
     start_date = request.args.get("start")
     end_date = request.args.get("end")
+    school_year = request.args.get("school_year", "").strip()
+    
+    # Get the appropriate storage collection based on school year
+    calendar_collection, _, _ = get_calendar_events_storage(school_year)
     
     query = {}
     if start_date or end_date:
@@ -10907,7 +11175,7 @@ def api_get_calendar_events():
         if end_date: date_q["$lte"] = end_date
         query["date"] = date_q
         
-    eventsCursor = calendar_events.find(query).sort("date", ASCENDING)
+    eventsCursor = calendar_collection.find(query).sort("date", ASCENDING)
     events = []
     for ev in eventsCursor:
         ev["_id"] = str(ev["_id"])
@@ -10927,21 +11195,35 @@ def api_create_calendar_event():
     title = payload.get("title", "")
     special_cond = payload.get("special_condition", "")
     custom_schedule = payload.get("custom_schedule")
+    school_year = payload.get("school_year", "").strip()
     
     if not date_str:
         return jsonify({"status": "error", "message": "Date is required"}), 400
+    
+    # Derive school year from date if not provided
+    if not school_year:
+        from datetime import datetime
+        try:
+            event_date = datetime.strptime(date_str, "%Y-%m-%d")
+            school_year = get_school_year_for_date(event_date)
+        except ValueError:
+            school_year = get_current_school_year_label()
+    
+    # Get the appropriate storage collection based on school year
+    calendar_collection, _, _ = get_calendar_events_storage(school_year)
         
     doc = {
         "date": date_str,
         "type": type_str,
         "title": title,
         "special_condition": special_cond,
+        "school_year": school_year,
     }
     if custom_schedule:
         doc["custom_schedule"] = custom_schedule
         
     try:
-        res = calendar_events.insert_one(doc)
+        res = calendar_collection.insert_one(doc)
         doc["_id"] = str(res.inserted_id)
         return jsonify({"status": "ok", "event": doc})
     except DuplicateKeyError:
@@ -10958,20 +11240,63 @@ def api_update_calendar_event(event_id):
     title = payload.get("title", "")
     special_cond = payload.get("special_condition", "")
     custom_schedule = payload.get("custom_schedule")
+    school_year = payload.get("school_year", "").strip()
+    
+    # First, try to find the event in active collection, then archive collections
+    from bson import ObjectId
+    try:
+        oid = ObjectId(event_id)
+    except Exception:
+        return jsonify({"status": "error", "message": "Invalid event ID"}), 400
+    
+    # Find the event across all collections to determine its school year
+    event_doc = None
+    target_collection = None
+    
+    # Check current school year collection first
+    current_collection, _, _ = get_calendar_events_storage("")
+    event_doc = current_collection.find_one({"_id": oid})
+    if event_doc:
+        target_collection = current_collection
+    else:
+        # Check archive collections by trying different school years
+        # For now, we'll search the main calendar_events as fallback
+        event_doc = calendar_events.find_one({"_id": oid})
+        if event_doc:
+            target_collection = calendar_events
+    
+    if not event_doc:
+        return jsonify({"status": "error", "message": "Event not found"}), 404
+    
+    # Use the event's school year or derive from date
+    event_school_year = school_year or event_doc.get("school_year")
+    if not event_school_year and event_doc.get("date"):
+        from datetime import datetime
+        try:
+            event_date = datetime.strptime(event_doc["date"], "%Y-%m-%d")
+            event_school_year = get_school_year_for_date(event_date)
+        except ValueError:
+            event_school_year = get_current_school_year_label()
+    
+    # Get the appropriate storage collection
+    calendar_collection, _, _ = get_calendar_events_storage(event_school_year)
     
     update_data = {
         "type": type_str,
         "title": title,
         "special_condition": special_cond,
-        "custom_schedule": custom_schedule
+        "school_year": event_school_year,
     }
+    if custom_schedule:
+        update_data["custom_schedule"] = custom_schedule
+    
     # Unset custom_schedule if it is not provided
     if not custom_schedule:
-        calendar_events.update_one({"_id": ObjectId(event_id)}, {"$unset": {"custom_schedule": ""}})
+        calendar_collection.update_one({"_id": oid}, {"$unset": {"custom_schedule": ""}})
         update_data.pop("custom_schedule", None)
         
-    res = calendar_events.update_one(
-        {"_id": ObjectId(event_id)},
+    res = calendar_collection.update_one(
+        {"_id": oid},
         {"$set": update_data}
     )
     if res.matched_count == 0:
@@ -10985,11 +11310,33 @@ def api_delete_calendar_event(event_id):
     if not login_required() or session.get("role") != ROLE_FULL_ADMIN:
         return jsonify({"status": "error", "message": "Unauthorized"}), 401
         
-    res = calendar_events.delete_one({"_id": ObjectId(event_id)})
-    if res.deleted_count == 0:
-        return jsonify({"status": "error", "message": "Event not found"}), 404
-        
-    return jsonify({"status": "ok", "message": "Event deleted"})
+    from bson import ObjectId
+    try:
+        oid = ObjectId(event_id)
+    except Exception:
+        return jsonify({"status": "error", "message": "Invalid event ID"}), 400
+    
+    # Find the event across all collections to determine its school year
+    event_doc = None
+    
+    # Check current school year collection first
+    current_collection, _, _ = get_calendar_events_storage("")
+    event_doc = current_collection.find_one({"_id": oid})
+    if event_doc:
+        res = current_collection.delete_one({"_id": oid})
+        if res.deleted_count == 0:
+            return jsonify({"status": "error", "message": "Event not found"}), 404
+        return jsonify({"status": "ok", "message": "Event deleted"})
+    
+    # Check archive collections by trying the main calendar_events as fallback
+    event_doc = calendar_events.find_one({"_id": oid})
+    if event_doc:
+        res = calendar_events.delete_one({"_id": oid})
+        if res.deleted_count == 0:
+            return jsonify({"status": "error", "message": "Event not found"}), 404
+        return jsonify({"status": "ok", "message": "Event deleted"})
+    
+    return jsonify({"status": "error", "message": "Event not found"}), 404
 
 
 # =====================================
