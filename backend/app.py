@@ -173,6 +173,8 @@ SCAN_JPEG_QUALITY = env_int("SCAN_JPEG_QUALITY", 80, minimum=40, maximum=95)
 SCAN_CAPTURE_FLUSH_GRABS = env_int("SCAN_CAPTURE_FLUSH_GRABS", 2, minimum=0, maximum=10)
 SCAN_FORCE_RESIZE = env_bool("SCAN_FORCE_RESIZE", True)
 SCAN_FACE_INDEX_ALLOW_LEGACY_IMAGE_FALLBACK = env_bool("SCAN_FACE_INDEX_ALLOW_LEGACY_IMAGE_FALLBACK", False)
+SCAN_OUT_MINUTES = env_int("SCAN_OUT_MINUTES", 30, minimum=5, maximum=240)
+SCAN_REPEAT_SUPPRESSION_SECONDS = env_int("SCAN_REPEAT_SUPPRESSION_SECONDS", 20, minimum=5, maximum=120)
 UNKNOWN_ALERT_COOLDOWN_SECONDS = 30
 UNREGISTERED_EVENT_COOLDOWN_SECONDS = 2
 RECOGNITION_TOLERANCE = 0.50
@@ -2230,46 +2232,122 @@ def build_pagination_payload(page, per_page, total, filters_payload, endpoint):
     }
 
 
-def get_default_schedule():
-    settings = system_settings.find_one({"key": "default_schedule"})
-    if settings and "schedule" in settings:
-        return settings["schedule"]
+def clamp_int_value(value, default, minimum=None, maximum=None):
+    try:
+        normalized = int(value)
+    except (TypeError, ValueError):
+        normalized = int(default)
+    if minimum is not None:
+        normalized = max(int(minimum), normalized)
+    if maximum is not None:
+        normalized = min(int(maximum), normalized)
+    return normalized
+
+
+def time_to_hhmm(value, fallback):
+    parsed = parse_time_str(value) or parse_time_str(fallback)
+    if parsed is None:
+        parsed = dtime(hour=0, minute=0)
+    return parsed.strftime("%H:%M")
+
+
+def hhmm_to_minutes(value, fallback="00:00"):
+    parsed = parse_time_str(value) or parse_time_str(fallback)
+    if parsed is None:
+        return 0
+    return (int(parsed.hour) * 60) + int(parsed.minute)
+
+
+def minutes_to_hhmm(total_minutes):
+    normalized = max(0, int(total_minutes or 0)) % (24 * 60)
+    hour, minute = divmod(normalized, 60)
+    return f"{hour:02d}:{minute:02d}"
+
+
+def derive_late_threshold_minutes(raw_schedule, morning_start, afternoon_start, default_minutes=15):
+    explicit_minutes = raw_schedule.get("late_threshold_minutes")
+    if explicit_minutes not in (None, ""):
+        return clamp_int_value(explicit_minutes, default_minutes, minimum=1, maximum=180)
+
+    morning_late = raw_schedule.get("morning_late")
+    afternoon_late = raw_schedule.get("afternoon_late")
+    derived_candidates = []
+    if morning_late:
+        derived_candidates.append(hhmm_to_minutes(morning_late) - hhmm_to_minutes(morning_start))
+    if afternoon_late:
+        derived_candidates.append(hhmm_to_minutes(afternoon_late) - hhmm_to_minutes(afternoon_start))
+    for candidate in derived_candidates:
+        if candidate and candidate > 0:
+            return clamp_int_value(candidate, default_minutes, minimum=1, maximum=180)
+    return clamp_int_value(default_minutes, default_minutes, minimum=1, maximum=180)
+
+
+def normalize_attendance_schedule(raw_schedule=None):
+    schedule = dict(raw_schedule or {})
+    morning_start = time_to_hhmm(schedule.get("morning_start"), "05:00")
+    noon_start = time_to_hhmm(schedule.get("noon_start"), "12:00")
+    afternoon_start = time_to_hhmm(schedule.get("afternoon_start"), "13:00")
+    afternoon_end = time_to_hhmm(schedule.get("afternoon_end"), "17:00")
+    late_threshold_minutes = derive_late_threshold_minutes(
+        schedule,
+        morning_start,
+        afternoon_start,
+        default_minutes=15,
+    )
+    morning_late = time_to_hhmm(
+        schedule.get("morning_late"),
+        minutes_to_hhmm(hhmm_to_minutes(morning_start) + late_threshold_minutes),
+    )
+    afternoon_late = time_to_hhmm(
+        schedule.get("afternoon_late"),
+        minutes_to_hhmm(hhmm_to_minutes(afternoon_start) + late_threshold_minutes),
+    )
+    scan_cooldown_minutes = clamp_int_value(
+        schedule.get("scan_cooldown_minutes"),
+        30,
+        minimum=5,
+        maximum=240,
+    )
     return {
-        "morning_start": "05:00",
-        "morning_late": "08:15",
-        "noon_start": "12:00",
-        "afternoon_start": "13:00",
-        "afternoon_late": "13:15",
-        "afternoon_end": "17:00"
+        "morning_start": morning_start,
+        "morning_late": morning_late,
+        "noon_start": noon_start,
+        "afternoon_start": afternoon_start,
+        "afternoon_late": afternoon_late,
+        "afternoon_end": afternoon_end,
+        "late_threshold_minutes": late_threshold_minutes,
+        "scan_cooldown_minutes": scan_cooldown_minutes,
     }
+
+
+def get_default_schedule():
+    settings = system_settings.find_one({"key": "default_schedule"}) or {}
+    return normalize_attendance_schedule(settings.get("schedule") or {})
 
 
 def get_active_schedule(date_obj):
     date_str = date_obj.strftime("%Y-%m-%d")
     school_year = get_school_year_for_date(date_obj)
     calendar_collection, _, _ = get_calendar_events_storage(school_year)
-    
+    base_schedule = get_default_schedule()
     event = calendar_collection.find_one({"date": date_str})
     if event:
+        custom_schedule = event.get("custom_schedule") or {}
         if event.get("custom_schedule"):
             return {
                 "type": event.get("type", "event"),
                 "special_condition": event.get("special_condition"),
-                "schedule": event["custom_schedule"]
+                "schedule": normalize_attendance_schedule({**base_schedule, **custom_schedule}),
             }
         return {
             "type": event.get("type", "event"),
             "special_condition": event.get("special_condition"),
+            "schedule": base_schedule,
         }
     return {
         "type": "regular",
         "special_condition": "",
-        "schedule": {
-            "morning_start": "07:00",
-            "morning_end": "12:00",
-            "afternoon_start": "13:00",
-            "afternoon_end": "17:00"
-        }
+        "schedule": base_schedule,
     }
 
 
@@ -2284,7 +2362,7 @@ def parse_time_str(time_str):
 
 def session_info_for_time(dt):
     active_sched = get_active_schedule(dt)
-    sched = active_sched.get("schedule", {})
+    sched = normalize_attendance_schedule(active_sched.get("schedule", {}))
     
     m_start = parse_time_str(sched.get("morning_start")) or MORNING_START
     m_late_thr = parse_time_str(sched.get("morning_late")) or MORNING_LATE_THRESHOLD
@@ -2357,11 +2435,11 @@ def normalize_scan_session_mode(value, default="auto"):
 def scan_session_mode_label(mode):
     normalized = normalize_scan_session_mode(mode)
     labels = {
-        "auto": "Automatic (Time-Based)",
+        "auto": "Smart IN/OUT Tracking",
         "manual_in": "Manual IN",
         "manual_out": "Manual OUT",
     }
-    return labels.get(normalized, "Automatic (Time-Based)")
+    return labels.get(normalized, "Smart IN/OUT Tracking")
 
 
 def get_scan_session_mode():
@@ -2402,11 +2480,403 @@ def session_info_for_mode(dt, mode):
 def resolve_gate_session(dt=None):
     current_dt = dt or now_local()
     mode = get_scan_session_mode()
-    session_info = session_info_for_mode(current_dt, mode)
+    if mode == "auto":
+        status_hint = session_info_for_time(current_dt)
+        session_info = {
+            "session": "Real-Time Smart Tracking",
+            "gate_action": "AUTO",
+            "verification_label": "Smart IN/OUT",
+            "status": status_hint.get("status", "Present"),
+            "display_message": "Real-time face recognition is active.",
+            "voice_message": "Scanning ready",
+        }
+    else:
+        session_info = session_info_for_mode(current_dt, mode)
     return {
         **session_info,
         "mode": mode,
         "mode_label": scan_session_mode_label(mode),
+    }
+
+
+def normalize_gate_action_value(value, session_name=""):
+    normalized = str(value or "").strip().upper()
+    if normalized in {"IN", "OUT"}:
+        return normalized
+    session_text = str(session_name or "").strip().lower()
+    if "out" in session_text:
+        return "OUT"
+    if "in" in session_text:
+        return "IN"
+    return ""
+
+
+def parse_gate_record_datetime(record):
+    if not isinstance(record, dict):
+        return None
+
+    timestamp_value = str(record.get("timestamp") or "").strip()
+    if timestamp_value:
+        normalized = timestamp_value.replace("Z", "+00:00")
+        try:
+            parsed = datetime.fromisoformat(normalized)
+            if parsed.tzinfo is not None:
+                return parsed.astimezone().replace(tzinfo=None)
+            return parsed
+        except ValueError:
+            pass
+
+    date_value = str(record.get("date") or "").strip()
+    time_value = str(record.get("time") or "").strip()
+    if date_value and time_value:
+        try:
+            return datetime.fromisoformat(f"{date_value}T{time_value}")
+        except ValueError:
+            return None
+    return None
+
+
+def parse_datetime_like(value):
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, dtime):
+        return datetime.combine(now_local().date(), value)
+
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+
+    normalized = raw.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+        if parsed.tzinfo is not None:
+            return parsed.astimezone().replace(tzinfo=None)
+        return parsed
+    except ValueError:
+        pass
+
+    for pattern in (
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%dT%H:%M",
+        "%m/%d/%Y %H:%M:%S",
+        "%m/%d/%Y %H:%M",
+        "%Y-%m-%d",
+        "%H:%M:%S",
+        "%H:%M",
+        "%I:%M %p",
+        "%I:%M:%S %p",
+    ):
+        try:
+            return datetime.strptime(raw, pattern)
+        except ValueError:
+            continue
+    return None
+
+
+def format_time_for_display(value, fallback=""):
+    for candidate in (value, fallback):
+        parsed = parse_datetime_like(candidate)
+        if parsed is not None:
+            return parsed.strftime("%I:%M %p").lstrip("0")
+    return str(fallback or value or "").strip()
+
+
+def format_timestamp_for_display(value, fallback=""):
+    for candidate in (value, fallback):
+        parsed = parse_datetime_like(candidate)
+        if parsed is None:
+            continue
+        if parsed.year == 1900 and parsed.month == 1 and parsed.day == 1:
+            return parsed.strftime("%I:%M:%S %p").lstrip("0")
+        return parsed.strftime("%b %d, %Y %I:%M:%S %p").replace(" 0", " ")
+    return str(fallback or value or "").strip()
+
+
+def serialize_gate_log_display_row(row, profile_photo=""):
+    if not row:
+        return {}
+    student_id = str(row.get("student_id") or "").strip()
+    time_raw = str(row.get("time") or "")
+    timestamp_raw = str(row.get("timestamp") or "")
+    return {
+        "_id": str(row.get("_id") or ""),
+        "student_id": student_id,
+        "name": row.get("student_name", ""),
+        "action": row.get("gate_action", "IN"),
+        "status": row.get("status", "Present"),
+        "session": row.get("session", ""),
+        "verification_label": row.get("verification_label", ""),
+        "date": row.get("date", ""),
+        "time": format_time_for_display(time_raw, timestamp_raw),
+        "timestamp": format_timestamp_for_display(timestamp_raw, time_raw),
+        "raw_time": time_raw,
+        "raw_timestamp": timestamp_raw,
+        "profile_photo": profile_photo,
+    }
+
+
+def serialize_sms_log_display_row(row):
+    if not row:
+        return {}
+    time_raw = str(row.get("time") or "")
+    timestamp_raw = str(row.get("timestamp") or "")
+    status_value = str(row.get("status", "") or "")
+    return {
+        "_id": str(row.get("_id") or ""),
+        "student_id": row.get("student_id", ""),
+        "name": row.get("name", ""),
+        "parent_contact": row.get("parent_contact", ""),
+        "message": row.get("message", ""),
+        "status": status_value.upper() if status_value else "",
+        "sid": row.get("sid", ""),
+        "error": row.get("error", ""),
+        "date": row.get("date", ""),
+        "time": format_time_for_display(time_raw, timestamp_raw),
+        "timestamp": format_timestamp_for_display(timestamp_raw, time_raw),
+        "raw_time": time_raw,
+        "raw_timestamp": timestamp_raw,
+    }
+
+
+def format_wait_time_short(total_seconds):
+    remaining_seconds = max(int(total_seconds or 0), 0)
+    minutes, seconds = divmod(remaining_seconds, 60)
+    hours, minutes = divmod(minutes, 60)
+    parts = []
+    if hours:
+        parts.append(f"{hours}h")
+    if minutes:
+        parts.append(f"{minutes}m")
+    if not parts or (not hours and seconds and minutes < 2):
+        parts.append(f"{seconds}s")
+    return " ".join(parts[:2])
+
+
+def build_gate_feedback(action, status):
+    normalized_action = "OUT" if str(action or "").strip().upper() == "OUT" else "IN"
+    normalized_status = str(status or "").strip().title()
+    if normalized_action == "OUT":
+        verification_label = "Thank You"
+        display_message = "Thank You"
+        voice_message = "Thank you"
+    else:
+        verification_label = "Welcome"
+        display_message = "Welcome"
+        voice_message = "Welcome"
+
+    if normalized_status == "Late" and normalized_action == "IN":
+        display_message += " - You are Late"
+    elif normalized_status == "Holiday":
+        display_message += " (Holiday)"
+
+    return {
+        "verification_label": verification_label,
+        "display_message": display_message,
+        "voice_message": voice_message,
+    }
+
+
+def build_gate_session_name(action, mode, dt):
+    normalized_action = "OUT" if str(action or "").strip().upper() == "OUT" else "IN"
+    normalized_mode = normalize_scan_session_mode(mode, default="auto")
+    prefix = "Manual" if normalized_mode.startswith("manual_") else "Live"
+    return f"{prefix} {normalized_action} {format_time_for_display(dt)}"
+
+
+def build_scan_activity_entry(student_id, student_name, gate_action, status, verification_label, timestamp, time_str):
+    return {
+        "student_id": student_id,
+        "name": student_name,
+        "gate_action": gate_action,
+        "status": status,
+        "verification_label": verification_label,
+        "timestamp": timestamp,
+        "time": format_time_for_display(time_str, timestamp),
+        "label": f"{student_name} ({gate_action})",
+    }
+
+
+def get_latest_gate_record(attendance_collection, student_id):
+    if not student_id:
+        return None
+    return attendance_collection.find_one(
+        {"student_id": student_id, "gate_action": {"$in": ["IN", "OUT"]}},
+        sort=[("timestamp", DESCENDING), ("_id", DESCENDING)],
+    )
+
+
+def build_gate_scan_result(attendance_collection, school_year_label, student, now, source="gate_scan", mode=None):
+    normalized_mode = normalize_scan_session_mode(mode or get_scan_session_mode(), default="auto")
+    runtime_schedule = normalize_attendance_schedule((get_active_schedule(now) or {}).get("schedule", {}))
+    scan_cooldown_minutes = clamp_int_value(
+        runtime_schedule.get("scan_cooldown_minutes"),
+        SCAN_OUT_MINUTES,
+        minimum=5,
+        maximum=240,
+    )
+    scan_cooldown_seconds = scan_cooldown_minutes * 60
+    timestamp = now.isoformat(timespec="seconds")
+    now_ts = float(now.timestamp())
+    date_str = now.strftime("%Y-%m-%d")
+    time_str = now.strftime("%H:%M:%S")
+    student_id = (student.get("student_id") or "").strip()
+    student_name = (student.get("name") or "").strip()
+    parent_contact = (student.get("parent_contact") or "").strip()
+    if not student_id or not student_name:
+        return None
+
+    last_record = get_latest_gate_record(attendance_collection, student_id)
+    last_action = normalize_gate_action_value(
+        (last_record or {}).get("gate_action"),
+        (last_record or {}).get("session"),
+    )
+    last_record_dt = parse_gate_record_datetime(last_record)
+    last_status = str((last_record or {}).get("status") or "Present").strip().title() or "Present"
+    elapsed_since_last = None
+    if last_record_dt is not None:
+        elapsed_since_last = max((now - last_record_dt).total_seconds(), 0.0)
+    next_allowed_scan_ts = now_ts + scan_cooldown_seconds
+    if last_record_dt is not None:
+        next_allowed_scan_ts = max(float(last_record_dt.timestamp()) + scan_cooldown_seconds, now_ts)
+
+    status_hint = session_info_for_time(now)
+    in_status = str(status_hint.get("status") or "Present").strip().title() or "Present"
+    out_status = "Holiday" if in_status == "Holiday" else "Present"
+
+    def duplicate_result(message, voice_message, action=None, status=None, reason="duplicate"):
+        resolved_action = normalize_gate_action_value(action or last_action or "IN")
+        resolved_status = str(status or last_status or "Present").strip().title() or "Present"
+        return {
+            "student_id": student_id,
+            "student_name": student_name,
+            "parent_contact": parent_contact,
+            "school_year": school_year_label,
+            "status": resolved_status,
+            "session": str((last_record or {}).get("session") or build_gate_session_name(resolved_action, normalized_mode, now)),
+            "source": source,
+            "timestamp": timestamp,
+            "date": date_str,
+            "time": time_str,
+            "gate_action": resolved_action,
+            "verification_label": "Already Recorded",
+            "display_message": message,
+            "voice_message": voice_message,
+            "duplicate": True,
+            "duplicate_reason": reason,
+            "feed_update": False,
+            "activity_entry": None,
+            "tracking_mode": normalized_mode,
+            "scan_cooldown_minutes": scan_cooldown_minutes,
+            "next_allowed_scan_ts": next_allowed_scan_ts,
+        }
+
+    if elapsed_since_last is not None and elapsed_since_last < SCAN_REPEAT_SUPPRESSION_SECONDS:
+        return duplicate_result(
+            "Already recorded moments ago.",
+            "Already recorded",
+            action=last_action or "IN",
+            status=last_status,
+            reason="repeat_suppressed",
+        )
+
+    if normalized_mode == "manual_in":
+        if last_action == "IN":
+            return duplicate_result(
+                "Already marked IN.",
+                "Already checked in",
+                action="IN",
+                status=last_status,
+                reason="already_in",
+            )
+        next_action = "IN"
+    elif normalized_mode == "manual_out":
+        if last_action != "IN" or last_record_dt is None:
+            return duplicate_result(
+                "IN is required before OUT.",
+                "Check in first",
+                action=last_action or "IN",
+                status=last_status,
+                reason="out_requires_in",
+            )
+        elapsed_since_in = max((now - last_record_dt).total_seconds(), 0.0)
+        if elapsed_since_in < scan_cooldown_seconds:
+            return duplicate_result(
+                f"Already IN - wait {format_wait_time_short(scan_cooldown_seconds - elapsed_since_in)} before OUT.",
+                "Please wait before exit",
+                action="IN",
+                status=last_status,
+                reason="out_wait_period",
+            )
+        next_action = "OUT"
+    else:
+        if last_action == "IN" and last_record_dt is not None:
+            elapsed_since_in = max((now - last_record_dt).total_seconds(), 0.0)
+            if elapsed_since_in < scan_cooldown_seconds:
+                return duplicate_result(
+                    f"Already IN - wait {format_wait_time_short(scan_cooldown_seconds - elapsed_since_in)} before OUT.",
+                    "Please wait before exit",
+                    action="IN",
+                    status=last_status,
+                    reason="out_wait_period",
+                )
+            next_action = "OUT"
+        else:
+            next_action = "IN"
+
+    if next_action == "IN" and last_action == "IN":
+        return duplicate_result(
+            "Already marked IN.",
+            "Already checked in",
+            action="IN",
+            status=last_status,
+            reason="already_in",
+        )
+
+    if next_action == "OUT" and last_action == "OUT":
+        return duplicate_result(
+            "Already marked OUT.",
+            "Already checked out",
+            action="OUT",
+            status=last_status,
+            reason="already_out",
+        )
+
+    status = in_status if next_action == "IN" else out_status
+    feedback = build_gate_feedback(next_action, status)
+    session_name = build_gate_session_name(next_action, normalized_mode, now)
+    activity_entry = build_scan_activity_entry(
+        student_id,
+        student_name,
+        next_action,
+        status,
+        feedback["verification_label"],
+        timestamp,
+        time_str,
+    )
+    return {
+        "student_id": student_id,
+        "student_name": student_name,
+        "parent_contact": parent_contact,
+        "school_year": school_year_label,
+        "status": status,
+        "session": session_name,
+        "source": source,
+        "timestamp": timestamp,
+        "date": date_str,
+        "time": time_str,
+        "gate_action": next_action,
+        "verification_label": feedback["verification_label"],
+        "display_message": feedback["display_message"],
+        "voice_message": feedback["voice_message"],
+        "duplicate": False,
+        "duplicate_reason": "",
+        "feed_update": True,
+        "activity_entry": activity_entry,
+        "tracking_mode": normalized_mode,
+        "scan_cooldown_minutes": scan_cooldown_minutes,
+        "next_allowed_scan_ts": now_ts + scan_cooldown_seconds,
     }
 
 
@@ -3095,20 +3565,23 @@ def record_login(username, role):
 def serialize_attendance_correction(doc):
     if not doc:
         return {}
+    log_timestamp = str(doc.get("log_timestamp") or "")
+    requested_at = str(doc.get("requested_at") or "")
+    reviewed_at = str(doc.get("reviewed_at") or "")
     payload = {
         "_id": str(doc.get("_id")),
         "attendance_log_id": str(doc.get("attendance_log_id") or ""),
         "student_id": str(doc.get("student_id") or ""),
         "student_name": str(doc.get("student_name") or ""),
-        "log_timestamp": str(doc.get("log_timestamp") or ""),
+        "log_timestamp": format_timestamp_for_display(log_timestamp),
         "current_status": str(doc.get("current_status") or ""),
         "requested_status": str(doc.get("requested_status") or ""),
         "reason": str(doc.get("reason") or ""),
         "status": str(doc.get("status") or "pending"),
         "requested_by": str(doc.get("requested_by") or ""),
-        "requested_at": str(doc.get("requested_at") or ""),
+        "requested_at": format_timestamp_for_display(requested_at),
         "reviewed_by": str(doc.get("reviewed_by") or ""),
-        "reviewed_at": str(doc.get("reviewed_at") or ""),
+        "reviewed_at": format_timestamp_for_display(reviewed_at),
         "review_note": str(doc.get("review_note") or ""),
         "applied": bool(doc.get("applied")),
     }
@@ -4431,91 +4904,83 @@ def _active_student_query(student_id):
     }
 
 
-def log_attendance_and_sms(student):
+def log_attendance_and_sms(student, source="gate_scan", send_notifications=True):
     now = now_local()
-    timestamp = now_iso()
-    date_str = now.strftime("%Y-%m-%d")
-    time_str = now.strftime("%H:%M:%S")
     # Always use the current active school year from database for gate scanning
     school_year_label = get_current_school_year_label()
     attendance_collection, school_year_label, _ = get_attendance_logs_storage(school_year_label)
-    session_info = resolve_gate_session(now)
-    status = session_info["status"]
-    gate_action = session_info["gate_action"]
-    verification_label = session_info["verification_label"]
-    session_name = session_info["session"]
-
-    student_id = (student.get("student_id") or "").strip()
-    student_name = (student.get("name") or "").strip()
-    parent_contact = (student.get("parent_contact") or "").strip()
-    if not student_id or not student_name:
+    result = build_gate_scan_result(
+        attendance_collection,
+        school_year_label,
+        student,
+        now,
+        source=source,
+    )
+    if not result:
         return None
 
-    dedupe_query = {"student_id": student_id, "date": date_str, "session": session_name}
-
-    existing_record = attendance_collection.find_one(dedupe_query)
-    if existing_record:
-        existing_status = existing_record.get("status", status)
-        existing_gate_action = existing_record.get("gate_action", gate_action)
-        existing_session = existing_record.get("session", session_name)
+    if result["duplicate"]:
         return {
-            "student_id": student_id,
-            "status": existing_status,
+            **result,
             "sms_status": "skipped",
-            "gate_action": existing_gate_action,
-            "verification_label": existing_record.get("verification_label", verification_label),
-            "session": existing_session,
-            "display_message": "Done!",
-            "voice_message": "Done!",
-            "duplicate": True,
         }
 
     attendance_doc = {
-        "student_id": student_id,
-        "student_name": student_name,
+        "student_id": result["student_id"],
+        "student_name": result["student_name"],
         "school_year": school_year_label,
-        "status": status,
-        "session": session_name,
-        "source": "gate_scan",
-        "timestamp": timestamp,
-        "date": date_str,
-        "time": time_str,
-        "gate_action": gate_action,
-        "verification_label": verification_label,
+        "status": result["status"],
+        "session": result["session"],
+        "source": source,
+        "timestamp": result["timestamp"],
+        "date": result["date"],
+        "time": result["time"],
+        "gate_action": result["gate_action"],
+        "verification_label": result["verification_label"],
+        "tracking_mode": result["tracking_mode"],
     }
     try:
         attendance_collection.insert_one(attendance_doc)
         signal_data_change("gate_logs")
     except DuplicateKeyError:
-        existing_record = attendance_collection.find_one(dedupe_query) or attendance_doc
+        existing_record = attendance_collection.find_one({
+            "student_id": result["student_id"],
+            "date": result["date"],
+            "session": result["session"],
+        }) or attendance_doc
         return {
-            "student_id": student_id,
-            "status": existing_record.get("status", status),
+            **result,
+            "status": existing_record.get("status", result["status"]),
             "sms_status": "skipped",
-            "gate_action": existing_record.get("gate_action", gate_action),
-            "verification_label": existing_record.get("verification_label", verification_label),
-            "session": existing_record.get("session", session_name),
-            "display_message": "Done!",
-            "voice_message": "Done!",
+            "gate_action": existing_record.get("gate_action", result["gate_action"]),
+            "verification_label": existing_record.get("verification_label", result["verification_label"]),
+            "session": existing_record.get("session", result["session"]),
+            "display_message": "Already recorded moments ago.",
+            "voice_message": "Already recorded",
             "duplicate": True,
+            "duplicate_reason": "duplicate_key",
+            "feed_update": False,
+            "activity_entry": None,
         }
 
     sms_status = "skipped"
     sms_error = ""
+    parent_contact = result["parent_contact"]
 
-    if parent_contact:
-        movement_text = "entered" if gate_action == "IN" else "exited"
+    if send_notifications and parent_contact:
+        movement_text = "entered" if result["gate_action"] == "IN" else "exited"
+        display_time = format_time_for_display(result.get("time"), result.get("timestamp"))
         template_payload = get_attendance_sms_template_payload()
         template_text = template_payload.get("template") or get_default_attendance_sms_template()
         template_variables = {
-            "student_name": student_name,
-            "student_id": student_id,
+            "student_name": result["student_name"],
+            "student_id": result["student_id"],
             "movement_text": movement_text,
-            "gate_action": gate_action,
-            "status": status,
-            "session": session_name,
-            "time": time_str,
-            "date": date_str,
+            "gate_action": result["gate_action"],
+            "status": result["status"],
+            "session": result["session"],
+            "time": display_time,
+            "date": result["date"],
         }
         try:
             msg_text = SmsProvider.render_template(template_text, template_variables)
@@ -4533,13 +4998,13 @@ def log_attendance_and_sms(student):
                 sms_type="transactional",
                 metadata={
                     "context": "attendance_gate_scan",
-                    "session": session_name,
+                    "session": result["session"],
                     "school_year": school_year_label,
                     "template_id": ATTENDANCE_SMS_TEMPLATE_DOC_ID,
                     "template_updated_at": template_payload.get("updated_at", ""),
                 },
-                student_id=student_id,
-                student_name=student_name,
+                student_id=result["student_id"],
+                student_name=result["student_name"],
                 parent_contact=parent_contact,
             )
             status_async = "sent" if sms_result.get("status") == "sent" else "failed"
@@ -4548,36 +5013,29 @@ def log_attendance_and_sms(student):
             if status_async == "failed":
                 create_alert(
                     level="high",
-                    message=f"Failed SMS notification for {student_name}.",
+                    message=f"Failed SMS notification for {result['student_name']}.",
                     category="sms",
-                    meta={"student_id": student_id, "error": error_async, "school_year": school_year_label},
+                    meta={"student_id": result["student_id"], "error": error_async, "school_year": school_year_label},
                 )
-                
+
         import threading
         threading.Thread(target=_send_sms_async, daemon=True).start()
         sms_status = "queued"
         sms_error = ""
-    else:
+    elif send_notifications:
         log_skipped_sms(
-            student_id=student_id,
-            student_name=student_name,
+            student_id=result["student_id"],
+            student_name=result["student_name"],
             parent_contact=parent_contact,
-            message=f"No parent contact configured for {student_name}. SMS not sent.",
+            message=f"No parent contact configured for {result['student_name']}. SMS not sent.",
             reason="missing_parent_contact",
             sms_type="transactional",
-            metadata={"context": "attendance_gate_scan", "session": session_name, "school_year": school_year_label},
+            metadata={"context": "attendance_gate_scan", "session": result["session"], "school_year": school_year_label},
         )
 
     return {
-        "student_id": student_id,
-        "status": status,
+        **result,
         "sms_status": sms_status,
-        "gate_action": gate_action,
-        "verification_label": verification_label,
-        "session": session_name,
-        "display_message": session_info["display_message"],
-        "voice_message": session_info["voice_message"],
-        "duplicate": False,
     }
 
 
@@ -4589,15 +5047,21 @@ def handle_verified_student(student, confidence=0.0):
         return None
 
     with scan_lock:
-        last_ts = float(last_scanned.get(student_id, 0) or 0)
-        if now_ts - last_ts < SCAN_COOLDOWN_SECONDS:
+        cooldown_until = float(last_scanned.get(student_id, 0) or 0)
+        if now_ts < cooldown_until:
             return None
-        last_scanned[student_id] = now_ts
     result = log_attendance_and_sms(student)
     if not result:
         return None
+    next_allowed_scan_ts = float(result.get("next_allowed_scan_ts") or (now_ts + SCAN_COOLDOWN_SECONDS))
+    with scan_lock:
+        last_scanned[student_id] = max(next_allowed_scan_ts, now_ts + SCAN_COOLDOWN_SECONDS)
+
+    if result["duplicate"]:
+        return None
 
     push_scan_event("verified", {
+        "student_id": student_id,
         "name": student_name,
         "verified": True,
         "attendance_status": result["status"],
@@ -4607,9 +5071,16 @@ def handle_verified_student(student, confidence=0.0):
         "session": result["session"],
         "display_message": result["display_message"],
         "voice_message": result["voice_message"],
+        "voice_key": f"{student_id}:{result['gate_action']}:{result['timestamp']}",
         "confidence": confidence,
         "confidence_pct": confidence,
-        "duplicate": result["duplicate"],
+        "duplicate": False,
+        "duplicate_reason": "",
+        "time": format_time_for_display(result.get("time"), result.get("timestamp")),
+        "timestamp_display": format_timestamp_for_display(result.get("timestamp"), result.get("time")),
+        "feed_update": bool(result.get("feed_update")),
+        "activity_entry": result.get("activity_entry"),
+        "tracking_mode": result.get("tracking_mode", get_scan_session_mode()),
     })
     return result
 
@@ -4751,6 +5222,8 @@ def start_scan_capture():
         last_scanned.clear()
         scan_state["capture"] = None  # No server-side camera needed
         scan_state["active"] = True
+        scan_state["events"] = []
+        scan_state["event_counter"] = 0
         scan_state["known_encodings"] = np.empty((0, 128), dtype=np.float64)
         scan_state["known_students"] = []
         scan_state["model_status"] = "loading"
@@ -4896,6 +5369,7 @@ def compute_dashboard_data(args, school_year=""):
         for r in login_rows:
             r["_id"] = str(r["_id"])
             r["role"] = normalize_role_value(r.get("role"), ROLE_STAFF)
+            r["timestamp"] = format_timestamp_for_display(r.get("timestamp"))
 
     q = args.get("q", "").strip()
     log_type = args.get("log_type", "all")
@@ -4956,10 +5430,14 @@ def compute_dashboard_data(args, school_year=""):
         gate_results = list(attendance_collection.find(gate_query).sort("timestamp", -1).limit(20))
         for g in gate_results:
             g["_id"] = str(g["_id"])
+            g["time"] = format_time_for_display(g.get("time"), g.get("timestamp"))
+            g["timestamp"] = format_timestamp_for_display(g.get("timestamp"), g.get("time"))
     if log_type in ("all", "sms"):
         sms_results = list(sms_collection.find(sms_query).sort("timestamp", -1).limit(20))
         for s in sms_results:
             s["_id"] = str(s["_id"])
+            s["time"] = format_time_for_display(s.get("time"), s.get("timestamp"))
+            s["timestamp"] = format_timestamp_for_display(s.get("timestamp"), s.get("time"))
 
     return {
         "selected_school_year": school_year_label,
@@ -7465,6 +7943,79 @@ def build_new_student_document(student_data):
     return payload
 
 
+def normalize_face_capture_profile(value):
+    text = str(value or "standard").strip().lower().replace("-", "_").replace(" ", "_")
+    if text in {"similar_faces", "similar", "twins", "twin"}:
+        return "similar_faces"
+    return "standard"
+
+
+def parse_face_capture_meta(raw_meta):
+    if isinstance(raw_meta, str):
+        try:
+            raw_meta = json.loads(raw_meta)
+        except Exception:
+            raw_meta = []
+    if not isinstance(raw_meta, list):
+        return []
+
+    parsed = []
+    for row in raw_meta:
+        if not isinstance(row, dict):
+            parsed.append({})
+            continue
+        parsed.append({
+            "step_key": str(row.get("step_key") or row.get("key") or "").strip(),
+            "label": str(row.get("label") or "").strip(),
+            "instruction": str(row.get("instruction") or "").strip(),
+            "yaw": row.get("yaw"),
+            "pitch": row.get("pitch"),
+        })
+    return parsed
+
+
+def validate_face_capture_image(raw_face):
+    try:
+        img_b64 = raw_face.split(",", 1)[1]
+        img_bytes = base64.b64decode(img_b64)
+        img = Image.open(BytesIO(img_bytes)).convert("RGB")
+        img_np = np.array(img)
+    except Exception as exc:
+        print(f"[WARNING] Face capture decode skipped: {exc}")
+        return None
+
+    try:
+        face_locations = face_recognition.face_locations(img_np, model="hog")
+        if len(face_locations) != 1:
+            return None
+
+        top, right, bottom, left = face_locations[0]
+        face_height = max(0, bottom - top)
+        face_width = max(0, right - left)
+        if face_height < img_np.shape[0] * 0.28 or face_width < img_np.shape[1] * 0.22:
+            return None
+
+        gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
+        brightness = float(np.mean(gray))
+        contrast = float(np.std(gray))
+        sharpness = float(cv2.Laplacian(gray, cv2.CV_64F).var())
+        if brightness < 40 or brightness > 220 or contrast < 20 or sharpness < 35:
+            return None
+
+        enc_rows = face_recognition.face_encodings(img_np, known_face_locations=face_locations)
+        if not enc_rows:
+            return None
+        return {
+            "encoding": enc_rows[0],
+            "brightness": round(brightness, 2),
+            "contrast": round(contrast, 2),
+            "sharpness": round(sharpness, 2),
+        }
+    except Exception as exc:
+        print(f"[WARNING] Face encoding skipped: {exc}")
+        return None
+
+
 def parse_faces_payload(data):
     raw_faces = data.get("faces", data.get("face_data", []))
     if isinstance(raw_faces, str):
@@ -7474,7 +8025,11 @@ def parse_faces_payload(data):
             raw_faces = []
 
     if not isinstance(raw_faces, list):
-        return None, None, "Face data must be an array.", "faces"
+        return None, None, None, "Face data must be an array.", "faces"
+
+    capture_profile = normalize_face_capture_profile(data.get("capture_profile"))
+    required_count = 20 if capture_profile == "similar_faces" else 10
+    raw_meta = parse_face_capture_meta(data.get("capture_meta", []))
 
     faces_array = []
     for raw_face in raw_faces:
@@ -7483,31 +8038,61 @@ def parse_faces_payload(data):
         raw = raw_face.strip()
         if raw and "," in raw:
             faces_array.append(raw)
-        if len(faces_array) >= 5:
+        if len(faces_array) >= required_count:
             break
 
     if not faces_array:
-        return None, None, "Capture at least one face image.", "faces"
-    if len(faces_array) < 5:
-        return None, None, "Capture all required angles (Front, Left, Right, Slight Up, Slight Down).", "faces"
+        return None, None, None, "Capture at least one face image.", "faces"
+    if len(faces_array) < required_count:
+        return None, None, None, f"Capture all required guided angles ({required_count} images).", "faces"
 
+    validated_faces = []
     face_encodings = []
-    for raw_face in faces_array:
-        try:
-            img_b64 = raw_face.split(",", 1)[1]
-            img_bytes = base64.b64decode(img_b64)
-            img = Image.open(BytesIO(img_bytes)).convert("RGB")
-            img_np = np.array(img)
-            enc_rows = face_recognition.face_encodings(img_np)
-            if enc_rows:
-                face_encodings.append(enc_rows[0].tolist())
-        except Exception as exc:
-            print(f"[WARNING] Face encoding skipped: {exc}")
+    capture_meta = []
+    seen_encodings = []
 
-    if not face_encodings:
-        return None, None, "No detectable face found in the uploaded captures.", "faces"
+    for index, raw_face in enumerate(faces_array):
+        validated = validate_face_capture_image(raw_face)
+        if not validated:
+            continue
 
-    return faces_array, face_encodings, "", ""
+        encoding = validated["encoding"]
+        if seen_encodings:
+            try:
+                distances = face_recognition.face_distance(seen_encodings, encoding)
+                if len(distances) and float(np.min(distances)) < 0.04:
+                    continue
+            except Exception:
+                pass
+
+        seen_encodings.append(encoding)
+        validated_faces.append(raw_face)
+        face_encodings.append(encoding.tolist())
+        meta_row = raw_meta[index] if index < len(raw_meta) else {}
+        capture_meta.append({
+            "step_key": meta_row.get("step_key") or f"capture_{len(validated_faces)}",
+            "label": meta_row.get("label") or f"Capture {len(validated_faces)}",
+            "instruction": meta_row.get("instruction") or "",
+            "yaw": meta_row.get("yaw"),
+            "pitch": meta_row.get("pitch"),
+            "quality": {
+                "brightness": validated["brightness"],
+                "contrast": validated["contrast"],
+                "sharpness": validated["sharpness"],
+            },
+        })
+
+    if len(validated_faces) < required_count:
+        return None, None, None, (
+            f"Need {required_count} clear and unique captures inside the oval guide. "
+            f"Only {len(validated_faces)} passed validation."
+        ), "faces"
+
+    return validated_faces, face_encodings, {
+        "capture_profile": capture_profile,
+        "capture_count": len(validated_faces),
+        "capture_meta": capture_meta,
+    }, "", ""
 
 
 def refresh_scan_face_index_if_active():
@@ -8196,6 +8781,25 @@ def format_export_sort_label(sort_by):
     return "Oldest First" if str(sort_by or "").strip().lower() == "oldest" else "Newest First"
 
 
+def wants_inline_pdf_response():
+    requested = str(
+        request.args.get("disposition")
+        or request.args.get("pdf_disposition")
+        or request.args.get("view")
+        or ""
+    ).strip().lower()
+    return requested in {"inline", "preview", "print"}
+
+
+def send_generated_pdf(buffer, filename):
+    return send_file(
+        buffer,
+        as_attachment=not wants_inline_pdf_response(),
+        download_name=filename,
+        mimetype="application/pdf",
+    )
+
+
 @app.route("/students/export_pdf", methods=["GET"])
 @require_permission("students_write")
 def students_export_pdf():
@@ -8609,12 +9213,7 @@ def students_export_pdf():
     buffer.seek(0)
 
     filename = f"students_export_{now_local().strftime('%Y%m%d_%H%M%S')}.pdf"
-    return send_file(
-        buffer,
-        as_attachment=True,
-        download_name=filename,
-        mimetype="application/pdf"
-    )
+    return send_generated_pdf(buffer, filename)
 
 
 @app.route("/api/students/stats", methods=["GET"])
@@ -9148,7 +9747,7 @@ def save_face_registration(student_id, is_update=False):
         return api_error("Student not found.", 404)
 
     payload = request_payload()
-    faces_array, face_encodings, err_message, err_field = parse_faces_payload(payload)
+    faces_array, face_encodings, capture_details, err_message, err_field = parse_faces_payload(payload)
     if err_message:
         return api_error(err_message, 400, err_field)
 
@@ -9157,6 +9756,9 @@ def save_face_registration(student_id, is_update=False):
         "faces": faces_array,
         "face_encodings": face_encodings,
         "face_embeddings": face_encodings,
+        "face_capture_profile": capture_details.get("capture_profile", "standard") if isinstance(capture_details, dict) else "standard",
+        "face_capture_count": capture_details.get("capture_count", len(faces_array)) if isinstance(capture_details, dict) else len(faces_array),
+        "face_capture_meta": capture_details.get("capture_meta", []) if isinstance(capture_details, dict) else [],
         "profile_photo": faces_array[0] if faces_array else "",
         "face_registered": True,
         "face_updated_at": now_local(),
@@ -9386,22 +9988,13 @@ def gate_logs_page():
 
     rows = list(logs_collection.find(query).sort(sort_spec).skip(skip).limit(per_page))
     photo_map = build_student_photo_map([row.get("student_id", "") for row in rows])
-    logs = []
-    for row in rows:
-        student_id = row.get("student_id", "")
-        logs.append({
-            "_id": str(row.get("_id")),
-            "student_id": student_id,
-            "name": row.get("student_name", ""),
-            "action": row.get("gate_action", "IN"),
-            "status": row.get("status", "Present"),
-            "session": row.get("session", ""),
-            "verification_label": row.get("verification_label", ""),
-            "date": row.get("date", ""),
-            "time": row.get("time", ""),
-            "timestamp": row.get("timestamp", ""),
-            "profile_photo": photo_map.get(str(student_id).strip(), ""),
-        })
+    logs = [
+        serialize_gate_log_display_row(
+            row,
+            profile_photo=photo_map.get(str(row.get("student_id", "")).strip(), ""),
+        )
+        for row in rows
+    ]
 
     stats = {
         "total_entries": total_filtered,
@@ -9490,7 +10083,7 @@ def gate_logs_export():
             Paragraph(xml_escape(str(row.get("student_id") or "N/A")), styles["table_cell"]),
             Paragraph(xml_escape(str(row.get("student_name") or "N/A")), styles["table_cell"]),
             Paragraph(xml_escape(str(row.get("date") or "N/A")), styles["table_cell_center"]),
-            Paragraph(xml_escape(str(row.get("time") or "N/A")), styles["table_cell_center"]),
+            Paragraph(xml_escape(format_time_for_display(row.get("time"), row.get("timestamp")) or "N/A"), styles["table_cell_center"]),
             Paragraph(xml_escape(str(row.get("gate_action") or "N/A")), styles["table_cell_center"]),
             Paragraph(xml_escape(str(row.get("session") or "N/A")), styles["table_cell_center"]),
             Paragraph(xml_escape(str(row.get("status") or "N/A")), styles["table_cell_center"]),
@@ -9536,12 +10129,7 @@ def gate_logs_export():
     buffer.seek(0)
 
     filename = f"gate_logs_{now_local().strftime('%Y%m%d_%H%M%S')}.pdf"
-    return send_file(
-        buffer,
-        as_attachment=True,
-        download_name=filename,
-        mimetype="application/pdf",
-    )
+    return send_generated_pdf(buffer, filename)
 
 
 @app.route("/api/gate-logs/latest")
@@ -9563,22 +10151,13 @@ def gate_logs_latest():
     rows.reverse()
     photo_map = build_student_photo_map([row.get("student_id", "") for row in rows])
 
-    payload = []
-    for row in rows:
-        student_id = row.get("student_id", "")
-        payload.append({
-            "_id": str(row.get("_id")),
-            "student_id": student_id,
-            "name": row.get("student_name", ""),
-            "action": row.get("gate_action", "IN"),
-            "status": row.get("status", "Present"),
-            "session": row.get("session", ""),
-            "verification_label": row.get("verification_label", ""),
-            "date": row.get("date", ""),
-            "time": row.get("time", ""),
-            "timestamp": row.get("timestamp", ""),
-            "profile_photo": photo_map.get(str(student_id).strip(), ""),
-        })
+    payload = [
+        serialize_gate_log_display_row(
+            row,
+            profile_photo=photo_map.get(str(row.get("student_id", "")).strip(), ""),
+        )
+        for row in rows
+    ]
 
     return jsonify({"status": "ok", "school_year": school_year_label, "logs": payload})
 
@@ -9836,55 +10415,38 @@ def simulate_gate(student_id):
     if not student:
         return jsonify({"status": "FAILED", "error": "Student not found"}), 404
 
-    now = now_local()
-    date_str = now.strftime("%Y-%m-%d")
-    time_str = now.strftime("%H:%M:%S")
-    # Always use the current active school year from database for gate simulation
-    school_year_label = get_current_school_year_label()
-    attendance_collection, school_year_label, _ = get_attendance_logs_storage(school_year_label)
-    session_info = resolve_gate_session(now)
-    status = session_info["status"]
-    gate_action = session_info["gate_action"]
-    verification_label = session_info["verification_label"]
-    session_name = session_info["session"]
+    result = log_attendance_and_sms(student, source="manual_simulation", send_notifications=False)
+    if not result:
+        return jsonify({"status": "FAILED", "error": "Unable to process gate simulation."}), 400
 
-    dedupe_query = {
-        "student_id": student.get("student_id", ""),
-        "date": date_str,
-        "session": session_name,
-    }
-    existing_record = attendance_collection.find_one(dedupe_query)
-    duplicate = existing_record is not None
-
-    if not duplicate:
-        attendance_collection.insert_one({
+    if not result["duplicate"]:
+        push_scan_event("verified", {
             "student_id": student.get("student_id", ""),
-            "student_name": student.get("name", ""),
-            "school_year": school_year_label,
-            "status": status,
-            "session": session_name,
-            "source": "manual_simulation",
-            "timestamp": now_iso(),
-            "date": date_str,
-            "time": time_str,
-            "gate_action": gate_action,
-            "verification_label": verification_label,
+            "name": student.get("name", ""),
+            "verified": True,
+            "attendance_status": result["status"],
+            "sms_status": result["sms_status"],
+            "gate_action": result["gate_action"],
+            "verification_label": result["verification_label"],
+            "session": result["session"],
+            "display_message": result["display_message"],
+            "voice_message": result["voice_message"],
+            "voice_key": f"{student.get('student_id', '')}:{result['gate_action']}:{result['timestamp']}",
+            "duplicate": False,
+            "duplicate_reason": "",
+            "time": format_time_for_display(result.get("time"), result.get("timestamp")),
+            "timestamp_display": format_timestamp_for_display(result.get("timestamp"), result.get("time")),
+            "feed_update": bool(result.get("feed_update")),
+            "activity_entry": result.get("activity_entry"),
+            "tracking_mode": result.get("tracking_mode", get_scan_session_mode()),
         })
-        signal_data_change("gate_logs")
-
-    push_scan_event("verified", {
+    return jsonify({
+        "status": "SUCCESS",
         "name": student.get("name", ""),
-        "verified": True,
-        "attendance_status": status,
-        "sms_status": "SKIPPED",
-        "gate_action": gate_action,
-        "verification_label": verification_label,
-        "session": session_name,
-        "display_message": "Done!" if duplicate else session_info["display_message"],
-        "voice_message": "Done!" if duplicate else session_info["voice_message"],
-        "duplicate": duplicate,
+        "action": result["gate_action"],
+        "duplicate": result["duplicate"],
+        "message": result["display_message"],
     })
-    return jsonify({"status": "SUCCESS", "name": student.get("name", ""), "action": gate_action})
 
 
 @app.route("/sms-logs")
@@ -9903,22 +10465,7 @@ def sms_logs_page():
     skip = (pagination["page"] - 1) * per_page
 
     rows = list(logs_collection.find(query).sort(sort_spec).skip(skip).limit(per_page))
-    logs = []
-    for row in rows:
-        status_value = str(row.get("status", "") or "")
-        logs.append({
-            "_id": str(row.get("_id")),
-            "student_id": row.get("student_id", ""),
-            "name": row.get("name", ""),
-            "parent_contact": row.get("parent_contact", ""),
-            "message": row.get("message", ""),
-            "status": status_value.upper() if status_value else "",
-            "sid": row.get("sid", ""),
-            "error": row.get("error", ""),
-            "date": row.get("date", ""),
-            "time": row.get("time", ""),
-            "timestamp": row.get("timestamp", ""),
-        })
+    logs = [serialize_sms_log_display_row(row) for row in rows]
 
     stats = {
         "total_logs": total_filtered,
@@ -10064,7 +10611,7 @@ def sms_logs_export():
             Paragraph(xml_escape(str(row.get("name") or "N/A")), styles["table_cell"]),
             Paragraph(xml_escape(str(row.get("parent_contact") or "N/A")), styles["table_cell"]),
             Paragraph(xml_escape(str(row.get("date") or "N/A")), styles["table_cell_center"]),
-            Paragraph(xml_escape(str(row.get("time") or "N/A")), styles["table_cell_center"]),
+            Paragraph(xml_escape(format_time_for_display(row.get("time"), row.get("timestamp")) or "N/A"), styles["table_cell_center"]),
             Paragraph(xml_escape(str(row.get("status") or "N/A").title()), styles["table_cell_center"]),
             Paragraph(xml_escape(str(row.get("message") or "N/A")), styles["table_cell"]),
             Paragraph(xml_escape(str(row.get("sid") or "N/A")), styles["table_cell"]),
@@ -10107,12 +10654,7 @@ def sms_logs_export():
     buffer.seek(0)
 
     filename = f"sms_logs_{now_local().strftime('%Y%m%d_%H%M%S')}.pdf"
-    return send_file(
-        buffer,
-        as_attachment=True,
-        download_name=filename,
-        mimetype="application/pdf",
-    )
+    return send_generated_pdf(buffer, filename)
 
 
 @app.route("/sms-logs/resend/<id>", methods=["POST"])
@@ -11144,17 +11686,20 @@ def api_get_default_schedule():
 def api_update_default_schedule():
     if not login_required() or session.get("role") != ROLE_FULL_ADMIN:
         return jsonify({"status": "error", "message": "Unauthorized"}), 401
-        
+
     payload = request.json or {}
-    schedule_data = {
+    raw_schedule = {
         "morning_start": payload.get("morning_start", "05:00"),
-        "morning_late": payload.get("morning_late", "08:15"),
+        "morning_late": payload.get("morning_late", ""),
         "noon_start": payload.get("noon_start", "12:00"),
         "afternoon_start": payload.get("afternoon_start", "13:00"),
-        "afternoon_late": payload.get("afternoon_late", "13:15"),
-        "afternoon_end": payload.get("afternoon_end", "17:00")
+        "afternoon_late": payload.get("afternoon_late", ""),
+        "afternoon_end": payload.get("afternoon_end", "17:00"),
+        "late_threshold_minutes": payload.get("late_threshold_minutes", 15),
+        "scan_cooldown_minutes": payload.get("scan_cooldown_minutes", 30),
     }
-    
+    schedule_data = normalize_attendance_schedule(raw_schedule)
+
     system_settings.update_one(
         {"key": "default_schedule"},
         {"$set": {"schedule": schedule_data}},

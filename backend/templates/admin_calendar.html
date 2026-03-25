@@ -70,10 +70,6 @@
                             <input type="time" id="sch_morning_start" class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300">
                         </div>
                         <div>
-                            <label class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Morning Late After</label>
-                            <input type="time" id="sch_morning_late" class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300">
-                        </div>
-                        <div>
                             <label class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Noon Out (Break)</label>
                             <input type="time" id="sch_noon_start" class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300">
                         </div>
@@ -82,12 +78,16 @@
                             <input type="time" id="sch_afternoon_start" class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300">
                         </div>
                         <div>
-                            <label class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Afternoon Late After</label>
-                            <input type="time" id="sch_afternoon_late" class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300">
-                        </div>
-                        <div>
                             <label class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Afternoon Out (End)</label>
                             <input type="time" id="sch_afternoon_end" class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300">
+                        </div>
+                        <div>
+                            <label class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Late Threshold (Minutes)</label>
+                            <input type="number" id="sch_late_threshold_minutes" min="1" max="180" class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300">
+                        </div>
+                        <div>
+                            <label class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Scan Cooldown (Minutes)</label>
+                            <input type="number" id="sch_scan_cooldown_minutes" min="5" max="240" class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300">
                         </div>
                     </div>
                 </section>
@@ -226,11 +226,11 @@
                 if (d.schedule) {
                     const s = d.schedule;
                     document.getElementById('sch_morning_start').value = s.morning_start || '05:00';
-                    document.getElementById('sch_morning_late').value = s.morning_late || '08:15';
                     document.getElementById('sch_noon_start').value = s.noon_start || '12:00';
                     document.getElementById('sch_afternoon_start').value = s.afternoon_start || '13:00';
-                    document.getElementById('sch_afternoon_late').value = s.afternoon_late || '13:15';
                     document.getElementById('sch_afternoon_end').value = s.afternoon_end || '17:00';
+                    document.getElementById('sch_late_threshold_minutes').value = s.late_threshold_minutes || 15;
+                    document.getElementById('sch_scan_cooldown_minutes').value = s.scan_cooldown_minutes || 30;
                 }
             } catch(e) { console.error('Schedule load error', e); }
         }
@@ -239,11 +239,11 @@
             const alertEl = document.getElementById('scheduleAlert');
             const payload = {
                 morning_start: document.getElementById('sch_morning_start').value,
-                morning_late: document.getElementById('sch_morning_late').value,
                 noon_start: document.getElementById('sch_noon_start').value,
                 afternoon_start: document.getElementById('sch_afternoon_start').value,
-                afternoon_late: document.getElementById('sch_afternoon_late').value,
-                afternoon_end: document.getElementById('sch_afternoon_end').value
+                afternoon_end: document.getElementById('sch_afternoon_end').value,
+                late_threshold_minutes: document.getElementById('sch_late_threshold_minutes').value,
+                scan_cooldown_minutes: document.getElementById('sch_scan_cooldown_minutes').value
             };
             try {
                 const r = await fetch('/api/schedule/default', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });

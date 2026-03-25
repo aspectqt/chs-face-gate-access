@@ -93,25 +93,45 @@
           </section>
 
           <section class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <article class="rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-emerald-100/70 p-4 shadow-sm">
-              <p class="text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald-700">Tracked School Years</p>
-              <p class="mt-2 text-3xl font-bold text-slate-900">{{ archive_totals.school_year_count }}</p>
-              <p class="mt-1 text-[11px] text-slate-500">School years known to the archive and enrollment storage.</p>
+            <article class="stat-overview-card stat-overview-card--emerald p-5">
+              <div class="stat-overview-kicker">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <span>Tracked School Years</span>
+              </div>
+              <p class="stat-overview-value">{{ archive_totals.school_year_count }}</p>
+              <p class="stat-overview-note">School years known to the archive and enrollment storage.</p>
             </article>
-            <article class="rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50 via-white to-blue-100/70 p-4 shadow-sm">
-              <p class="text-[11px] font-semibold uppercase tracking-[0.12em] text-blue-700">Archived School Years</p>
-              <p class="mt-2 text-3xl font-bold text-slate-900">{{ archive_totals.archived_year_count }}</p>
-              <p class="mt-1 text-[11px] text-slate-500">Historical school years separated from the active workspace.</p>
+            <article class="stat-overview-card stat-overview-card--blue p-5">
+              <div class="stat-overview-kicker">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m6-6H6" />
+                </svg>
+                <span>Archived School Years</span>
+              </div>
+              <p class="stat-overview-value">{{ archive_totals.archived_year_count }}</p>
+              <p class="stat-overview-note">Historical school years separated from the active workspace.</p>
             </article>
-            <article class="rounded-2xl border border-cyan-200 bg-gradient-to-br from-cyan-50 via-white to-cyan-100/70 p-4 shadow-sm">
-              <p class="text-[11px] font-semibold uppercase tracking-[0.12em] text-cyan-700">Active Storage Docs</p>
-              <p class="mt-2 text-3xl font-bold text-slate-900">{{ archive_totals.active_storage_total }}</p>
-              <p class="mt-1 text-[11px] text-slate-500">Current-year operational and structural records.</p>
+            <article class="stat-overview-card stat-overview-card--cyan p-5">
+              <div class="stat-overview-kicker">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h10" />
+                </svg>
+                <span>Active Storage Docs</span>
+              </div>
+              <p class="stat-overview-value">{{ archive_totals.active_storage_total }}</p>
+              <p class="stat-overview-note">Current-year operational and structural records.</p>
             </article>
-            <article class="rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 via-white to-amber-100/70 p-4 shadow-sm">
-              <p class="text-[11px] font-semibold uppercase tracking-[0.12em] text-amber-700">Archived Storage Docs</p>
-              <p class="mt-2 text-3xl font-bold text-slate-900">{{ archive_totals.archived_storage_total }}</p>
-              <p class="mt-1 text-[11px] text-slate-500">Historical records retained outside the active collections.</p>
+            <article class="stat-overview-card stat-overview-card--amber p-5">
+              <div class="stat-overview-kicker">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M3 7.5h18M6 12h12m-9 4.5h6" />
+                </svg>
+                <span>Archived Storage Docs</span>
+              </div>
+              <p class="stat-overview-value">{{ archive_totals.archived_storage_total }}</p>
+              <p class="stat-overview-note">Historical records retained outside the active collections.</p>
             </article>
           </section>
 

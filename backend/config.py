@@ -58,11 +58,47 @@ early_timeout_requests = db["early_timeout_requests"]
 early_timeout_requests_archive = db[EARLY_TIMEOUT_REQUESTS_ARCHIVE_COLLECTION_NAME]
 
 
+def _normalize_index_keys(keys):
+    normalized = []
+    for item in keys:
+        if isinstance(item, str):
+            normalized.append((item, ASCENDING))
+            continue
+        if isinstance(item, (list, tuple)) and len(item) >= 2:
+            normalized.append((item[0], item[1]))
+            continue
+        raise ValueError(f"Unsupported index key specification: {item!r}")
+    return tuple(normalized)
+
+
+def _find_existing_index(collection, normalized_keys, requested_name=""):
+    index_info = collection.index_information()
+    if requested_name:
+        existing = index_info.get(requested_name)
+        if existing:
+            return requested_name, existing
+
+    for name, spec in index_info.items():
+        if tuple(spec.get("key", [])) == normalized_keys:
+            return name, spec
+    return "", None
+
+
 def _safe_create_index(collection, keys, **kwargs):
+    normalized_keys = _normalize_index_keys(keys)
+    requested_name = str(kwargs.get("name") or "").strip()
+    existing_name, existing_spec = _find_existing_index(collection, normalized_keys, requested_name)
+    if existing_spec is not None:
+        return existing_name or requested_name or None
+
     try:
-        collection.create_index(keys, **kwargs)
+        return collection.create_index(list(normalized_keys), **kwargs)
     except Exception as exc:
+        existing_name, existing_spec = _find_existing_index(collection, normalized_keys, requested_name)
+        if existing_spec is not None:
+            return existing_name or requested_name or None
         print(f"[WARNING] Could not create index on {collection.name}: {exc}")
+        return None
 
 
 def student_enrollment_collection_name(school_year):

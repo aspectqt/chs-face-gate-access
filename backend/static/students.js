@@ -1,11 +1,55 @@
 (() => {
-  const steps = [
-    { key: "front", label: "Front", instruction: "Look Straight at the Camera" },
-    { key: "left", label: "Left", instruction: "Turn your head slightly to the LEFT" },
-    { key: "right", label: "Right", instruction: "Turn your head slightly to the RIGHT" },
-    { key: "up", label: "Slight Up", instruction: "Look slightly UP" },
-    { key: "down", label: "Slight Down", instruction: "Look slightly DOWN" },
+  const STANDARD_FACE_CAPTURE_STEPS = [
+    { key: "front", label: "Center", instruction: "Look straight at the camera.", yawRange: [-0.028, 0.028], pitchRange: [-0.03, 0.03] },
+    { key: "left_soft", label: "Soft Left", instruction: "Turn slightly to your left.", yawRange: [0.028, 0.062], pitchRange: [-0.08, 0.08] },
+    { key: "left", label: "Left", instruction: "Turn farther to your left.", yawRange: [0.062, 0.125], pitchRange: [-0.1, 0.1] },
+    { key: "right_soft", label: "Soft Right", instruction: "Turn slightly to your right.", yawRange: [-0.062, -0.028], pitchRange: [-0.08, 0.08] },
+    { key: "right", label: "Right", instruction: "Turn farther to your right.", yawRange: [-0.125, -0.062], pitchRange: [-0.1, 0.1] },
+    { key: "up", label: "Up", instruction: "Lift your chin slightly.", yawRange: [-0.08, 0.08], pitchRange: [-0.07, -0.018] },
+    { key: "down", label: "Down", instruction: "Lower your chin slightly.", yawRange: [-0.08, 0.08], pitchRange: [0.022, 0.07] },
+    { key: "up_left", label: "Up Left", instruction: "Look up and to your left.", yawRange: [0.028, 0.095], pitchRange: [-0.085, -0.015] },
+    { key: "up_right", label: "Up Right", instruction: "Look up and to your right.", yawRange: [-0.095, -0.028], pitchRange: [-0.085, -0.015] },
+    { key: "down_center", label: "Low Center", instruction: "Keep centered and lower your chin a little more.", yawRange: [-0.08, 0.08], pitchRange: [0.07, 0.115] },
   ];
+  const SIMILAR_FACE_CAPTURE_EXTRA_STEPS = [
+    { key: "down_left", label: "Down Left", instruction: "Look down and to your left.", yawRange: [0.03, 0.1], pitchRange: [0.04, 0.11] },
+    { key: "down_right", label: "Down Right", instruction: "Look down and to your right.", yawRange: [-0.1, -0.03], pitchRange: [0.04, 0.11] },
+    { key: "profile_left", label: "Profile Left", instruction: "Turn to a deeper left angle.", yawRange: [0.105, 0.175], pitchRange: [-0.09, 0.09] },
+    { key: "profile_right", label: "Profile Right", instruction: "Turn to a deeper right angle.", yawRange: [-0.175, -0.105], pitchRange: [-0.09, 0.09] },
+    { key: "high_left", label: "High Left", instruction: "Lift your chin and turn left.", yawRange: [0.05, 0.12], pitchRange: [-0.095, -0.028] },
+    { key: "high_right", label: "High Right", instruction: "Lift your chin and turn right.", yawRange: [-0.12, -0.05], pitchRange: [-0.095, -0.028] },
+    { key: "chin_left", label: "Chin Left", instruction: "Lower your chin and turn left.", yawRange: [0.05, 0.12], pitchRange: [0.045, 0.12] },
+    { key: "chin_right", label: "Chin Right", instruction: "Lower your chin and turn right.", yawRange: [-0.12, -0.05], pitchRange: [0.045, 0.12] },
+    { key: "high_center", label: "High Center", instruction: "Look higher while staying centered.", yawRange: [-0.06, 0.06], pitchRange: [-0.11, -0.05] },
+    { key: "low_center", label: "Low Center", instruction: "Look lower while staying centered.", yawRange: [-0.06, 0.06], pitchRange: [0.09, 0.14] },
+  ];
+  const FACE_CAPTURE_PROFILES = {
+    standard: {
+      key: "standard",
+      label: "Standard Profile",
+      target: STANDARD_FACE_CAPTURE_STEPS.length,
+      badgeText: "10 guided angles",
+      steps: STANDARD_FACE_CAPTURE_STEPS,
+    },
+    similar_faces: {
+      key: "similar_faces",
+      label: "Similar Faces Mode",
+      target: STANDARD_FACE_CAPTURE_STEPS.length + SIMILAR_FACE_CAPTURE_EXTRA_STEPS.length,
+      badgeText: "20 guided angles",
+      steps: [...STANDARD_FACE_CAPTURE_STEPS, ...SIMILAR_FACE_CAPTURE_EXTRA_STEPS],
+    },
+  };
+  const FACE_GUIDE_RING_CLASSES = {
+    idle: "h-[72%] w-[48%] rounded-[999px] border-2 border-white/70 shadow-[0_0_0_999px_rgba(2,6,23,0.58)] transition-all duration-300",
+    detected: "h-[72%] w-[48%] rounded-[999px] border-2 border-sky-300/85 shadow-[0_0_0_999px_rgba(2,6,23,0.58)] transition-all duration-300",
+    aligned: "h-[72%] w-[48%] rounded-[999px] border-2 border-emerald-400 shadow-[0_0_0_999px_rgba(2,6,23,0.54),0_0_24px_rgba(52,211,153,0.3)] transition-all duration-300",
+    warning: "h-[72%] w-[48%] rounded-[999px] border-2 border-amber-300 shadow-[0_0_0_999px_rgba(2,6,23,0.6)] transition-all duration-300",
+  };
+  const FACE_CAPTURE_BRIGHTNESS_MIN = 52;
+  const FACE_CAPTURE_BRIGHTNESS_MAX = 208;
+  const FACE_CAPTURE_CONTRAST_MIN = 26;
+  const FACE_CAPTURE_SHARPNESS_MIN = 18;
+  const FACE_CAPTURE_MIN_HAMMING_DISTANCE = 6;
   const SECTION_STATS_EMPTY_NOTE = "Select a year level and section to view detailed gender statistics.";
   const REENROLL_ASSIGNMENT_NEW_SECTION_VALUE = "__new_section__";
 
@@ -31,7 +75,9 @@
     face: {
       studentId: "",
       mode: "register",
+      captureProfile: "standard",
       captures: [],
+      captureMeta: [],
       stream: null,
       mesh: null,
       lastResults: null,
@@ -39,6 +85,7 @@
       processing: false,
       alignFrames: 0,
       cooldownUntil: 0,
+      started: false,
     },
     requests: {
       students: null,
@@ -188,6 +235,10 @@
     guideText: document.getElementById("guideText"),
     captureProgressText: document.getElementById("captureProgressText"),
     faceStatus: document.getElementById("faceStatus"),
+    startCaptureBtn: document.getElementById("startCaptureBtn"),
+    faceCaptureProfileStandard: document.getElementById("faceCaptureProfileStandard"),
+    faceCaptureProfileSimilar: document.getElementById("faceCaptureProfileSimilar"),
+    faceCaptureTarget: document.getElementById("faceCaptureTarget"),
     stepTags: document.getElementById("stepTags"),
     captureGrid: document.getElementById("captureGrid"),
     resetCaptureBtn: document.getElementById("resetCaptureBtn"),
@@ -1249,6 +1300,16 @@
     return data;
   };
 
+  const buildInlinePdfUrl = (url) => {
+    try {
+      const parsed = new URL(String(url || ""), window.location.origin);
+      parsed.searchParams.set("disposition", "inline");
+      return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+    } catch (_error) {
+      return url;
+    }
+  };
+
   const updateStudentsExportLink = () => {
     if (!refs.studentsExportBtn) return;
     const params = new URLSearchParams();
@@ -1259,11 +1320,24 @@
     if (state.filters.faceStatus) params.set("face_status", state.filters.faceStatus);
     const query = params.toString();
     const url = query ? `/students/export_pdf?${query}` : "/students/export_pdf";
+    const printUrl = buildInlinePdfUrl(url);
+
     if (refs.studentsExportBtn.dataset) {
       refs.studentsExportBtn.dataset.downloadUrl = url;
+      refs.studentsExportBtn.dataset.printUrl = printUrl;
     }
-    if (refs.studentsExportBtn.tagName === "A") {
-      refs.studentsExportBtn.href = url;
+
+    const downloadLink = refs.studentsExportBtn.querySelector("[data-pdf-download-link]");
+    if (downloadLink) {
+      downloadLink.href = url;
+      if (downloadLink.dataset) {
+        downloadLink.dataset.downloadUrl = url;
+      }
+    }
+
+    const printButton = refs.studentsExportBtn.querySelector("[data-pdf-print-button]");
+    if (printButton && printButton.dataset) {
+      printButton.dataset.printUrl = printUrl;
     }
   };
 
@@ -1304,7 +1378,7 @@
     }
     const restoreTarget = closedEntry?.lastFocus || state.lastFocus;
     if (restoreTarget && typeof restoreTarget.focus === "function") restoreTarget.focus();
-    if (id === "faceModal") stopFaceCapture();
+    if (id === "faceModal") resetFaceCaptureSession({ clearStudent: true });
     if (id === "deleteModal") state.deleteTarget = { id: "", label: "" };
     if (id === "addModal") {
       clearAddFormValidation();
@@ -1813,46 +1887,233 @@
     }
   };
 
-  const evaluateStep = (stepKey, yaw, pitch) => {
-    if (stepKey === "front") return Math.abs(yaw) < 0.035 && Math.abs(pitch) < 0.035;
-    if (stepKey === "left") return yaw > 0.035 && Math.abs(pitch) < 0.08;
-    if (stepKey === "right") return yaw < -0.035 && Math.abs(pitch) < 0.08;
-    if (stepKey === "up") return pitch < -0.018 && Math.abs(yaw) < 0.09;
-    if (stepKey === "down") return pitch > 0.018 && Math.abs(yaw) < 0.09;
-    return false;
+  const clampNumber = (value, min, max) => Math.min(max, Math.max(min, value));
+
+  const normalizeFaceCaptureProfile = (value) => {
+    const text = String(value || "standard").trim().toLowerCase();
+    return text === "similar_faces" ? "similar_faces" : "standard";
   };
 
-    const drawOverlay = (ctx, width, height, aligned, hasFace) => {
-    ctx.clearRect(0, 0, width, height);
+  const getFaceCaptureProfileConfig = () => FACE_CAPTURE_PROFILES[normalizeFaceCaptureProfile(state.face.captureProfile)] || FACE_CAPTURE_PROFILES.standard;
+  const getFaceCaptureSteps = () => getFaceCaptureProfileConfig().steps;
+  const getCurrentFaceStep = () => getFaceCaptureSteps()[state.face.captures.length] || null;
+
+  const setGuideRingState = (stateKey = "idle") => {
     const ring = document.getElementById("faceGuideRing");
     if (ring) {
-      if (!hasFace) {
-        ring.className = "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[66%] aspect-square rounded-full border-4 border-slate-400/30 transition-colors duration-300";
-      } else if (aligned) {
-        ring.className = "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[66%] aspect-square rounded-full border-4 border-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.4)] transition-colors duration-300";
-      } else {
-        ring.className = "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[66%] aspect-square rounded-full border-4 border-blue-400/60 shadow-[0_0_10px_rgba(96,165,250,0.2)] transition-colors duration-300";
-      }
+      ring.className = FACE_GUIDE_RING_CLASSES[stateKey] || FACE_GUIDE_RING_CLASSES.idle;
     }
   };
 
+  const getGuideMetrics = (width, height) => ({
+    cx: width / 2,
+    cy: height / 2,
+    rx: width * 0.24,
+    ry: height * 0.36,
+  });
+
+  const getFaceBounds = (landmarks, width, height) => {
+    let minX = width;
+    let minY = height;
+    let maxX = 0;
+    let maxY = 0;
+    landmarks.forEach((landmark) => {
+      const x = clampNumber(landmark.x * width, 0, width);
+      const y = clampNumber(landmark.y * height, 0, height);
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+    });
+    return {
+      minX,
+      minY,
+      maxX,
+      maxY,
+      width: Math.max(0, maxX - minX),
+      height: Math.max(0, maxY - minY),
+      centerX: (minX + maxX) / 2,
+      centerY: (minY + maxY) / 2,
+    };
+  };
+
+  const pointInsideGuide = (point, guide, padding = 0.92) => {
+    const dx = (point.x - guide.cx) / (guide.rx * padding);
+    const dy = (point.y - guide.cy) / (guide.ry * padding);
+    return (dx * dx) + (dy * dy) <= 1;
+  };
+
+  const isFaceInsideGuide = (landmarks, width, height) => {
+    const guide = getGuideMetrics(width, height);
+    const bounds = getFaceBounds(landmarks, width, height);
+    const keyPoints = [1, 10, 152, 234, 454, 33, 263].map((index) => ({
+      x: landmarks[index].x * width,
+      y: landmarks[index].y * height,
+    }));
+
+    if (!keyPoints.every((point) => pointInsideGuide(point, guide))) {
+      return false;
+    }
+
+    const faceHeightRatio = bounds.height / (guide.ry * 2);
+    const faceWidthRatio = bounds.width / (guide.rx * 2);
+    return faceHeightRatio >= 0.52 && faceHeightRatio <= 0.98 && faceWidthRatio >= 0.44 && faceWidthRatio <= 0.92;
+  };
+
+  const evaluateStep = (step, yaw, pitch) => {
+    if (!step) return false;
+    return yaw >= step.yawRange[0] && yaw <= step.yawRange[1] && pitch >= step.pitchRange[0] && pitch <= step.pitchRange[1];
+  };
+
+  const drawOverlay = (ctx, width, height, stateKey = "idle") => {
+    if (ctx) ctx.clearRect(0, 0, width, height);
+    setGuideRingState(stateKey);
+  };
+
+  const buildCaptureFingerprint = (canvas) => {
+    const fingerprintCanvas = document.createElement("canvas");
+    fingerprintCanvas.width = 8;
+    fingerprintCanvas.height = 8;
+    const fingerprintContext = fingerprintCanvas.getContext("2d");
+    fingerprintContext.drawImage(canvas, 0, 0, 8, 8);
+    const { data } = fingerprintContext.getImageData(0, 0, 8, 8);
+    const grayscale = [];
+    for (let index = 0; index < data.length; index += 4) {
+      grayscale.push((data[index] * 0.299) + (data[index + 1] * 0.587) + (data[index + 2] * 0.114));
+    }
+    const average = grayscale.reduce((sum, value) => sum + value, 0) / Math.max(1, grayscale.length);
+    return grayscale.map((value) => (value >= average ? "1" : "0")).join("");
+  };
+
+  const getHammingDistance = (left, right) => {
+    if (!left || !right || left.length !== right.length) return Number.MAX_SAFE_INTEGER;
+    let distance = 0;
+    for (let index = 0; index < left.length; index += 1) {
+      if (left[index] !== right[index]) distance += 1;
+    }
+    return distance;
+  };
+
+  const buildFaceCropCanvas = (video, landmarks, width, height) => {
+    const bounds = getFaceBounds(landmarks, width, height);
+    const baseSize = Math.max(bounds.width, bounds.height);
+    if (!baseSize) return null;
+    const cropSize = clampNumber(baseSize * 1.85, 220, Math.min(width, height));
+    const centerX = clampNumber(bounds.centerX, cropSize / 2, width - (cropSize / 2));
+    const centerY = clampNumber(bounds.centerY - (baseSize * 0.05), cropSize / 2, height - (cropSize / 2));
+    const sx = clampNumber(centerX - (cropSize / 2), 0, Math.max(0, width - cropSize));
+    const sy = clampNumber(centerY - (cropSize / 2), 0, Math.max(0, height - cropSize));
+    const canvas = document.createElement("canvas");
+    canvas.width = 320;
+    canvas.height = 320;
+    const context = canvas.getContext("2d");
+    context.drawImage(video, sx, sy, cropSize, cropSize, 0, 0, canvas.width, canvas.height);
+    return canvas;
+  };
+
+  const analyzeCaptureQuality = (canvas) => {
+    const context = canvas.getContext("2d");
+    const width = canvas.width;
+    const height = canvas.height;
+    const { data } = context.getImageData(0, 0, width, height);
+    const grayscale = new Float32Array(width * height);
+    let total = 0;
+    let totalSquared = 0;
+
+    for (let index = 0, pixel = 0; index < data.length; index += 4, pixel += 1) {
+      const value = (data[index] * 0.299) + (data[index + 1] * 0.587) + (data[index + 2] * 0.114);
+      grayscale[pixel] = value;
+      total += value;
+      totalSquared += value * value;
+    }
+
+    const count = grayscale.length || 1;
+    const brightness = total / count;
+    const variance = Math.max(0, (totalSquared / count) - (brightness * brightness));
+    const contrast = Math.sqrt(variance);
+
+    let sharpnessTotal = 0;
+    let sharpnessCount = 0;
+    for (let y = 1; y < height - 1; y += 1) {
+      for (let x = 1; x < width - 1; x += 1) {
+        const index = (y * width) + x;
+        sharpnessTotal += Math.abs(grayscale[index] - grayscale[index + 1]) + Math.abs(grayscale[index] - grayscale[index + width]);
+        sharpnessCount += 1;
+      }
+    }
+    const sharpness = sharpnessCount ? sharpnessTotal / sharpnessCount : 0;
+
+    if (brightness < FACE_CAPTURE_BRIGHTNESS_MIN) {
+      return { ok: false, reason: "Increase lighting before capturing the next angle.", brightness, contrast, sharpness };
+    }
+    if (brightness > FACE_CAPTURE_BRIGHTNESS_MAX) {
+      return { ok: false, reason: "Reduce glare or strong backlight before capturing.", brightness, contrast, sharpness };
+    }
+    if (contrast < FACE_CAPTURE_CONTRAST_MIN) {
+      return { ok: false, reason: "Add more contrast so the face is easier to separate from the background.", brightness, contrast, sharpness };
+    }
+    if (sharpness < FACE_CAPTURE_SHARPNESS_MIN) {
+      return { ok: false, reason: "Hold still for a sharper capture.", brightness, contrast, sharpness };
+    }
+    return { ok: true, brightness, contrast, sharpness };
+  };
+
   const renderFaceState = () => {
-    refs.captureProgressText.textContent = `${state.face.captures.length} / ${steps.length}`;
-    refs.submitFaceBtn.disabled = state.face.captures.length < steps.length;
+    const profile = getFaceCaptureProfileConfig();
+    const steps = profile.steps;
+    const completedCount = state.face.captures.length;
+    const registrationComplete = completedCount >= steps.length;
 
-    refs.stepTags.innerHTML = steps.map((step, index) => {
-      let cls = "bg-slate-100 border-slate-200 text-slate-500";
-      if (index < state.face.captures.length) cls = "bg-emerald-100 border-emerald-300 text-emerald-700";
-      if (index === state.face.captures.length) cls = "bg-blue-100 border-blue-300 text-blue-700";
-      return `<div class="rounded-lg border px-2 py-1 text-xs font-semibold ${cls}">${step.label}</div>`;
-    }).join("");
+    if (refs.captureProgressText) refs.captureProgressText.textContent = `${completedCount} / ${steps.length} captures`;
+    if (refs.submitFaceBtn) refs.submitFaceBtn.disabled = completedCount < steps.length;
+    if (refs.faceCaptureTarget) refs.faceCaptureTarget.textContent = profile.badgeText;
 
-    refs.captureGrid.innerHTML = steps.map((step, index) => {
-      const image = state.face.captures[index];
-      return image
-        ? `<div class="rounded-lg border p-1"><img src="${image}" alt="${step.label}" class="h-16 w-full object-cover rounded"></div>`
-        : `<div class="h-16 rounded-lg border border-dashed bg-slate-50 text-[10px] text-slate-400 flex items-center justify-center">${step.label}</div>`;
-    }).join("");
+    if (refs.startCaptureBtn) {
+      refs.startCaptureBtn.disabled = state.face.started || registrationComplete;
+      refs.startCaptureBtn.textContent = registrationComplete ? "Registration Complete" : "Start Registration";
+    }
+
+    if (refs.resetCaptureBtn) {
+      refs.resetCaptureBtn.disabled = !state.face.started && completedCount === 0;
+    }
+
+    if (refs.faceCaptureProfileStandard) {
+      refs.faceCaptureProfileStandard.checked = profile.key === "standard";
+      refs.faceCaptureProfileStandard.disabled = state.face.started || completedCount > 0;
+    }
+    if (refs.faceCaptureProfileSimilar) {
+      refs.faceCaptureProfileSimilar.checked = profile.key === "similar_faces";
+      refs.faceCaptureProfileSimilar.disabled = state.face.started || completedCount > 0;
+    }
+
+    if (refs.stepTags) {
+      refs.stepTags.innerHTML = steps.map((step, index) => {
+        let toneClass = "border-slate-200 bg-slate-50 text-slate-500";
+        if (index < completedCount) toneClass = "border-emerald-200 bg-emerald-50 text-emerald-700";
+        if (index === completedCount && !registrationComplete) toneClass = "border-sky-200 bg-sky-50 text-sky-700";
+        return `<div class="rounded-2xl border ${toneClass} px-3 py-2">
+            <p class="text-[10px] font-semibold uppercase tracking-[0.24em]">${index + 1}</p>
+            <p class="mt-1 text-sm font-semibold text-slate-900">${esc(step.label)}</p>
+            <p class="mt-1 text-[11px] text-slate-500">${esc(step.instruction)}</p>
+          </div>`;
+      }).join("");
+    }
+
+    if (refs.captureGrid) {
+      refs.captureGrid.innerHTML = steps.map((step, index) => {
+        const image = state.face.captures[index];
+        const meta = state.face.captureMeta[index];
+        return image
+          ? `<div class="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+              <img src="${image}" alt="${esc(step.label)}" class="h-24 w-full object-cover">
+              <div class="px-2 py-2">
+                <p class="text-[11px] font-semibold uppercase tracking-[0.22em] text-emerald-600">${index + 1}</p>
+                <p class="mt-1 text-xs font-semibold text-slate-900">${esc(meta?.label || step.label)}</p>
+              </div>
+            </div>`
+          : `<div class="flex h-24 items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-2 text-center text-[11px] font-medium text-slate-400">${esc(step.label)}</div>`;
+      }).join("");
+    }
   };
 
   const stopCameraTracks = () => {
@@ -1860,7 +2121,7 @@
       state.face.stream.getTracks().forEach((track) => track.stop());
       state.face.stream = null;
     }
-    refs.faceVideo.srcObject = null;
+    if (refs.faceVideo) refs.faceVideo.srcObject = null;
   };
 
   const stopFaceCapture = () => {
@@ -1872,32 +2133,87 @@
     state.face.mesh = null;
     state.face.lastResults = null;
     state.face.processing = false;
+    if (refs.faceOverlay) {
+      const overlayContext = refs.faceOverlay.getContext("2d");
+      overlayContext?.clearRect(0, 0, refs.faceOverlay.width || 0, refs.faceOverlay.height || 0);
+    }
+    setGuideRingState("idle");
   };
 
-  const captureCurrentFrame = () => {
-    if (!refs.faceVideo.videoWidth || !refs.faceVideo.videoHeight) return;
-    refs.faceCaptureCanvas.width = refs.faceVideo.videoWidth;
-    refs.faceCaptureCanvas.height = refs.faceVideo.videoHeight;
-    refs.faceCaptureCanvas.getContext("2d").drawImage(refs.faceVideo, 0, 0, refs.faceCaptureCanvas.width, refs.faceCaptureCanvas.height);
-    state.face.captures.push(refs.faceCaptureCanvas.toDataURL("image/jpeg", 0.92));
+  const resetFaceCaptureSession = ({ clearStudent = false } = {}) => {
+    stopFaceCapture();
+    state.face.captures = [];
+    state.face.captureMeta = [];
+    state.face.alignFrames = 0;
+    state.face.cooldownUntil = 0;
+    state.face.started = false;
+    if (clearStudent) {
+      state.face.studentId = "";
+      state.face.mode = "register";
+      state.face.captureProfile = "standard";
+    }
+    if (refs.guideText) refs.guideText.textContent = "Press Start Registration to begin.";
+    if (refs.faceStatus) refs.faceStatus.textContent = "Choose a capture profile, then start the registration camera.";
+    renderFaceState();
+  };
+
+  const captureCurrentFrame = (step, landmarks, width, height, pose) => {
+    const cropCanvas = buildFaceCropCanvas(refs.faceVideo, landmarks, width, height);
+    if (!cropCanvas) {
+      state.face.alignFrames = 0;
+      state.face.cooldownUntil = Date.now() + 700;
+      refs.faceStatus.textContent = "Move closer so the face fills the oval guide.";
+      return;
+    }
+
+    const quality = analyzeCaptureQuality(cropCanvas);
+    if (!quality.ok) {
+      state.face.alignFrames = 0;
+      state.face.cooldownUntil = Date.now() + 700;
+      refs.faceStatus.textContent = quality.reason;
+      return;
+    }
+
+    const fingerprint = buildCaptureFingerprint(cropCanvas);
+    const duplicate = state.face.captureMeta.some((meta) => getHammingDistance(meta.fingerprint, fingerprint) < FACE_CAPTURE_MIN_HAMMING_DISTANCE);
+    if (duplicate) {
+      state.face.alignFrames = 0;
+      state.face.cooldownUntil = Date.now() + 700;
+      refs.faceStatus.textContent = "That angle is too similar. Shift to the next guided position.";
+      return;
+    }
+
+    state.face.captures.push(cropCanvas.toDataURL("image/jpeg", 0.94));
+    state.face.captureMeta.push({
+      step_key: step.key,
+      label: step.label,
+      instruction: step.instruction,
+      yaw: Number(pose.yaw.toFixed(4)),
+      pitch: Number(pose.pitch.toFixed(4)),
+      brightness: Number(quality.brightness.toFixed(2)),
+      contrast: Number(quality.contrast.toFixed(2)),
+      sharpness: Number(quality.sharpness.toFixed(2)),
+      fingerprint,
+    });
 
     state.face.alignFrames = 0;
-    state.face.cooldownUntil = Date.now() + 900;
+    state.face.cooldownUntil = Date.now() + 950;
+    const steps = getFaceCaptureSteps();
     if (state.face.captures.length >= steps.length) {
+      state.face.started = false;
+      refs.guideText.textContent = "All required captures are complete.";
       refs.faceStatus.textContent = "Capture sequence complete. Save face registration.";
-      stopCameraTracks();
-      if (state.face.rafId) {
-        cancelAnimationFrame(state.face.rafId);
-        state.face.rafId = null;
-      }
+      stopFaceCapture();
     } else {
-      refs.faceStatus.textContent = `Captured ${state.face.captures.length}/${steps.length}. Moving to next angle.`;
+      const nextStep = getCurrentFaceStep();
+      refs.guideText.textContent = nextStep?.instruction || "Continue with the guided sequence.";
+      refs.faceStatus.textContent = `Captured ${state.face.captures.length}/${steps.length}. Next: ${nextStep?.label || "Save registration"}.`;
     }
     renderFaceState();
   };
 
   const processFaceFrame = async () => {
-    if (!state.face.mesh || !state.face.stream) {
+    if (!state.face.started || !state.face.mesh || !state.face.stream) {
       state.face.rafId = null;
       return;
     }
@@ -1920,8 +2236,6 @@
       const width = video.videoWidth || video.clientWidth;
       const height = video.videoHeight || video.clientHeight;
       if (!width || !height) {
-        state.face.processing = false;
-        state.face.rafId = requestAnimationFrame(processFaceFrame);
         return;
       }
 
@@ -1929,11 +2243,12 @@
       if (refs.faceOverlay.height !== height) refs.faceOverlay.height = height;
       const context = refs.faceOverlay.getContext("2d");
 
-      const step = steps[state.face.captures.length];
+      const step = getCurrentFaceStep();
       if (!step) {
-        drawOverlay(context, width, height, true, true);
-        state.face.processing = false;
-        state.face.rafId = requestAnimationFrame(processFaceFrame);
+        state.face.started = false;
+        refs.faceStatus.textContent = "Capture sequence complete. Save face registration.";
+        stopFaceCapture();
+        renderFaceState();
         return;
       }
 
@@ -1942,14 +2257,19 @@
       const faces = results.multiFaceLandmarks || [];
       if (faces.length !== 1) {
         state.face.alignFrames = 0;
-        drawOverlay(context, width, height, false, false);
-        refs.faceStatus.textContent = faces.length > 1 ? "Multiple faces detected. Keep one face in frame." : "Waiting for face detection.";
-        state.face.processing = false;
-        state.face.rafId = requestAnimationFrame(processFaceFrame);
+        drawOverlay(context, width, height, faces.length > 1 ? "warning" : "idle");
+        refs.faceStatus.textContent = faces.length > 1 ? "Keep only one face inside the oval guide." : "Waiting for one face inside the oval guide.";
         return;
       }
 
       const landmarks = faces[0];
+      if (!isFaceInsideGuide(landmarks, width, height)) {
+        state.face.alignFrames = 0;
+        drawOverlay(context, width, height, "warning");
+        refs.faceStatus.textContent = "Center the face inside the oval guide before capture.";
+        return;
+      }
+
       const left = landmarks[234];
       const right = landmarks[454];
       const nose = landmarks[1];
@@ -1958,60 +2278,73 @@
 
       const yaw = nose.x - ((left.x + right.x) / 2);
       const pitch = nose.y - ((top.y + bottom.y) / 2);
-      const aligned = evaluateStep(step.key, yaw, pitch);
+      const aligned = evaluateStep(step, yaw, pitch);
 
-      drawOverlay(context, width, height, aligned, true);
+      drawOverlay(context, width, height, aligned ? "aligned" : "detected");
 
       if (Date.now() >= state.face.cooldownUntil) {
         state.face.alignFrames = aligned ? state.face.alignFrames + 1 : 0;
       }
 
-      refs.faceStatus.textContent = aligned ? `Alignment OK for ${step.label}. Hold still...` : `Adjust for ${step.label}.`;
+      refs.faceStatus.textContent = aligned ? `Alignment locked for ${step.label}. Hold still...` : `Adjust for ${step.label}.`;
 
       if (state.face.alignFrames >= 4 && Date.now() >= state.face.cooldownUntil) {
-        captureCurrentFrame();
+        captureCurrentFrame(step, landmarks, width, height, { yaw, pitch });
       }
     } catch (_error) {
       refs.faceStatus.textContent = "Face detection processing error.";
+      setGuideRingState("warning");
     } finally {
       state.face.processing = false;
-      state.face.rafId = requestAnimationFrame(processFaceFrame);
+      if (state.face.started && state.face.mesh && state.face.stream) {
+        state.face.rafId = requestAnimationFrame(processFaceFrame);
+      } else {
+        state.face.rafId = null;
+      }
     }
   };
 
   const startFaceCapture = async () => {
+    if (state.face.started) return;
+    const step = getCurrentFaceStep();
+    if (!step) {
+      refs.faceStatus.textContent = "Capture sequence is already complete.";
+      return;
+    }
     stopFaceCapture();
     state.face.lastResults = null;
+    state.face.alignFrames = 0;
+    state.face.cooldownUntil = 0;
+    state.face.started = true;
     renderFaceState();
-    refs.guideText.textContent = steps[state.face.captures.length]?.instruction || "Preparing capture...";
+    refs.guideText.textContent = step.instruction;
     refs.faceStatus.textContent = "Starting camera...";
 
     if (typeof FaceMesh === "undefined") {
+      state.face.started = false;
       refs.faceStatus.textContent = "FaceMesh library failed to load.";
+      renderFaceState();
       showToast("FaceMesh library failed to load.", true);
       return;
     }
 
-        try {
+    try {
       const constraints = {
-        video: { 
-          width: { ideal: 960 }, 
-          height: { ideal: 720 }, 
-          facingMode: "user"
+        video: {
+          width: { ideal: 960 },
+          height: { ideal: 720 },
+          facingMode: "user",
         },
         audio: false,
       };
-      
       state.face.stream = await navigator.mediaDevices.getUserMedia(constraints);
-      
       const videoTrack = state.face.stream.getVideoTracks()[0];
-      if (videoTrack && typeof videoTrack.applyConstraints === 'function') {
+      if (videoTrack && typeof videoTrack.applyConstraints === "function") {
         const capabilities = videoTrack.getCapabilities ? videoTrack.getCapabilities() : {};
-        if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
-          await videoTrack.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
+        if (capabilities.focusMode && capabilities.focusMode.includes("continuous")) {
+          await videoTrack.applyConstraints({ advanced: [{ focusMode: "continuous" }] });
         }
       }
-      
       refs.faceVideo.srcObject = state.face.stream;
       await refs.faceVideo.play();
 
@@ -2019,17 +2352,21 @@
       state.face.mesh.setOptions({
         maxNumFaces: 1,
         refineLandmarks: true,
-        minDetectionConfidence: 0.6,
-        minTrackingConfidence: 0.6,
+        minDetectionConfidence: 0.7,
+        minTrackingConfidence: 0.7,
       });
       state.face.mesh.onResults((results) => {
         state.face.lastResults = results || null;
       });
 
-      refs.faceStatus.textContent = "Camera ready. Follow the guide.";
+      refs.faceStatus.textContent = "Camera ready. Hold one face inside the oval guide.";
+      setGuideRingState("idle");
       state.face.rafId = requestAnimationFrame(processFaceFrame);
     } catch (_error) {
+      state.face.started = false;
+      stopFaceCapture();
       refs.faceStatus.textContent = "Unable to access camera. Check browser permissions.";
+      renderFaceState();
       showToast("Unable to access camera.", true);
     }
   };
@@ -2042,29 +2379,30 @@
     try {
       const data = await api(`/api/students/${studentId}`);
       const student = data.student || {};
+      resetFaceCaptureSession({ clearStudent: true });
       state.face.studentId = student.student_ref_id || studentId;
       if (!state.face.studentId) {
         showToast("Student profile was not found for face registration.", true);
         return;
       }
       state.face.mode = mode === "update" ? "update" : "register";
-      state.face.captures = [];
-      state.face.alignFrames = 0;
-      state.face.cooldownUntil = 0;
 
       refs.faceTitle.textContent = state.face.mode === "update" ? "Update Face Registration" : "Register Face";
       refs.faceSubtitle.textContent = `${student.name || ""} (${student.lrn || student.student_id || ""})`;
+      refs.guideText.textContent = "Press Start Registration to begin.";
+      refs.faceStatus.textContent = "Choose a capture profile, then start the registration camera.";
 
       showModal("faceModal");
-      await startFaceCapture();
+      renderFaceState();
     } catch (error) {
       showToast(error.message, true);
     }
   };
 
   const submitFaceRegistration = async () => {
+    const steps = getFaceCaptureSteps();
     if (!state.face.studentId || state.face.captures.length < steps.length) {
-      showToast("Complete all required face angles first.", true);
+      showToast("Complete all required face captures first.", true);
       return;
     }
 
@@ -2074,7 +2412,15 @@
       : `/api/students/${state.face.studentId}/face/register`;
 
     try {
-      await api(url, { method: updateMode ? "PUT" : "POST", body: { faces: state.face.captures } });
+      await api(url, {
+        method: updateMode ? "PUT" : "POST",
+        body: {
+          faces: state.face.captures,
+          capture_profile: state.face.captureProfile,
+          capture_target: steps.length,
+          capture_meta: state.face.captureMeta.map(({ fingerprint, ...meta }) => meta),
+        },
+      });
       closeModal("faceModal");
       if (updateMode) showFaceUpdateSuccessAnimation();
       showToast(updateMode ? "Face updated successfully." : "Face registered successfully.");
@@ -2693,14 +3039,30 @@
       loadStudents();
     });
 
-    refs.resetCaptureBtn.addEventListener("click", async () => {
-      state.face.captures = [];
-      state.face.alignFrames = 0;
-      state.face.cooldownUntil = 0;
-      await startFaceCapture();
+    refs.faceCaptureProfileStandard?.addEventListener("change", () => {
+      state.face.captureProfile = "standard";
+      renderFaceState();
     });
 
-    refs.submitFaceBtn.addEventListener("click", submitFaceRegistration);
+    refs.faceCaptureProfileSimilar?.addEventListener("change", () => {
+      state.face.captureProfile = "similar_faces";
+      renderFaceState();
+    });
+
+    refs.startCaptureBtn?.addEventListener("click", startFaceCapture);
+
+    refs.resetCaptureBtn?.addEventListener("click", () => {
+      const studentId = state.face.studentId;
+      const mode = state.face.mode;
+      const captureProfile = state.face.captureProfile;
+      resetFaceCaptureSession();
+      state.face.studentId = studentId;
+      state.face.mode = mode;
+      state.face.captureProfile = captureProfile;
+      renderFaceState();
+    });
+
+    refs.submitFaceBtn?.addEventListener("click", submitFaceRegistration);
 
     document.querySelectorAll("[data-close]").forEach((button) => {
       button.addEventListener("click", () => closeModal(button.dataset.close));

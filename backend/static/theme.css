@@ -176,6 +176,79 @@ html[data-theme="dark"] .ring-offset-2 {
   --tw-ring-offset-color: #0f172a !important;
 }
 
+.stat-overview-card {
+  --stat-accent: 15 118 110;
+  border: 1px solid rgba(var(--stat-accent), 0.16);
+  border-radius: 1.5rem;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.94)),
+    linear-gradient(135deg, rgba(var(--stat-accent), 0.06), rgba(var(--stat-accent), 0.015));
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.05);
+  min-height: 10.25rem;
+}
+
+.stat-overview-card--emerald { --stat-accent: 5 150 105; }
+.stat-overview-card--blue { --stat-accent: 37 99 235; }
+.stat-overview-card--violet { --stat-accent: 124 58 237; }
+.stat-overview-card--sky { --stat-accent: 2 132 199; }
+.stat-overview-card--pink { --stat-accent: 219 39 119; }
+.stat-overview-card--cyan { --stat-accent: 8 145 178; }
+.stat-overview-card--amber { --stat-accent: 217 119 6; }
+.stat-overview-card--rose { --stat-accent: 225 29 72; }
+
+.stat-overview-kicker {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(var(--stat-accent), 0.96);
+}
+
+.stat-overview-kicker svg {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+}
+
+.stat-overview-value {
+  margin-top: 1rem;
+  font-size: clamp(2.25rem, 3vw, 2.85rem);
+  line-height: 0.95;
+  font-weight: 700;
+  letter-spacing: -0.045em;
+  color: var(--app-text);
+}
+
+.stat-overview-note {
+  margin-top: 0.55rem;
+  font-size: 0.76rem;
+  line-height: 1.45;
+  color: var(--app-text-soft);
+}
+
+html[data-theme="dark"] .stat-overview-card {
+  border-color: rgba(var(--stat-accent), 0.28);
+  background:
+    linear-gradient(180deg, rgba(17, 28, 47, 0.96), rgba(12, 19, 33, 0.98)),
+    linear-gradient(135deg, rgba(var(--stat-accent), 0.18), rgba(var(--stat-accent), 0.045));
+  box-shadow: 0 16px 36px rgba(2, 6, 23, 0.36);
+}
+
+html[data-theme="dark"] .stat-overview-kicker {
+  color: rgba(var(--stat-accent), 0.92);
+}
+
+html[data-theme="dark"] .stat-overview-value {
+  color: #f8fafc;
+}
+
+html[data-theme="dark"] .stat-overview-note {
+  color: #a5b4c7;
+}
+
 /* Global dropdown/select polish */
 select {
   appearance: none;

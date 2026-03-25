@@ -305,11 +305,6 @@ class EnhancedClientCamera {
                     this.handleMultipleFaces(faces);
                 }
                 
-                // Process each detected face
-                for (const face of faces) {
-                    await this.processDetectedFace(face);
-                }
-                
                 this.metrics.facesDetected += faces.length;
             } else {
                 // Clear overlay if no faces detected

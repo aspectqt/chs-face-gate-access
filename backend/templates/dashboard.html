@@ -117,6 +117,239 @@
             padding-bottom: 0.75rem;
         }
 
+        #scanNameOverlay,
+        #scanOverlay,
+        #scanEventBadge {
+            display: none !important;
+        }
+
+        .scan-activity-feed {
+            scrollbar-width: thin;
+            scrollbar-color: rgba(148, 163, 184, 0.7) transparent;
+        }
+
+        .scan-activity-feed::-webkit-scrollbar {
+            width: 0.4rem;
+        }
+
+        .scan-activity-feed::-webkit-scrollbar-thumb {
+            background: rgba(148, 163, 184, 0.7);
+            border-radius: 999px;
+        }
+
+        .scan-activity-item {
+            opacity: 1;
+            transform: translateY(0);
+            transition: opacity 220ms ease, transform 220ms ease, box-shadow 220ms ease;
+        }
+
+        .scan-activity-item.scan-activity-enter {
+            opacity: 0;
+            transform: translateY(1rem);
+        }
+
+        .gate-console-shell {
+            border: 1px solid rgba(148, 163, 184, 0.18);
+            border-radius: 1.75rem;
+            background: var(--app-surface-1);
+            box-shadow: 0 14px 32px rgba(15, 23, 42, 0.05);
+            overflow: hidden;
+        }
+
+        .gate-console-panel {
+            border: 1px solid rgba(148, 163, 184, 0.18);
+            border-radius: 1.35rem;
+            background: var(--app-surface-1);
+        }
+
+        .gate-console-panel-soft {
+            background: var(--app-surface-2);
+        }
+
+        .gate-console-camera {
+            background: var(--app-surface-1);
+        }
+
+        .gate-console-kicker {
+            letter-spacing: 0.18em;
+        }
+
+        .gate-console-heading {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .gate-console-heading svg {
+            width: 1.2rem;
+            height: 1.2rem;
+            flex-shrink: 0;
+            color: rgb(5 150 105);
+        }
+
+        .gate-console-divider {
+            border-color: rgba(148, 163, 184, 0.16);
+        }
+
+        .gate-console-frame {
+            border-color: rgba(51, 65, 85, 0.9);
+            background: #020617;
+            box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.08);
+        }
+
+        .gate-console-count {
+            border: 1px solid rgba(148, 163, 184, 0.24);
+            background: rgba(255, 255, 255, 0.72);
+            color: rgb(71 85 105);
+        }
+
+        .gate-console-feed-surface {
+            border: 1px solid rgba(148, 163, 184, 0.16);
+            background: rgba(255, 255, 255, 0.82);
+        }
+
+        .gate-console-feed-item {
+            border: 1px solid rgba(148, 163, 184, 0.18);
+            background: rgba(255, 255, 255, 0.92);
+        }
+
+        .gate-console-feed-overlay {
+            position: absolute;
+            left: 1rem;
+            top: 1rem;
+            bottom: 1rem;
+            z-index: 20;
+            width: min(16rem, calc(100% - 2rem));
+            max-width: 16rem;
+            pointer-events: auto;
+        }
+
+        .gate-console-feed-overlay-panel {
+            display: flex;
+            height: 100%;
+            min-height: 0;
+            flex-direction: column;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 1.25rem;
+            background: rgba(15, 23, 42, 0.3);
+            backdrop-filter: blur(12px);
+            box-shadow: 0 10px 28px rgba(2, 6, 23, 0.2);
+        }
+
+        .gate-console-feed-overlay-surface {
+            margin-top: 0.75rem;
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 1rem;
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .gate-console-feed-overlay .gate-console-count {
+            border-color: rgba(255, 255, 255, 0.18);
+            background: rgba(255, 255, 255, 0.12);
+            color: #f8fafc;
+        }
+
+        .gate-console-feed-overlay .gate-console-feed-item {
+            border-color: rgba(255, 255, 255, 0.16);
+            background: rgba(255, 255, 255, 0.9);
+            box-shadow: 0 8px 18px rgba(15, 23, 42, 0.14);
+        }
+
+        .gate-console-feed-empty {
+            border-color: rgba(255, 255, 255, 0.12);
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .gate-console-control-actions {
+            align-items: center;
+        }
+
+        html[data-theme="dark"] .gate-console-shell {
+            border-color: rgba(71, 85, 105, 0.85);
+            background: linear-gradient(180deg, rgba(17, 28, 47, 0.96), rgba(12, 19, 33, 0.98));
+            box-shadow: 0 18px 40px rgba(2, 6, 23, 0.4);
+        }
+
+        html[data-theme="dark"] .gate-console-panel {
+            border-color: rgba(71, 85, 105, 0.72);
+            background: rgba(17, 28, 47, 0.94);
+        }
+
+        html[data-theme="dark"] .gate-console-panel-soft {
+            background: rgba(23, 37, 59, 0.92);
+        }
+
+        html[data-theme="dark"] .gate-console-kicker {
+            color: #a5b4c7 !important;
+        }
+
+        html[data-theme="dark"] .gate-console-heading svg {
+            color: #34d399;
+        }
+
+        html[data-theme="dark"] .gate-console-divider {
+            border-color: rgba(71, 85, 105, 0.68);
+        }
+
+        html[data-theme="dark"] .gate-console-count {
+            border-color: rgba(71, 85, 105, 0.72);
+            background: rgba(15, 23, 42, 0.72);
+            color: #cbd5e1;
+        }
+
+        html[data-theme="dark"] .gate-console-feed-surface,
+        html[data-theme="dark"] .gate-console-feed-item {
+            border-color: rgba(71, 85, 105, 0.66);
+            background: rgba(15, 23, 42, 0.72);
+        }
+
+        html[data-theme="dark"] .gate-console-feed-overlay-panel {
+            border-color: rgba(148, 163, 184, 0.16);
+            background: rgba(2, 6, 23, 0.42);
+        }
+
+        html[data-theme="dark"] .gate-console-feed-overlay-surface,
+        html[data-theme="dark"] .gate-console-feed-empty {
+            border-color: rgba(148, 163, 184, 0.16);
+            background: rgba(15, 23, 42, 0.2);
+        }
+
+        html[data-theme="dark"] .gate-console-feed-overlay .gate-console-feed-item {
+            border-color: rgba(148, 163, 184, 0.18);
+            background: rgba(15, 23, 42, 0.8);
+        }
+
+        @media (max-width: 767px) {
+            .gate-console-feed-overlay {
+                left: 0.75rem;
+                right: 0.75rem;
+                top: 0.75rem;
+                bottom: auto;
+                width: auto;
+                max-width: none;
+                height: 10rem;
+            }
+        }
+
+        .gate-console-stat {
+            border: 1px solid rgba(226, 232, 240, 0.92);
+            border-radius: 1.25rem;
+            background: rgba(255, 255, 255, 0.96);
+            padding: 0.95rem 1rem;
+        }
+
+        .gate-console-stat-label {
+            display: block;
+            font-size: 0.68rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.14em;
+            color: rgb(100 116 139);
+        }
+
         @media (max-width: 640px) {
             .dashboard-main {
                 padding: 1rem;
@@ -291,114 +524,60 @@
                 {% endif %}
 
                 <!-- STATS -->
-                <section class="grid w-full grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-5">
-                    <article
-                        class="dashboard-card group relative overflow-hidden rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-emerald-100/70 p-4 shadow-sm transition hover:shadow-md">
-                        <div class="absolute -right-4 -top-4 h-20 w-20 rounded-full bg-emerald-200/40 blur-xl"></div>
-                        <div class="relative flex items-start justify-between gap-3">
-                            <div>
-                                <p class="text-[11px] font-semibold tracking-[0.12em] text-emerald-700 uppercase">Total
-                                    Students</p>
-                                <p id="statTotalStudents" class="mt-2 text-3xl font-bold text-slate-900">{{
-                                    total_students }}</p>
-                                <p class="mt-1 text-[11px] text-slate-500">Registered learner profiles</p>
-                            </div>
-                            <span
-                                class="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-emerald-200 bg-white text-emerald-700">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
-                                    stroke="currentColor" stroke-width="2">
-                                    <path stroke-linecap="round" stroke-linejoin="round"
-                                        d="M12 14c3.866 0 7 1.79 7 4v2H5v-2c0-2.21 3.134-4 7-4zm0-2a4 4 0 100-8 4 4 0 000 8z" />
-                                </svg>
-                            </span>
+                <section class="grid w-full grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+                    <article class="stat-overview-card stat-overview-card--emerald p-5">
+                        <div class="stat-overview-kicker">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 14c3.866 0 7 1.79 7 4v2H5v-2c0-2.21 3.134-4 7-4zm0-2a4 4 0 100-8 4 4 0 000 8z" />
+                            </svg>
+                            <span>Total Students</span>
                         </div>
+                        <p id="statTotalStudents" class="stat-overview-value">{{ total_students }}</p>
+                        <p class="stat-overview-note">Registered learner profiles</p>
                     </article>
 
-                    <article
-                        class="dashboard-card group relative overflow-hidden rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50 via-white to-blue-100/70 p-4 shadow-sm transition hover:shadow-md">
-                        <div class="absolute -right-4 -top-4 h-20 w-20 rounded-full bg-blue-200/40 blur-xl"></div>
-                        <div class="relative flex items-start justify-between gap-3">
-                            <div>
-                                <p class="text-[11px] font-semibold tracking-[0.12em] text-blue-700 uppercase">Students
-                                    Present Today</p>
-                                <p id="statPresentToday" class="mt-2 text-3xl font-bold text-slate-900">{{ present_today
-                                    }}</p>
-                                <p class="mt-1 text-[11px] text-slate-500">Confirmed gate attendance</p>
-                            </div>
-                            <span
-                                class="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-blue-200 bg-white text-blue-700">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
-                                    stroke="currentColor" stroke-width="2">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-                                </svg>
-                            </span>
+                    <article class="stat-overview-card stat-overview-card--blue p-5">
+                        <div class="stat-overview-kicker">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                            <span>Students Present Today</span>
                         </div>
+                        <p id="statPresentToday" class="stat-overview-value">{{ present_today }}</p>
+                        <p class="stat-overview-note">Confirmed gate attendance</p>
                     </article>
 
-                    <article
-                        class="dashboard-card group relative overflow-hidden rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-50 via-white to-violet-100/70 p-4 shadow-sm transition hover:shadow-md">
-                        <div class="absolute -right-4 -top-4 h-20 w-20 rounded-full bg-violet-200/40 blur-xl"></div>
-                        <div class="relative flex items-start justify-between gap-3">
-                            <div>
-                                <p class="text-[11px] font-semibold tracking-[0.12em] text-violet-700 uppercase">SMS
-                                    Sent Today</p>
-                                <p id="statSmsSentToday" class="mt-2 text-3xl font-bold text-slate-900">{{
-                                    sms_sent_today }}</p>
-                                <p class="mt-1 text-[11px] text-slate-500">Parent notifications delivered</p>
-                            </div>
-                            <span
-                                class="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-violet-200 bg-white text-violet-700">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
-                                    stroke="currentColor" stroke-width="2">
-                                    <path stroke-linecap="round" stroke-linejoin="round"
-                                        d="M8 10h.01M12 10h.01M16 10h.01M21 12c0 4.418-4.03 8-9 8s-9-3.582-9-8 4.03-8 9-8 9 3.582 9 8z" />
-                                </svg>
-                            </span>
+                    <article class="stat-overview-card stat-overview-card--violet p-5">
+                        <div class="stat-overview-kicker">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M7 10h10M7 14h6m-8 6h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                            </svg>
+                            <span>SMS Sent Today</span>
                         </div>
+                        <p id="statSmsSentToday" class="stat-overview-value">{{ sms_sent_today }}</p>
+                        <p class="stat-overview-note">Parent notifications delivered</p>
                     </article>
 
-                    <article
-                        class="dashboard-card group relative overflow-hidden rounded-2xl border border-sky-200 bg-gradient-to-br from-sky-50 via-white to-sky-100/70 p-4 shadow-sm transition hover:shadow-md">
-                        <div class="absolute -right-4 -top-4 h-20 w-20 rounded-full bg-sky-200/40 blur-xl"></div>
-                        <div class="relative flex items-start justify-between gap-3">
-                            <div>
-                                <p class="text-[11px] font-semibold tracking-[0.12em] text-sky-700 uppercase">Total Male
-                                    Students</p>
-                                <p id="statMaleStudents" class="mt-2 text-3xl font-bold text-slate-900">{{
-                                    total_male_students }}</p>
-                                <p class="mt-1 text-[11px] text-slate-500">Profile breakdown</p>
-                            </div>
-                            <span
-                                class="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-sky-200 bg-white text-sky-700">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
-                                    stroke="currentColor" stroke-width="2">
-                                    <path stroke-linecap="round" stroke-linejoin="round"
-                                        d="M12 4a4 4 0 014 4v1h1a4 4 0 010 8h-1v3H8v-3H7a4 4 0 010-8h1V8a4 4 0 014-4z" />
-                                </svg>
-                            </span>
+                    <article class="stat-overview-card stat-overview-card--sky p-5">
+                        <div class="stat-overview-kicker">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4a4 4 0 014 4v1h1a4 4 0 010 8h-1v3H8v-3H7a4 4 0 010-8h1V8a4 4 0 014-4z" />
+                            </svg>
+                            <span>Total Male Students</span>
                         </div>
+                        <p id="statMaleStudents" class="stat-overview-value">{{ total_male_students }}</p>
+                        <p class="stat-overview-note">Male student profile count</p>
                     </article>
 
-                    <article
-                        class="dashboard-card group relative overflow-hidden rounded-2xl border border-pink-200 bg-gradient-to-br from-pink-50 via-white to-pink-100/70 p-4 shadow-sm transition hover:shadow-md">
-                        <div class="absolute -right-4 -top-4 h-20 w-20 rounded-full bg-pink-200/40 blur-xl"></div>
-                        <div class="relative flex items-start justify-between gap-3">
-                            <div>
-                                <p class="text-[11px] font-semibold tracking-[0.12em] text-pink-700 uppercase">Total
-                                    Female Students</p>
-                                <p id="statFemaleStudents" class="mt-2 text-3xl font-bold text-slate-900">{{
-                                    total_female_students }}</p>
-                                <p class="mt-1 text-[11px] text-slate-500">Profile breakdown</p>
-                            </div>
-                            <span
-                                class="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-pink-200 bg-white text-pink-700">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
-                                    stroke="currentColor" stroke-width="2">
-                                    <path stroke-linecap="round" stroke-linejoin="round"
-                                        d="M12 3a5 5 0 015 5 5 5 0 01-4 4.9V16h2v2h-2v3h-2v-3H9v-2h2v-3.1A5 5 0 017 8a5 5 0 015-5z" />
-                                </svg>
-                            </span>
+                    <article class="stat-overview-card stat-overview-card--pink p-5">
+                        <div class="stat-overview-kicker">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 3a5 5 0 015 5 5 5 0 01-4 4.9V16h2v2h-2v3h-2v-3H9v-2h2v-3.1A5 5 0 017 8a5 5 0 015-5z" />
+                            </svg>
+                            <span>Total Female Students</span>
                         </div>
+                        <p id="statFemaleStudents" class="stat-overview-value">{{ total_female_students }}</p>
+                        <p class="stat-overview-note">Female student profile count</p>
                     </article>
                 </section>
 
@@ -450,171 +629,64 @@
 
                 <!-- GATE + SEARCH -->
                 <section id="gate-scanning" class="grid w-full grid-cols-1 gap-5 xl:grid-cols-12 items-stretch">
-                    <div class="xl:col-span-7">
+                    <div class="xl:col-span-10">
                         <div id="gateConsoleCard"
-                            class="dashboard-card rounded-3xl border border-slate-200 bg-gradient-to-b from-white via-slate-50 to-slate-100/70 p-4 shadow-sm">
-                            <div class="flex flex-wrap items-start justify-between gap-3">
-                                <div>
-                                    <div class="flex items-center gap-2">
-                                        <span
-                                            class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700">
-                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4.5 w-4.5" fill="none"
-                                                viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                                <path stroke-linecap="round" stroke-linejoin="round"
-                                                    d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14V10z" />
-                                                <rect x="3" y="6" width="12" height="12" rx="2" ry="2" />
-                                            </svg>
-                                        </span>
-                                        <h2 class="text-lg font-semibold text-slate-800">Gate Scanning Console</h2>
+                            class="gate-console-shell p-5 lg:p-6">
+                            <div class="gate-console-divider flex flex-wrap items-start justify-between gap-4 border-b pb-5">
+                                <div class="min-w-0">
+                                    <p class="gate-console-kicker text-[11px] font-semibold uppercase text-slate-500">Live Recognition</p>
+                                    <div class="gate-console-heading mt-2">
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none"
+                                            viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                            <path stroke-linecap="round" stroke-linejoin="round"
+                                                d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14V10z" />
+                                            <rect x="3" y="6" width="12" height="12" rx="2" ry="2" />
+                                        </svg>
+                                        <div>
+                                            <h2 class="text-xl font-semibold text-slate-900">Gate Scanning Console</h2>
+                                            <p class="mt-1 text-sm text-slate-500">Real-time face recognition with a transparent live feed inside the camera view.</p>
+                                        </div>
                                     </div>
-                                    <p class="mt-1 text-xs text-slate-500">Real-time face verification, attendance, and
-                                        SMS workflow.</p>
                                 </div>
                                 <span id="currentSessionBadge"
-                                    class="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">Current
-                                    Session: Morning In</span>
+                                    class="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[11px] font-semibold text-emerald-700">Tracking
+                                    Mode: Smart IN/OUT Tracking</span>
                             </div>
 
-                            <div class="mt-4 grid grid-cols-1 lg:grid-cols-12 gap-3 items-stretch">
-                                <div class="lg:col-span-7 lg:row-span-2 flex min-h-0">
-                                    <div
-                                        class="rounded-2xl border border-slate-200 bg-slate-900/95 p-2 flex flex-col w-full h-full">
-                                        <div class="mb-3 flex items-center justify-between px-2 text-xs text-slate-200">
-                                            <div class="flex items-center gap-2">
-                                                <span
-                                                    class="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-white/10 text-emerald-200">
-                                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
-                                                        viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                                        <path stroke-linecap="round" stroke-linejoin="round"
-                                                            d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14V10z" />
-                                                        <rect x="3" y="6" width="12" height="12" rx="2" ry="2" />
-                                                    </svg>
-                                                </span>
-                                                <span
-                                                    class="font-semibold uppercase tracking-wide text-slate-200">Camera
-                                                    / Face Recognition</span>
-                                            </div>
-                                            <span class="text-[11px] text-slate-300">Live feed and verification
-                                                overlay</span>
-                                        </div>
-                                        <div id="scanFrame"
-                                            class="relative w-full overflow-hidden rounded-xl border border-slate-700 bg-slate-900 aspect-[16/9] min-h-[220px] sm:min-h-[260px] lg:aspect-auto lg:flex-1 lg:h-full">
-                                            <div id="scanPlaceholder"
-                                                class="flex h-full items-center justify-center text-center px-6">
-                                                <div>
-                                                    <p class="text-sm font-semibold text-slate-100">Webcam is idle</p>
-                                                    <p class="mt-2 text-xs text-slate-400">Click <span
-                                                            class="font-semibold text-emerald-300">Start Scan</span> to
-                                                        open the camera.</p>
-                                                </div>
-                                            </div>
-                                            <div id="scanNameOverlay" class="hidden absolute inset-0 flex items-center justify-center pointer-events-none z-10 bg-slate-900/40 backdrop-blur-[2px]">
-                                                <div class="bg-slate-900/80 backdrop-blur-md border border-white/20 rounded-2xl px-10 py-6 text-center shadow-2xl transform transition-all duration-300">
-                                                    <div class="mb-3 flex justify-center">
-                                                        <span class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-                                                                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-                                                            </svg>
-                                                        </span>
-                                                    </div>
-                                                    <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-400 mb-1 opacity-80">Recognition Success</p>
-                                                    <h3 id="scanNameText" class="text-3xl font-bold text-white tracking-tight leading-tight">--</h3>
-                                                    <div id="scanStatusBadge" class="mt-3 inline-flex items-center rounded-full bg-slate-700/50 px-3 py-1 text-xs font-bold text-slate-200 border border-white/10 uppercase tracking-wider">
-                                                        Verified
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <video id="videoFeed" class="hidden h-full w-full object-cover" autoplay playsinline style="transform: scaleX(-1);"
-                                                title="Client device camera stream"></video>
-                                            <canvas id="cameraOverlay" class="hidden absolute top-0 left-0 w-full h-full pointer-events-none z-10"></canvas>
-                                            <div id="scanOverlay"
-                                                class="hidden absolute bottom-0 left-0 right-0 border-t border-white/10 bg-black/70 px-4 py-2.5 text-sm text-white text-center backdrop-blur-sm z-20">
-                                                No active verification event.
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="lg:col-span-5">
-                                    <div class="rounded-2xl border border-slate-200 bg-white p-3">
-                                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
-                                            <div class="space-y-2">
-                                                <div>
-                                                    <p
-                                                        class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                                                        Session Controls</p>
-                                                    <p class="mt-1 text-xs text-slate-500">Set the scan session mode and
-                                                        camera controls.</p>
-                                                </div>
-                                                <div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
-                                                    <label for="sessionModeSelect"
-                                                        class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Session
-                                                        Mode</label>
-                                                    <select id="sessionModeSelect"
-                                                        class="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-300">
-                                                        <option value="auto">Automatic (Time-Based)</option>
-                                                        <option value="manual_in">Manual IN</option>
-                                                        <option value="manual_out">Manual OUT</option>
-                                                    </select>
-                                                </div>
-                                            </div>
-                                            <div class="flex flex-wrap items-center gap-2 md:justify-end">
-                                                <button id="startBtn"
-                                                    class="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700">
-                                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
-                                                        viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                                        <path stroke-linecap="round" stroke-linejoin="round"
-                                                            d="m14.75 12-5.5 3.25V8.75L14.75 12Z" />
-                                                    </svg>
-                                                    <span>Start Scan</span>
-                                                </button>
-                                                <button id="stopBtn"
-                                                    class="inline-flex items-center gap-1.5 rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700">
-                                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
-                                                        viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                                        <rect x="7" y="7" width="10" height="10" rx="1"></rect>
-                                                    </svg>
-                                                    <span>Stop Scan</span>
-                                                </button>
-                                                <button id="scanFullscreenBtn" type="button"
-                                                    class="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">
-                                                    <span id="scanFullscreenIconEnter" aria-hidden="true">
-                                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4.5 w-4.5"
-                                                            fill="none" viewBox="0 0 24 24" stroke="currentColor"
-                                                            stroke-width="2">
-                                                            <path stroke-linecap="round" stroke-linejoin="round"
-                                                                d="M8 3H4v4M16 3h4v4M8 21H4v-4M20 17v4h-4" />
-                                                        </svg>
-                                                    </span>
-                                                    <span id="scanFullscreenIconExit" class="hidden" aria-hidden="true">
-                                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4.5 w-4.5"
-                                                            fill="none" viewBox="0 0 24 24" stroke="currentColor"
-                                                            stroke-width="2">
-                                                            <path stroke-linecap="round" stroke-linejoin="round"
-                                                                d="M9 3H4v5M15 3h5v5M9 21H4v-5M20 16v5h-5" />
-                                                            <path stroke-linecap="round" stroke-linejoin="round"
-                                                                d="M9 9 4 4M15 9l5-5M9 15l-5 5M15 15l5 5" />
-                                                        </svg>
-                                                    </span>
-                                                    <span id="scanFullscreenLabel">Full Screen Camera</span>
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                </div>
-                                <div class="lg:col-span-5">
-                                    <div class="rounded-2xl border border-slate-200 bg-white p-3">
+                            <div class="mt-6 grid gap-4">
+                                <aside class="order-2 grid min-h-0 min-w-0 content-start gap-4">
+                                    <div class="gate-console-panel gate-console-panel-soft p-4 lg:p-5">
                                         <div class="flex flex-wrap items-center justify-between gap-3">
                                             <div>
-                                                <p
-                                                    class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                                                    Gate Status & Scan Result</p>
-                                                <p class="mt-1 text-xs text-slate-500">Live verification outcomes and
-                                                    system status.</p>
+                                                <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Controls</p>
+                                                <p class="mt-1 text-sm text-slate-500">Only the essential scan actions are shown.</p>
                                             </div>
-                                            <div class="flex flex-wrap items-center gap-2 text-[11px]">
+                                            <div id="sessionActionHint" class="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-semibold text-emerald-700">
+                                                <span id="sessionActionIcon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg></span>
+                                                <span id="sessionActionText">Smart IN/OUT Active</span>
+                                            </div>
+                                        </div>
+                                        <div class="gate-console-control-actions mt-4 flex flex-wrap gap-2">
+                                            <button id="startBtn" class="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m14.75 12-5.5 3.25V8.75L14.75 12Z" /></svg><span>Start Scan</span></button>
+                                            <button id="stopBtn" class="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="7" y="7" width="10" height="10" rx="1"></rect></svg><span>Stop</span></button>
+                                            <button id="scanFullscreenBtn" type="button" class="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">
+                                                <span id="scanFullscreenIconEnter" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" class="h-4.5 w-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 3H4v4M16 3h4v4M8 21H4v-4M20 17v4h-4" /></svg></span>
+                                                <span id="scanFullscreenIconExit" class="hidden" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" class="h-4.5 w-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 3H4v5M15 3h5v5M9 21H4v-5M20 16v5h-5" /><path stroke-linecap="round" stroke-linejoin="round" d="M9 9 4 4M15 9l5-5M9 15l-5 5M15 15l5 5" /></svg></span>
+                                                <span id="scanFullscreenLabel">Full Screen</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </aside>
+                                <div class="order-1 xl:order-2 grid min-w-0 gap-4">
+                                    <div class="gate-console-panel gate-console-camera min-w-0 overflow-hidden p-4 lg:p-5">
+                                        <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+                                            <div>
+                                                <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Camera / Scanning Area</p>
+                                                <p class="mt-1 text-sm text-slate-500">The activity feed floats inside the camera on the left without blocking the main view.</p>
+                                            </div>
+                                            <div class="flex items-center gap-2">
                                                 <span id="scanStateBadge"
-                                                    class="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+                                                    class="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
                                                     <span class="h-2 w-2 rounded-full bg-slate-400"></span>
                                                     Idle
                                                 </span>
@@ -622,51 +694,60 @@
                                                     class="hidden inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold"></span>
                                             </div>
                                         </div>
-                                        <p id="status" class="mt-2 text-sm font-semibold text-slate-600">Status: Idle
-                                        </p>
-                                        <div class="mt-3 grid grid-cols-2 gap-2 text-[11px] sm:grid-cols-4">
-                                            <div id="cameraStatusChip"
-                                                class="text-center text-[11px] font-semibold text-slate-600">
-                                                Camera: Idle</div>
-                                            <div id="faceStatusChip"
-                                                class="text-center text-[11px] font-semibold text-slate-600">
-                                                Face: Standby</div>
-                                            <div id="accessStatusChip"
-                                                class="text-center text-[11px] font-semibold text-slate-600">
-                                                Access: --</div>
-                                            <div id="smsStatusChip"
-                                                class="text-center text-[11px] font-semibold text-slate-600">
-                                                SMS: --</div>
+                                        <div id="scanFrame" class="gate-console-frame relative w-full max-w-full overflow-hidden rounded-[1.5rem] aspect-[16/9] min-h-[18rem] sm:min-h-[21rem] lg:min-h-[24rem]">
+                                            <div class="gate-console-feed-overlay">
+                                                <div class="gate-console-feed-overlay-panel p-3">
+                                                    <div class="flex items-start justify-between gap-3">
+                                                        <div>
+                                                            <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-100">Live Activity Feed</p>
+                                                            <p class="mt-1 text-sm text-slate-200/80">Recent valid scans only.</p>
+                                                        </div>
+                                                        <span id="scanActivityCount"
+                                                            class="gate-console-count inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold">{{ search_gate_logs[:10]|length }}</span>
+                                                    </div>
+                                                    <div class="gate-console-feed-overlay-surface p-2.5">
+                                                        <div id="scanActivityFeed" class="scan-activity-feed flex h-full flex-col gap-2 overflow-y-auto pr-1">
+                                                            {% for g in search_gate_logs[:10] %}
+                                                            <article class="scan-activity-item gate-console-feed-item rounded-2xl px-3 py-3" data-student-id="{{ g.student_id }}" data-gate-action="{{ g.gate_action or 'IN' }}">
+                                                                <div class="flex items-start justify-between gap-3">
+                                                                    <div class="min-w-0">
+                                                                        <p class="truncate text-sm font-semibold text-slate-800">{{ g.student_name }}</p>
+                                                                        <p class="mt-1 text-[11px] text-slate-500">{{ g.time or g.timestamp or 'Recently scanned' }}</p>
+                                                                    </div>
+                                                                    <span class="inline-flex shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold {% if (g.gate_action or 'IN') == 'OUT' %}border border-blue-200 bg-blue-50 text-blue-700{% else %}border border-emerald-200 bg-emerald-50 text-emerald-700{% endif %}">{{ g.gate_action or 'IN' }}</span>
+                                                                </div>
+                                                            </article>
+                                                            {% endfor %}
+                                                        </div>
+                                                        <div id="scanActivityEmpty" class="gate-console-feed-empty {% if search_gate_logs[:10] %}hidden {% endif %}flex h-full items-center justify-center rounded-[1rem] border border-dashed px-4 text-center">
+                                                            <div>
+                                                                <p class="text-sm font-semibold text-slate-100">Waiting for live scans</p>
+                                                                <p class="mt-1 text-xs text-slate-200/80">New valid recognitions will appear here automatically.</p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div id="scanPlaceholder" class="flex h-full items-center justify-center px-8 text-center">
+                                                <div>
+                                                    <p class="text-base font-semibold text-slate-100">Camera is ready when you are</p>
+                                                    <p class="mt-2 text-sm text-slate-400">Start scanning to open the live camera feed and begin recognition.</p>
+                                                </div>
+                                            </div>
+                                            <div id="scanNameOverlay" class="hidden absolute inset-0 flex items-center justify-center pointer-events-none z-10 bg-slate-900/40 backdrop-blur-[2px]">
+                                                <div class="bg-slate-900/80 backdrop-blur-md border border-white/20 rounded-2xl px-10 py-6 text-center shadow-2xl transform transition-all duration-300">
+                                                    <div class="mb-3 flex justify-center"><span class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg></span></div>
+                                                    <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-400 mb-1 opacity-80">Recognition Success</p>
+                                                    <h3 id="scanNameText" class="text-3xl font-bold text-white tracking-tight leading-tight">--</h3>
+                                                    <div id="scanStatusBadge" class="mt-3 inline-flex items-center rounded-full bg-slate-700/50 px-3 py-1 text-xs font-bold text-slate-200 border border-white/10 uppercase tracking-wider">Verified</div>
+                                                </div>
+                                            </div>
+                                            <video id="videoFeed" class="hidden h-full w-full object-cover" autoplay playsinline style="transform: scaleX(-1);" title="Client device camera stream"></video>
+                                            <canvas id="cameraOverlay" class="hidden absolute top-0 left-0 w-full h-full pointer-events-none z-10"></canvas>
+                                            <div id="scanOverlay" class="hidden absolute bottom-0 left-0 right-0 border-t border-white/10 bg-black/70 px-4 py-2.5 text-sm text-white text-center backdrop-blur-sm z-20">No active verification event.</div>
                                         </div>
                                     </div>
                                 </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="xl:col-span-5 flex min-h-0 w-full">
-                        <div id="recentEntryLogsCard"
-                            class="dashboard-card rounded-2xl border border-slate-200 bg-white p-4 shadow-sm flex flex-col h-full w-full">
-                            <div class="flex items-start justify-between gap-3 mb-3">
-                                <div>
-                                    <h3 class="text-base font-semibold text-slate-800">Recent Entry Logs</h3>
-                                    <p class="text-xs text-slate-500 mt-1">Latest gate verification activity.</p>
-                                </div>
-                                <span
-                                    class="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
-                                    {{ search_gate_logs|length }}
-                                </span>
-                            </div>
-                            <div class="space-y-2 text-sm overflow-y-auto pr-1 flex-1 min-h-0">
-                                {% for g in search_gate_logs[:6] %}
-                                <div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
-                                    <p class="font-semibold text-slate-800 truncate">{{ g.student_name }} ({{
-                                        g.student_id }})</p>
-                                    <p class="text-[11px] text-slate-500">{{ g.status }} | {{ g.timestamp }}</p>
-                                </div>
-                                {% else %}
-                                <p class="text-slate-500 text-xs">No recent gate entries available.</p>
-                                {% endfor %}
                             </div>
                         </div>
                     </div>
@@ -1467,7 +1548,8 @@
         
         clientCamera.onVoiceFeedback = function(name, studentId) {
             console.log('[Voice Feedback]', name);
-            // Voice feedback is handled automatically by the enhanced camera
+            void studentId;
+            // Voice feedback is confirmed by backend attendance events only.
         };
 
         const video = document.getElementById('videoFeed');
@@ -1505,6 +1587,9 @@
         const faceStatusChip = document.getElementById('faceStatusChip');
         const accessStatusChip = document.getElementById('accessStatusChip');
         const smsStatusChip = document.getElementById('smsStatusChip');
+        const scanActivityFeed = document.getElementById('scanActivityFeed');
+        const scanActivityEmpty = document.getElementById('scanActivityEmpty');
+        const scanActivityCount = document.getElementById('scanActivityCount');
         const alertsSummaryCount = document.getElementById('alertsSummaryCount');
         let scanPollingTimer = null;
         let lastEventId = 0;
@@ -1524,7 +1609,12 @@
         let smsBalanceRefreshTimer = null;
         let smsBalancePollTimer = null;
         let smsBalanceLoading = false;
-        let scanStoppedAt = null; // Timestamp when scanning was manually stopped
+        let scanStoppedAt = null;
+        const SCAN_ACTIVITY_LIMIT = 10;
+        const VOICE_FEEDBACK_HISTORY_LIMIT = 40;
+        const voiceFeedbackQueue = [];
+        const spokenVoiceKeys = [];
+        let isSpeakingVerification = false;
 
         // School year variables for disabling scanning console
         const selectedSchoolYear = "{{ selected_school_year }}";
@@ -1539,7 +1629,7 @@
             const startBtn = document.getElementById('startBtn');
             const stopBtn = document.getElementById('stopBtn');
             const scanPlaceholder = document.getElementById('scanPlaceholder');
-            const video = document.getElementById('video');
+            const video = document.getElementById('videoFeed');
             const scanOverlay = document.getElementById('scanOverlay');
             
             if (isPreviousYearSelected()) {
@@ -1605,68 +1695,34 @@
             }
         }
 
-        function getCurrentSessionLabel(now = new Date()) {
-            const minutes = now.getHours() * 60 + now.getMinutes();
-            if (minutes >= 300 && minutes < 720) return 'Morning In';
-            if (minutes >= 720 && minutes < 780) return 'Noon Out';
-            if (minutes >= 780 && minutes < 1020) return 'Afternoon In';
-            if (minutes >= 1020) return 'Afternoon Out';
-            return 'Morning In';
+        function normalizeScanSessionMode(mode = scanSessionMode) {
+            const normalized = String(mode || 'auto').trim();
+            return normalized === 'manual_in' || normalized === 'manual_out' ? 'auto' : normalized;
         }
 
         function scanSessionModeLabel(mode = scanSessionMode) {
-            if (mode === 'manual_in') return 'Manual IN';
-            if (mode === 'manual_out') return 'Manual OUT';
-            return 'Automatic (Time-Based)';
+            return 'Smart IN/OUT Tracking';
         }
 
-        function getAutoSessionInfo(now = new Date()) {
-            const session = getCurrentSessionLabel(now);
-            const gateAction = session.toLowerCase().includes('out') ? 'OUT' : 'IN';
-            return { session, gate_action: gateAction };
+        function getAutoSessionInfo() {
+            return { session: 'Smart IN/OUT Tracking', gate_action: 'AUTO' };
         }
 
         function getManualSessionInfo(mode = scanSessionMode) {
-            if (mode === 'manual_in') {
-                return { session: 'Manual In', gate_action: 'IN' };
-            }
-            if (mode === 'manual_out') {
-                return { session: 'Manual Out', gate_action: 'OUT' };
-            }
             return null;
         }
 
         function updateCurrentSessionBadge(sessionInfo = null, mode = scanSessionMode) {
-            const normalizedMode = mode || 'auto';
-            const info = sessionInfo || getManualSessionInfo(normalizedMode) || getAutoSessionInfo();
-            const sessionLabel = info.session || 'Morning In';
-            const gateAction = String(info.gate_action || '').toUpperCase();
-            const prefix = normalizedMode === 'auto' ? 'Current Session' : 'Manual Session';
-            currentSessionBadge.textContent = `${prefix}: ${sessionLabel}`;
-
-            currentSessionBadge.className = 'inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold border';
-            if (normalizedMode === 'manual_in') {
-                currentSessionBadge.classList.add('bg-blue-100', 'text-blue-700', 'border-blue-200');
-            } else if (normalizedMode === 'manual_out') {
-                currentSessionBadge.classList.add('bg-amber-100', 'text-amber-700', 'border-amber-200');
-            } else if (sessionLabel === 'Morning In') {
-                currentSessionBadge.classList.add('bg-emerald-100', 'text-emerald-700', 'border-emerald-200');
-            } else if (sessionLabel === 'Noon Out') {
-                currentSessionBadge.classList.add('bg-amber-100', 'text-amber-700', 'border-amber-200');
-            } else if (sessionLabel === 'Afternoon In') {
-                currentSessionBadge.classList.add('bg-blue-100', 'text-blue-700', 'border-blue-200');
-            } else if (sessionLabel === 'Afternoon Out') {
-                currentSessionBadge.classList.add('bg-violet-100', 'text-violet-700', 'border-violet-200');
-            } else if (gateAction === 'IN') {
-                currentSessionBadge.classList.add('bg-emerald-100', 'text-emerald-700', 'border-emerald-200');
-            } else if (gateAction === 'OUT') {
-                currentSessionBadge.classList.add('bg-amber-100', 'text-amber-700', 'border-amber-200');
-            } else {
-                currentSessionBadge.classList.add('bg-slate-100', 'text-slate-700', 'border-slate-200');
-            }
+            if (!currentSessionBadge) return;
+            const info = getAutoSessionInfo();
+            currentSessionBadge.textContent = `Tracking Mode: ${info.session}`;
+            currentSessionBadge.className = 'inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[11px] font-semibold text-emerald-700';
         }
 
         function sessionActionIconMarkup(gateAction) {
+            if (gateAction === 'AUTO') {
+                return '<svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 12h16m-6-6 6 6-6 6" /><path stroke-linecap="round" stroke-linejoin="round" d="M20 12H4m6 6-6-6 6-6" /></svg>';
+            }
             if (gateAction === 'OUT') {
                 return '<svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14m-7-7 7 7-7 7" /></svg>';
             }
@@ -1675,29 +1731,19 @@
 
         function updateSessionActionHint(sessionInfo = null, mode = scanSessionMode) {
             if (!sessionActionHint) return;
-            const normalizedMode = mode || 'auto';
-            const info = sessionInfo || getManualSessionInfo(normalizedMode) || getAutoSessionInfo();
-            const gateAction = String(info.gate_action || '').toUpperCase() === 'OUT' ? 'OUT' : 'IN';
-            const sessionLabel = String(info.session || '').trim();
-            const suffix = sessionLabel ? ` (${sessionLabel})` : '';
             if (sessionActionText) {
-                sessionActionText.textContent = `Effective Action: ${gateAction}${suffix}`;
+                sessionActionText.textContent = 'Smart IN/OUT Active';
             } else {
-                sessionActionHint.textContent = `Effective Action: ${gateAction}${suffix}`;
+                sessionActionHint.textContent = 'Smart IN/OUT Active';
             }
             if (sessionActionIcon) {
-                sessionActionIcon.innerHTML = sessionActionIconMarkup(gateAction);
+                sessionActionIcon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>';
             }
-            sessionActionHint.className = 'text-[11px] font-semibold inline-flex items-center justify-end gap-1';
-            if (gateAction === 'OUT') {
-                sessionActionHint.classList.add('text-amber-700');
-            } else {
-                sessionActionHint.classList.add('text-emerald-700');
-            }
+            sessionActionHint.className = 'inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-semibold text-emerald-700';
         }
 
         function applyScanSessionMode(mode, sessionInfo = null) {
-            scanSessionMode = mode || 'auto';
+            scanSessionMode = normalizeScanSessionMode(mode);
             if (sessionModeSelect && sessionModeSelect.value !== scanSessionMode) {
                 sessionModeSelect.value = scanSessionMode;
             }
@@ -1878,6 +1924,11 @@
 
         function showScanEventBadge(level = 'info', message = '', duration = 2600) {
             if (!scanEventBadge) return;
+            if (isScanning) {
+                scanEventBadge.classList.add('hidden');
+                scanEventBadge.textContent = '';
+                return;
+            }
             const text = String(message || '').trim();
             if (!text) {
                 scanEventBadge.classList.add('hidden');
@@ -1988,44 +2039,55 @@
             }
         }
 
-        function speakVerification(text) {
-            if (!('speechSynthesis' in window)) return;
-            if (!isScanning) return;  // Do not speak after scanning has stopped
-            const utterance = new SpeechSynthesisUtterance(text);
+        function buildVoiceEventKey(evt) {
+            if (!evt) return '';
+            return String(evt.voice_key || `${evt.student_id || ''}:${evt.gate_action || ''}:${evt.timestamp || evt.id || ''}`).trim();
+        }
+
+        function processVoiceFeedbackQueue() {
+            if (isSpeakingVerification || !voiceFeedbackQueue.length || !('speechSynthesis' in window) || !isScanning) return;
+            const nextItem = voiceFeedbackQueue.shift();
+            if (!nextItem || !nextItem.text) return;
+
+            isSpeakingVerification = true;
+            const utterance = new SpeechSynthesisUtterance(nextItem.text);
             utterance.rate = 1.0;
             utterance.pitch = 1.0;
             utterance.volume = 1.0;
-            window.speechSynthesis.cancel();
+            utterance.onend = utterance.onerror = () => {
+                isSpeakingVerification = false;
+                window.setTimeout(processVoiceFeedbackQueue, 80);
+            };
             window.speechSynthesis.speak(utterance);
         }
 
-        function showRecognitionSuccess(studentName, studentId) {
-            // Update the name overlay
-            const scanNameText = document.getElementById('scanNameText');
-            const scanNameOverlay = document.getElementById('scanNameOverlay');
-            
-            if (scanNameText && scanNameOverlay) {
-                scanNameText.textContent = studentName;
-                scanNameOverlay.classList.remove('hidden');
-                
-                // Hide after 2 seconds
-                setTimeout(() => {
-                    scanNameOverlay.classList.add('hidden');
-                }, 2000);
-            }
-            
-            // Show success event badge
-            showScanEventBadge('success', `${studentName} verified`);
-            
-            // Update status
-            setScanState('success', `Status: ${studentName} Verified`);
-            
-            // Reset status after 3 seconds
-            setTimeout(() => {
-                if (isScanning) {
-                    setScanState('scanning', `Status: Scanning (${scanSessionModeLabel(scanSessionMode)})`);
+        function queueVoiceFeedback(text, voiceKey = '') {
+            const normalizedText = String(text || '').trim();
+            const normalizedKey = String(voiceKey || '').trim();
+            if (!normalizedText || !('speechSynthesis' in window)) return;
+            if (normalizedKey && spokenVoiceKeys.includes(normalizedKey)) return;
+            if (normalizedKey) {
+                spokenVoiceKeys.push(normalizedKey);
+                while (spokenVoiceKeys.length > VOICE_FEEDBACK_HISTORY_LIMIT) {
+                    spokenVoiceKeys.shift();
                 }
-            }, 3000);
+            }
+            voiceFeedbackQueue.push({ text: normalizedText, key: normalizedKey });
+            processVoiceFeedbackQueue();
+        }
+
+        function resetVoiceFeedbackState() {
+            voiceFeedbackQueue.length = 0;
+            spokenVoiceKeys.length = 0;
+            isSpeakingVerification = false;
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+            }
+        }
+
+        function showRecognitionSuccess(studentName, studentId) {
+            void studentName;
+            void studentId;
         }
 
         function playNotificationTone() {
@@ -2103,6 +2165,101 @@
             const tokens = palette[tone] || palette.neutral;
             tokens.forEach((token) => element.classList.add(token));
             element.textContent = text;
+        }
+
+        function formatScanActivityTime(timestampValue, fallbackValue = '') {
+            if (fallbackValue) {
+                const fallbackDate = new Date(`1970-01-01T${fallbackValue}`);
+                if (!Number.isNaN(fallbackDate.getTime())) {
+                    return fallbackDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+                }
+                return fallbackValue;
+            }
+            if (!timestampValue) return 'Just now';
+            const parsed = new Date(timestampValue);
+            if (Number.isNaN(parsed.getTime())) return 'Just now';
+            return parsed.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+        }
+
+        function escapeHtml(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function updateScanActivityState() {
+            if (!scanActivityFeed || !scanActivityEmpty) return;
+            const count = scanActivityFeed.children.length;
+            if (scanActivityCount) {
+                scanActivityCount.textContent = String(Math.min(count, SCAN_ACTIVITY_LIMIT));
+            }
+            scanActivityEmpty.classList.toggle('hidden', count > 0);
+            scanActivityFeed.classList.toggle('hidden', count === 0);
+        }
+
+        function normalizeScanActivityFeed() {
+            if (!scanActivityFeed) return;
+            const seenStudentIds = new Set();
+            Array.from(scanActivityFeed.children).forEach((node) => {
+                const studentId = String(node.dataset.studentId || '').trim();
+                if (!studentId || seenStudentIds.has(studentId) || seenStudentIds.size >= SCAN_ACTIVITY_LIMIT) {
+                    node.remove();
+                    return;
+                }
+                seenStudentIds.add(studentId);
+            });
+            updateScanActivityState();
+        }
+
+        function createScanActivityItem(entry) {
+            const action = String(entry?.gate_action || 'IN').toUpperCase() === 'OUT' ? 'OUT' : 'IN';
+            const item = document.createElement('article');
+            item.className = 'scan-activity-item rounded-2xl border border-slate-200 bg-white px-3 py-3 shadow-sm';
+            item.dataset.studentId = String(entry?.student_id || '').trim();
+            item.dataset.gateAction = action;
+
+            const badgeClasses = action === 'OUT'
+                ? 'border border-blue-200 bg-blue-50 text-blue-700'
+                : 'border border-emerald-200 bg-emerald-50 text-emerald-700';
+            const timeLabel = formatScanActivityTime(entry?.timestamp, entry?.time || '');
+            const studentName = String(entry?.name || 'Unknown Student').trim() || 'Unknown Student';
+
+            item.innerHTML = `
+                <div class="flex items-start justify-between gap-3">
+                    <div class="min-w-0">
+                        <p class="truncate text-sm font-semibold text-slate-800">${escapeHtml(studentName)}</p>
+                        <p class="mt-1 text-[11px] text-slate-500">${escapeHtml(timeLabel)}</p>
+                    </div>
+                    <span class="inline-flex shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${badgeClasses}">${action}</span>
+                </div>
+            `;
+            return item;
+        }
+
+        function upsertScanActivityEntry(entry) {
+            if (!scanActivityFeed || !entry || !entry.student_id) return;
+            const studentId = String(entry.student_id).trim();
+            if (!studentId) return;
+
+            const existing = Array.from(scanActivityFeed.children).find((node) => node.dataset.studentId === studentId);
+            if (existing) existing.remove();
+
+            const item = createScanActivityItem(entry);
+            item.classList.add('scan-activity-enter');
+            scanActivityFeed.prepend(item);
+            while (scanActivityFeed.children.length > SCAN_ACTIVITY_LIMIT) {
+                scanActivityFeed.lastElementChild?.remove();
+            }
+
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => item.classList.remove('scan-activity-enter'));
+            });
+
+            scanActivityFeed.scrollTo({ top: 0, behavior: 'smooth' });
+            updateScanActivityState();
         }
 
         function applyGateStatusDefaults() {
@@ -2373,22 +2530,21 @@
                         lastEventId = Math.max(lastEventId, evt.id || 0);
 
                         if (evt.type === 'verified') {
-                            const displayMessage = evt.duplicate ? 'Done!' : (evt.display_message || evt.verification_label || 'Verified');
+                            const gateAction = String(evt.gate_action || '').toUpperCase() === 'OUT' ? 'OUT' : 'IN';
+                            const displayMessage = evt.display_message || evt.verification_label || 'Verified';
                             const confidenceText = Number.isFinite(Number(evt.confidence_pct)) && Number(evt.confidence_pct) > 0
                                 ? ` (${Number(evt.confidence_pct).toFixed(1)}%)`
                                 : '';
                             
-                            // Bottom overlay update
-                            scanOverlay.textContent = `${evt.name} - ${displayMessage}${confidenceText}`;
+                            scanOverlay.textContent = `${evt.name} (${gateAction}) - ${displayMessage}${confidenceText}`;
                             scanOverlay.classList.remove('hidden');
                             
-                            // Centered prominent overlay update
                             const nameText = document.getElementById('scanNameText');
                             const nameOverlay = document.getElementById('scanNameOverlay');
                             const statusBadge = document.getElementById('scanStatusBadge');
                             
                             if (nameText) nameText.textContent = evt.name || 'Student';
-                            if (statusBadge) statusBadge.textContent = displayMessage;
+                            if (statusBadge) statusBadge.textContent = `${gateAction} - ${displayMessage}`;
                             if (nameOverlay) {
                                 nameOverlay.classList.remove('hidden');
                                 setTimeout(() => {
@@ -2398,20 +2554,21 @@
                             }
 
                             setScanState('success', `Status: ${displayMessage} - ${evt.name}`);
-                            showScanEventBadge('success', `${displayMessage}${confidenceText}`);
-                            
-                            // Restore state after feedback
+                            showScanEventBadge(evt.duplicate ? 'warning' : 'success', `${gateAction} - ${displayMessage}${confidenceText}`);
                             scheduleScanningStateRestore(evt.duplicate ? 800 : 1500);
-                            
-                            if (evt.duplicate) {
-                                playNotificationTone();
+
+                            if (evt.feed_update && evt.activity_entry) {
+                                upsertScanActivityEntry(evt.activity_entry);
                             }
-                            
-                            speakVerification(evt.voice_message || displayMessage);
+
+                            if (!evt.duplicate) {
+                                playNotificationTone();
+                                queueVoiceFeedback(evt.voice_message || displayMessage, buildVoiceEventKey(evt));
+                            }
                             
                             const smsStatus = String(evt.sms_status || '').toLowerCase();
                             setStatusChip(faceStatusChip, 'Face: Detected', 'success');
-                            setStatusChip(accessStatusChip, 'Access: Granted', 'success');
+                            setStatusChip(accessStatusChip, `Access: ${gateAction}`, gateAction === 'OUT' ? 'warning' : 'success');
                             
                             if (smsStatus === 'sent') {
                                 setStatusChip(smsStatusChip, 'SMS: Sent', 'success');
@@ -2510,6 +2667,8 @@
             // Stop frame processing and camera
             stopFrameProcessing();
             clientCamera.stop();
+            resetVoiceFeedbackState();
+            lastEventId = 0;
             
             // Immediately silence any ongoing speech
             if ('speechSynthesis' in window) {
@@ -2522,7 +2681,7 @@
             setScanButtons();
             
             // Cleanup UI elements
-            const video = document.getElementById('video');
+            const video = document.getElementById('videoFeed');
             const scanPlaceholder = document.getElementById('scanPlaceholder');
             const scanOverlay = document.getElementById('scanOverlay');
             
@@ -2586,6 +2745,8 @@
             const data = await response.json().catch(() => ({}));
             if (response.ok) {
                 isScanning = true;
+                lastEventId = 0;
+                resetVoiceFeedbackState();
                 setScanButtons();
                 applyGateStatusDefaults();
                 scanPlaceholder.classList.add('hidden');
@@ -2630,6 +2791,8 @@
             // Stop frame processing and camera immediately
             stopFrameProcessing();
             clientCamera.stop();
+            resetVoiceFeedbackState();
+            lastEventId = 0;
             
             // Stop event polling immediately BEFORE UI cleanup so no stale events fire voice
             stopPollingEvents();
@@ -2685,6 +2848,7 @@
         setScanButtons();
         setScanState('idle', 'Status: Idle');
         applyGateStatusDefaults();
+        normalizeScanActivityFeed();
         updateScanFullscreenButton();
         updateCurrentSessionBadge();
         updateSessionActionHint();

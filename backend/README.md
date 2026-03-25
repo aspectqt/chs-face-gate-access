@@ -94,8 +94,10 @@ OTP requests are stored in `otp_requests` with:
 Run unit tests:
 
 ```bash
-python -m unittest discover -s tests
+python -m unittest discover -s tests -p "test*.py"
 ```
+
+The repository now includes lightweight service tests plus app smoke tests. The smoke tests use the local Flask app and MongoDB; they automatically skip when MongoDB is unavailable.
 
 Staging send script:
 
