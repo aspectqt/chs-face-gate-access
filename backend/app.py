@@ -175,8 +175,8 @@ SCAN_FORCE_RESIZE = env_bool("SCAN_FORCE_RESIZE", True)
 SCAN_FACE_INDEX_ALLOW_LEGACY_IMAGE_FALLBACK = env_bool("SCAN_FACE_INDEX_ALLOW_LEGACY_IMAGE_FALLBACK", False)
 UNKNOWN_ALERT_COOLDOWN_SECONDS = 30
 UNREGISTERED_EVENT_COOLDOWN_SECONDS = 2
-RECOGNITION_TOLERANCE = 0.43
-MIN_RECOGNITION_CONFIDENCE = 57.0
+RECOGNITION_TOLERANCE = 0.50
+MIN_RECOGNITION_CONFIDENCE = 50.0
 PASSWORD_HASH_METHOD = "pbkdf2:sha256:600000"
 ALLOWED_AVATAR_EXTENSIONS = {"jpg", "jpeg", "png", "webp"}
 MAX_AVATAR_SIZE_BYTES = 5 * 1024 * 1024
@@ -4526,31 +4526,37 @@ def log_attendance_and_sms(student):
             template_variables,
         )
 
-        sms_result = send_sms(
-            parent_contact,
-            msg_text,
-            sms_type="transactional",
-            metadata={
-                "context": "attendance_gate_scan",
-                "session": session_name,
-                "school_year": school_year_label,
-                "template_id": ATTENDANCE_SMS_TEMPLATE_DOC_ID,
-                "template_updated_at": template_payload.get("updated_at", ""),
-            },
-            student_id=student_id,
-            student_name=student_name,
-            parent_contact=parent_contact,
-        )
-        sms_status = "sent" if sms_result.get("status") == "sent" else "failed"
-        sms_error = sms_result.get("error", "")
-
-        if sms_status == "failed":
-            create_alert(
-                level="high",
-                message=f"Failed SMS notification for {student_name}.",
-                category="sms",
-                meta={"student_id": student_id, "error": sms_error, "school_year": school_year_label},
+        def _send_sms_async():
+            sms_result = send_sms(
+                parent_contact,
+                msg_text,
+                sms_type="transactional",
+                metadata={
+                    "context": "attendance_gate_scan",
+                    "session": session_name,
+                    "school_year": school_year_label,
+                    "template_id": ATTENDANCE_SMS_TEMPLATE_DOC_ID,
+                    "template_updated_at": template_payload.get("updated_at", ""),
+                },
+                student_id=student_id,
+                student_name=student_name,
+                parent_contact=parent_contact,
             )
+            status_async = "sent" if sms_result.get("status") == "sent" else "failed"
+            error_async = sms_result.get("error", "")
+
+            if status_async == "failed":
+                create_alert(
+                    level="high",
+                    message=f"Failed SMS notification for {student_name}.",
+                    category="sms",
+                    meta={"student_id": student_id, "error": error_async, "school_year": school_year_label},
+                )
+                
+        import threading
+        threading.Thread(target=_send_sms_async, daemon=True).start()
+        sms_status = "queued"
+        sms_error = ""
     else:
         log_skipped_sms(
             student_id=student_id,
@@ -6128,56 +6134,57 @@ def process_client_frame(frame_bytes):
             model="hog",
         )
         
-        # Handle multiple faces
+        if len(face_locations_small) == 0:
+            return True, "No faces detected"
+            
+        db_encoding_count = int(len(db_encodings)) if db_encodings is not None else 0
+        
+        if model_status == "loading":
+            return True, "Model still loading"
+        elif model_status != "ready" or db_encoding_count == 0:
+            reason = "model_not_ready" if model_status == "model_not_ready" else "no_registered_students"
+            push_not_registered_event(reason, 0.0)
+            return True, f"Not ready: {reason}"
+
+        face_encs = face_recognition.face_encodings(
+            rgb_small,
+            face_locations_small,
+            model="small",
+        )
+        
+        if not face_encs:
+            push_not_registered_event("face_not_encoded", 0.0)
+            return True, "Face(s) not encoded"
+
+        results = []
+        for enc in face_encs:
+            distances = face_recognition.face_distance(db_encodings, enc)
+            
+            if len(distances) > 0:
+                best_idx = int(np.argmin(distances))
+                best_distance = float(distances[best_idx])
+                confidence_pct = calculate_match_confidence(best_distance)
+                is_match = best_distance <= RECOGNITION_TOLERANCE and confidence_pct >= MIN_RECOGNITION_CONFIDENCE
+                
+                if is_match and best_idx < len(db_students):
+                    candidate = db_students[best_idx]
+                    verification = handle_verified_student(candidate, confidence_pct)
+                    if verification:
+                        results.append(f"Verified: {candidate.get('name', 'Unknown')}")
+                    else:
+                        results.append(f"Duplicate scan (cooldown) - {candidate.get('name', 'Unknown')}")
+                else:
+                    push_not_registered_event("low_confidence", confidence_pct)
+                    results.append(f"Low confidence: {confidence_pct:.1f}%")
+            else:
+                push_not_registered_event("no_face_index", 0.0)
+                results.append("No face index")
+                
         if len(face_locations_small) > 1:
             push_multi_face_event(len(face_locations_small))
-            return True, f"Multiple faces detected ({len(face_locations_small)})"
-        
-        # Handle single face
-        if len(face_locations_small) == 1:
-            face_encs = face_recognition.face_encodings(
-                rgb_small,
-                face_locations_small,
-                model="small",
-            )
+            return True, f"Multi-face ({len(face_locations_small)}): " + " | ".join(results)
             
-            db_encoding_count = int(len(db_encodings)) if db_encodings is not None else 0
-            
-            if model_status == "loading":
-                return True, "Model still loading"
-            elif not face_encs:
-                push_not_registered_event("face_not_encoded", 0.0)
-                return True, "Face not encoded"
-            elif model_status != "ready" or db_encoding_count == 0:
-                reason = "model_not_ready" if model_status == "model_not_ready" else "no_registered_students"
-                push_not_registered_event(reason, 0.0)
-                return True, f"Not ready: {reason}"
-            else:
-                # Compare faces with database
-                enc = face_encs[0]
-                distances = face_recognition.face_distance(db_encodings, enc)
-                
-                if len(distances) > 0:
-                    best_idx = int(np.argmin(distances))
-                    best_distance = float(distances[best_idx])
-                    confidence_pct = calculate_match_confidence(best_distance)
-                    is_match = best_distance <= RECOGNITION_TOLERANCE and confidence_pct >= MIN_RECOGNITION_CONFIDENCE
-                    
-                    if is_match and best_idx < len(db_students):
-                        candidate = db_students[best_idx]
-                        verification = handle_verified_student(candidate, confidence_pct)
-                        if verification:
-                            return True, f"Verified: {candidate.get('name', 'Unknown')}"
-                        else:
-                            return True, "Duplicate scan (cooldown)"
-                    else:
-                        push_not_registered_event("low_confidence", confidence_pct)
-                        return True, f"Low confidence: {confidence_pct:.1f}%"
-                else:
-                    push_not_registered_event("no_face_index", 0.0)
-                    return True, "No face index"
-        
-        return True, "No faces detected"
+        return True, results[0]
         
     except Exception as exc:
         error_msg = f"Frame processing error: {str(exc)}"

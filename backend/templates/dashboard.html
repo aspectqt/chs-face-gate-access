@@ -1524,6 +1524,7 @@
         let smsBalanceRefreshTimer = null;
         let smsBalancePollTimer = null;
         let smsBalanceLoading = false;
+        let scanStoppedAt = null; // Timestamp when scanning was manually stopped
 
         // School year variables for disabling scanning console
         const selectedSchoolYear = "{{ selected_school_year }}";
@@ -1989,6 +1990,7 @@
 
         function speakVerification(text) {
             if (!('speechSynthesis' in window)) return;
+            if (!isScanning) return;  // Do not speak after scanning has stopped
             const utterance = new SpeechSynthesisUtterance(text);
             utterance.rate = 1.0;
             utterance.pitch = 1.0;
@@ -2258,12 +2260,18 @@
         }
 
         function queueDashboardContentRefresh() {
+            // Only allow a content refresh if scanning has been stopped for a while
+            // and the user hasn't just clicked stop (avoid reload right after stopping)
             if (isScanning || dashboardContentRefreshTimer) return;
             dashboardContentRefreshTimer = setTimeout(() => {
                 dashboardContentRefreshTimer = null;
                 if (isScanning) return;
+                // Only reload if scanning has been stopped for at least 5 seconds
+                // to avoid disrupting the user right after they click Stop
+                const timeSinceStop = scanStoppedAt ? (Date.now() - scanStoppedAt) : Infinity;
+                if (timeSinceStop < 5000) return;
                 window.location.reload();
-            }, 1800);
+            }, 4000);
         }
 
         function applyDashboardRealtimeSnapshot(payload) {
@@ -2503,8 +2511,14 @@
             stopFrameProcessing();
             clientCamera.stop();
             
+            // Immediately silence any ongoing speech
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+            }
+
             // Update UI state
             isScanning = false;
+            scanStoppedAt = Date.now();
             setScanButtons();
             
             // Cleanup UI elements
@@ -2517,7 +2531,7 @@
             if (scanOverlay) scanOverlay.classList.add('hidden');
             
             setScanState('idle', 'Status: Idle');
-            showScanEventBadge('info', 'Scan stopped due to school year change.');
+            showScanEventBadge('info', 'Scan stopped.');
             
             // Stop event polling
             stopPollingEvents();
@@ -2605,12 +2619,21 @@
         stopBtn.addEventListener('click', () => {
             // Immediate UI feedback
             isScanning = false;
+            scanStoppedAt = Date.now();
             setScanButtons();
             
+            // Immediately cancel any ongoing speech
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+            }
+
             // Stop frame processing and camera immediately
             stopFrameProcessing();
             clientCamera.stop();
             
+            // Stop event polling immediately BEFORE UI cleanup so no stale events fire voice
+            stopPollingEvents();
+
             // Cleanup UI elements
             video.classList.add('hidden');
             cameraOverlay.classList.add('hidden');
@@ -2625,12 +2648,14 @@
                 clearTimeout(scanStatusResetTimer);
                 scanStatusResetTimer = null;
             }
+            if (dashboardContentRefreshTimer) {
+                clearTimeout(dashboardContentRefreshTimer);
+                dashboardContentRefreshTimer = null;
+            }
 
             // Fire and forget server notification
             fetch('/stop_scan', { method: 'POST' }).catch(() => null);
             
-            // Stop event polling
-            stopPollingEvents();
             applyGateStatusDefaults();
         });
 
