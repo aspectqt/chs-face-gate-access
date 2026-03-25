@@ -1,27 +1,27 @@
 (() => {
   const STANDARD_FACE_CAPTURE_STEPS = [
-    { key: "front", label: "Center", instruction: "Look straight at the camera.", yawRange: [-0.028, 0.028], pitchRange: [-0.03, 0.03] },
-    { key: "left_soft", label: "Soft Left", instruction: "Turn slightly to your left.", yawRange: [0.028, 0.062], pitchRange: [-0.08, 0.08] },
-    { key: "left", label: "Left", instruction: "Turn farther to your left.", yawRange: [0.062, 0.125], pitchRange: [-0.1, 0.1] },
-    { key: "right_soft", label: "Soft Right", instruction: "Turn slightly to your right.", yawRange: [-0.062, -0.028], pitchRange: [-0.08, 0.08] },
-    { key: "right", label: "Right", instruction: "Turn farther to your right.", yawRange: [-0.125, -0.062], pitchRange: [-0.1, 0.1] },
-    { key: "up", label: "Up", instruction: "Lift your chin slightly.", yawRange: [-0.08, 0.08], pitchRange: [-0.07, -0.018] },
-    { key: "down", label: "Down", instruction: "Lower your chin slightly.", yawRange: [-0.08, 0.08], pitchRange: [0.022, 0.07] },
-    { key: "up_left", label: "Up Left", instruction: "Look up and to your left.", yawRange: [0.028, 0.095], pitchRange: [-0.085, -0.015] },
-    { key: "up_right", label: "Up Right", instruction: "Look up and to your right.", yawRange: [-0.095, -0.028], pitchRange: [-0.085, -0.015] },
-    { key: "down_center", label: "Low Center", instruction: "Keep centered and lower your chin a little more.", yawRange: [-0.08, 0.08], pitchRange: [0.07, 0.115] },
+    { key: "front", label: "Center", instruction: "Look straight at the camera.", targetYaw: 0, yawTolerance: 0.09, targetPitch: 0, pitchTolerance: 0.12, minScore: 0.72 },
+    { key: "left_soft", label: "Soft Left", instruction: "Turn slightly to your left.", targetYaw: 0.12, yawTolerance: 0.08, targetPitch: 0, pitchTolerance: 0.16, minScore: 0.7 },
+    { key: "left", label: "Left", instruction: "Turn farther to your left.", targetYaw: 0.24, yawTolerance: 0.09, targetPitch: 0, pitchTolerance: 0.17, minScore: 0.72 },
+    { key: "right_soft", label: "Soft Right", instruction: "Turn slightly to your right.", targetYaw: -0.12, yawTolerance: 0.08, targetPitch: 0, pitchTolerance: 0.16, minScore: 0.7 },
+    { key: "right", label: "Right", instruction: "Turn farther to your right.", targetYaw: -0.24, yawTolerance: 0.09, targetPitch: 0, pitchTolerance: 0.17, minScore: 0.72 },
+    { key: "up", label: "Up", instruction: "Lift your chin slightly.", targetYaw: 0, yawTolerance: 0.11, targetPitch: -0.13, pitchTolerance: 0.1, minScore: 0.7 },
+    { key: "down", label: "Down", instruction: "Lower your chin slightly.", targetYaw: 0, yawTolerance: 0.11, targetPitch: 0.13, pitchTolerance: 0.11, minScore: 0.7 },
+    { key: "up_left", label: "Up Left", instruction: "Look up and to your left.", targetYaw: 0.14, yawTolerance: 0.09, targetPitch: -0.11, pitchTolerance: 0.1, minScore: 0.68 },
+    { key: "up_right", label: "Up Right", instruction: "Look up and to your right.", targetYaw: -0.14, yawTolerance: 0.09, targetPitch: -0.11, pitchTolerance: 0.1, minScore: 0.68 },
+    { key: "down_center", label: "Low Center", instruction: "Keep centered and lower your chin a little more.", targetYaw: 0, yawTolerance: 0.12, targetPitch: 0.2, pitchTolerance: 0.1, minScore: 0.68 },
   ];
   const SIMILAR_FACE_CAPTURE_EXTRA_STEPS = [
-    { key: "down_left", label: "Down Left", instruction: "Look down and to your left.", yawRange: [0.03, 0.1], pitchRange: [0.04, 0.11] },
-    { key: "down_right", label: "Down Right", instruction: "Look down and to your right.", yawRange: [-0.1, -0.03], pitchRange: [0.04, 0.11] },
-    { key: "profile_left", label: "Profile Left", instruction: "Turn to a deeper left angle.", yawRange: [0.105, 0.175], pitchRange: [-0.09, 0.09] },
-    { key: "profile_right", label: "Profile Right", instruction: "Turn to a deeper right angle.", yawRange: [-0.175, -0.105], pitchRange: [-0.09, 0.09] },
-    { key: "high_left", label: "High Left", instruction: "Lift your chin and turn left.", yawRange: [0.05, 0.12], pitchRange: [-0.095, -0.028] },
-    { key: "high_right", label: "High Right", instruction: "Lift your chin and turn right.", yawRange: [-0.12, -0.05], pitchRange: [-0.095, -0.028] },
-    { key: "chin_left", label: "Chin Left", instruction: "Lower your chin and turn left.", yawRange: [0.05, 0.12], pitchRange: [0.045, 0.12] },
-    { key: "chin_right", label: "Chin Right", instruction: "Lower your chin and turn right.", yawRange: [-0.12, -0.05], pitchRange: [0.045, 0.12] },
-    { key: "high_center", label: "High Center", instruction: "Look higher while staying centered.", yawRange: [-0.06, 0.06], pitchRange: [-0.11, -0.05] },
-    { key: "low_center", label: "Low Center", instruction: "Look lower while staying centered.", yawRange: [-0.06, 0.06], pitchRange: [0.09, 0.14] },
+    { key: "down_left", label: "Down Left", instruction: "Look down and to your left.", targetYaw: 0.15, yawTolerance: 0.09, targetPitch: 0.15, pitchTolerance: 0.11, minScore: 0.68 },
+    { key: "down_right", label: "Down Right", instruction: "Look down and to your right.", targetYaw: -0.15, yawTolerance: 0.09, targetPitch: 0.15, pitchTolerance: 0.11, minScore: 0.68 },
+    { key: "profile_left", label: "Profile Left", instruction: "Turn to a deeper left angle.", targetYaw: 0.34, yawTolerance: 0.1, targetPitch: 0, pitchTolerance: 0.18, minScore: 0.72 },
+    { key: "profile_right", label: "Profile Right", instruction: "Turn to a deeper right angle.", targetYaw: -0.34, yawTolerance: 0.1, targetPitch: 0, pitchTolerance: 0.18, minScore: 0.72 },
+    { key: "high_left", label: "High Left", instruction: "Lift your chin and turn left.", targetYaw: 0.18, yawTolerance: 0.1, targetPitch: -0.18, pitchTolerance: 0.11, minScore: 0.68 },
+    { key: "high_right", label: "High Right", instruction: "Lift your chin and turn right.", targetYaw: -0.18, yawTolerance: 0.1, targetPitch: -0.18, pitchTolerance: 0.11, minScore: 0.68 },
+    { key: "chin_left", label: "Chin Left", instruction: "Lower your chin and turn left.", targetYaw: 0.18, yawTolerance: 0.1, targetPitch: 0.18, pitchTolerance: 0.11, minScore: 0.68 },
+    { key: "chin_right", label: "Chin Right", instruction: "Lower your chin and turn right.", targetYaw: -0.18, yawTolerance: 0.1, targetPitch: 0.18, pitchTolerance: 0.11, minScore: 0.68 },
+    { key: "high_center", label: "High Center", instruction: "Look higher while staying centered.", targetYaw: 0, yawTolerance: 0.12, targetPitch: -0.24, pitchTolerance: 0.1, minScore: 0.68 },
+    { key: "low_center", label: "Low Center", instruction: "Look lower while staying centered.", targetYaw: 0, yawTolerance: 0.12, targetPitch: 0.26, pitchTolerance: 0.1, minScore: 0.68 },
   ];
   const FACE_CAPTURE_PROFILES = {
     standard: {
@@ -45,11 +45,18 @@
     aligned: "h-[72%] w-[48%] rounded-[999px] border-2 border-emerald-400 shadow-[0_0_0_999px_rgba(2,6,23,0.54),0_0_24px_rgba(52,211,153,0.3)] transition-all duration-300",
     warning: "h-[72%] w-[48%] rounded-[999px] border-2 border-amber-300 shadow-[0_0_0_999px_rgba(2,6,23,0.6)] transition-all duration-300",
   };
-  const FACE_CAPTURE_BRIGHTNESS_MIN = 52;
-  const FACE_CAPTURE_BRIGHTNESS_MAX = 208;
-  const FACE_CAPTURE_CONTRAST_MIN = 26;
-  const FACE_CAPTURE_SHARPNESS_MIN = 18;
-  const FACE_CAPTURE_MIN_HAMMING_DISTANCE = 6;
+  const FACE_CAPTURE_BRIGHTNESS_MIN = 24;
+  const FACE_CAPTURE_BRIGHTNESS_MAX = 238;
+  const FACE_CAPTURE_CONTRAST_MIN = 12;
+  const FACE_CAPTURE_SHARPNESS_MIN = 6;
+  const FACE_CAPTURE_MIN_HAMMING_DISTANCE = 4;
+  const FACE_CAPTURE_STABLE_FRAME_TARGET = 2;
+  const FACE_CAPTURE_SOFT_FRAME_TARGET = 4;
+  const FACE_CAPTURE_DUPLICATE_POSE_DELTA = 0.055;
+  const FACE_CAPTURE_RETRY_COOLDOWN_MS = 240;
+  const FACE_CAPTURE_SUCCESS_COOLDOWN_MS = 420;
+  const FACE_CAPTURE_LOCKED_HOLD_MS = 120;
+  const FACE_CAPTURE_SOFT_HOLD_MS = 220;
   const SECTION_STATS_EMPTY_NOTE = "Select a year level and section to view detailed gender statistics.";
   const REENROLL_ASSIGNMENT_NEW_SECTION_VALUE = "__new_section__";
 
@@ -86,6 +93,8 @@
       alignFrames: 0,
       cooldownUntil: 0,
       started: false,
+      stableSince: 0,
+      stableMode: "",
     },
     requests: {
       students: null,
@@ -1957,12 +1966,51 @@
 
     const faceHeightRatio = bounds.height / (guide.ry * 2);
     const faceWidthRatio = bounds.width / (guide.rx * 2);
-    return faceHeightRatio >= 0.52 && faceHeightRatio <= 0.98 && faceWidthRatio >= 0.44 && faceWidthRatio <= 0.92;
+    return faceHeightRatio >= 0.42 && faceHeightRatio <= 1.02 && faceWidthRatio >= 0.34 && faceWidthRatio <= 0.94;
   };
 
-  const evaluateStep = (step, yaw, pitch) => {
-    if (!step) return false;
-    return yaw >= step.yawRange[0] && yaw <= step.yawRange[1] && pitch >= step.pitchRange[0] && pitch <= step.pitchRange[1];
+  const calculateFacePose = (landmarks) => {
+    const left = landmarks[234];
+    const right = landmarks[454];
+    const nose = landmarks[1];
+    const leftEye = landmarks[33];
+    const rightEye = landmarks[263];
+    const mouthLeft = landmarks[61];
+    const mouthRight = landmarks[291];
+    const upperLip = landmarks[13];
+    const lowerLip = landmarks[14];
+    const faceWidth = Math.max(Math.abs(right.x - left.x), 0.0001);
+    const mouthCenterY = (mouthLeft.y + mouthRight.y + upperLip.y + lowerLip.y) / 4;
+    const mouthCenterX = (mouthLeft.x + mouthRight.x + upperLip.x + lowerLip.x) / 4;
+    const centerX = (left.x + right.x) / 2;
+    const eyeCenterY = (leftEye.y + rightEye.y) / 2;
+    const eyeWidth = Math.max(Math.abs(rightEye.x - leftEye.x), 0.0001);
+    const eyeToMouthHeight = Math.max(Math.abs(mouthCenterY - eyeCenterY), 0.0001);
+
+    return {
+      yaw: (nose.x - centerX) / faceWidth,
+      pitch: ((nose.y - eyeCenterY) / eyeToMouthHeight) - 0.62,
+      roll: (rightEye.y - leftEye.y) / eyeWidth,
+      faceWidth,
+      faceHeight: eyeToMouthHeight,
+      mouthOffsetX: (nose.x - mouthCenterX) / eyeWidth,
+    };
+  };
+
+  const evaluateStep = (step, pose) => {
+    if (!step || !pose) {
+      return { aligned: false, score: 0, yawScore: 0, pitchScore: 0, rollScore: 0 };
+    }
+    const yawTolerance = Math.max(Number(step.yawTolerance || 0.1), 0.01);
+    const pitchTolerance = Math.max(Number(step.pitchTolerance || 0.1), 0.01);
+    const targetYaw = Number(step.targetYaw || 0);
+    const targetPitch = Number(step.targetPitch || 0);
+    const yawScore = Math.max(0, 1 - (Math.abs(pose.yaw - targetYaw) / yawTolerance));
+    const pitchScore = Math.max(0, 1 - (Math.abs(pose.pitch - targetPitch) / pitchTolerance));
+    const rollScore = Math.max(0, 1 - (Math.abs(pose.roll) / 0.22));
+    const score = (yawScore * 0.45) + (pitchScore * 0.4) + (rollScore * 0.15);
+    const aligned = score >= Number(step.minScore || 0.7) && rollScore >= 0.2;
+    return { aligned, score, yawScore, pitchScore, rollScore };
   };
 
   const drawOverlay = (ctx, width, height, stateKey = "idle") => {
@@ -2004,8 +2052,8 @@
     const sx = clampNumber(centerX - (cropSize / 2), 0, Math.max(0, width - cropSize));
     const sy = clampNumber(centerY - (cropSize / 2), 0, Math.max(0, height - cropSize));
     const canvas = document.createElement("canvas");
-    canvas.width = 320;
-    canvas.height = 320;
+    canvas.width = 384;
+    canvas.height = 384;
     const context = canvas.getContext("2d");
     context.drawImage(video, sx, sy, cropSize, cropSize, 0, 0, canvas.width, canvas.height);
     return canvas;
@@ -2043,10 +2091,10 @@
     }
     const sharpness = sharpnessCount ? sharpnessTotal / sharpnessCount : 0;
 
-    if (brightness < FACE_CAPTURE_BRIGHTNESS_MIN) {
+    if (brightness < FACE_CAPTURE_BRIGHTNESS_MIN && contrast < FACE_CAPTURE_CONTRAST_MIN * 1.6) {
       return { ok: false, reason: "Increase lighting before capturing the next angle.", brightness, contrast, sharpness };
     }
-    if (brightness > FACE_CAPTURE_BRIGHTNESS_MAX) {
+    if (brightness > FACE_CAPTURE_BRIGHTNESS_MAX && contrast < FACE_CAPTURE_CONTRAST_MIN * 1.4) {
       return { ok: false, reason: "Reduce glare or strong backlight before capturing.", brightness, contrast, sharpness };
     }
     if (contrast < FACE_CAPTURE_CONTRAST_MIN) {
@@ -2133,6 +2181,8 @@
     state.face.mesh = null;
     state.face.lastResults = null;
     state.face.processing = false;
+    state.face.stableSince = 0;
+    state.face.stableMode = "";
     if (refs.faceOverlay) {
       const overlayContext = refs.faceOverlay.getContext("2d");
       overlayContext?.clearRect(0, 0, refs.faceOverlay.width || 0, refs.faceOverlay.height || 0);
@@ -2147,6 +2197,8 @@
     state.face.alignFrames = 0;
     state.face.cooldownUntil = 0;
     state.face.started = false;
+    state.face.stableSince = 0;
+    state.face.stableMode = "";
     if (clearStudent) {
       state.face.studentId = "";
       state.face.mode = "register";
@@ -2161,29 +2213,48 @@
     const cropCanvas = buildFaceCropCanvas(refs.faceVideo, landmarks, width, height);
     if (!cropCanvas) {
       state.face.alignFrames = 0;
-      state.face.cooldownUntil = Date.now() + 700;
+      state.face.cooldownUntil = Date.now() + FACE_CAPTURE_RETRY_COOLDOWN_MS;
       refs.faceStatus.textContent = "Move closer so the face fills the oval guide.";
       return;
     }
 
     const quality = analyzeCaptureQuality(cropCanvas);
-    if (!quality.ok) {
+    const severeQualityFailure = !quality.ok
+      && (
+        Number(quality.brightness || 0) < 10
+        || Number(quality.brightness || 0) > 248
+        || Number(quality.contrast || 0) < 5
+        || Number(quality.sharpness || 0) < 2
+      );
+    if (severeQualityFailure) {
       state.face.alignFrames = 0;
-      state.face.cooldownUntil = Date.now() + 700;
+      state.face.stableSince = 0;
+      state.face.stableMode = "";
+      state.face.cooldownUntil = Date.now() + FACE_CAPTURE_RETRY_COOLDOWN_MS;
       refs.faceStatus.textContent = quality.reason;
       return;
     }
 
     const fingerprint = buildCaptureFingerprint(cropCanvas);
-    const duplicate = state.face.captureMeta.some((meta) => getHammingDistance(meta.fingerprint, fingerprint) < FACE_CAPTURE_MIN_HAMMING_DISTANCE);
+    const lastMeta = state.face.captureMeta[state.face.captureMeta.length - 1];
+    const duplicate = Boolean(lastMeta) && (() => {
+      const fingerprintDistance = getHammingDistance(lastMeta.fingerprint, fingerprint);
+      const yawDelta = Math.abs(Number(lastMeta.yaw || 0) - Number(pose.yaw || 0));
+      const pitchDelta = Math.abs(Number(lastMeta.pitch || 0) - Number(pose.pitch || 0));
+      return fingerprintDistance < 2
+        && yawDelta < FACE_CAPTURE_DUPLICATE_POSE_DELTA * 0.45
+        && pitchDelta < FACE_CAPTURE_DUPLICATE_POSE_DELTA * 0.45;
+    })();
     if (duplicate) {
       state.face.alignFrames = 0;
-      state.face.cooldownUntil = Date.now() + 700;
+      state.face.stableSince = 0;
+      state.face.stableMode = "";
+      state.face.cooldownUntil = Date.now() + FACE_CAPTURE_RETRY_COOLDOWN_MS;
       refs.faceStatus.textContent = "That angle is too similar. Shift to the next guided position.";
       return;
     }
 
-    state.face.captures.push(cropCanvas.toDataURL("image/jpeg", 0.94));
+    state.face.captures.push(cropCanvas.toDataURL("image/jpeg", 0.97));
     state.face.captureMeta.push({
       step_key: step.key,
       label: step.label,
@@ -2193,11 +2264,14 @@
       brightness: Number(quality.brightness.toFixed(2)),
       contrast: Number(quality.contrast.toFixed(2)),
       sharpness: Number(quality.sharpness.toFixed(2)),
+      quality_ok: Boolean(quality.ok),
       fingerprint,
     });
 
     state.face.alignFrames = 0;
-    state.face.cooldownUntil = Date.now() + 950;
+    state.face.stableSince = 0;
+    state.face.stableMode = "";
+    state.face.cooldownUntil = Date.now() + FACE_CAPTURE_SUCCESS_COOLDOWN_MS;
     const steps = getFaceCaptureSteps();
     if (state.face.captures.length >= steps.length) {
       state.face.started = false;
@@ -2265,31 +2339,51 @@
       const landmarks = faces[0];
       if (!isFaceInsideGuide(landmarks, width, height)) {
         state.face.alignFrames = 0;
+        state.face.stableSince = 0;
+        state.face.stableMode = "";
         drawOverlay(context, width, height, "warning");
         refs.faceStatus.textContent = "Center the face inside the oval guide before capture.";
         return;
       }
 
-      const left = landmarks[234];
-      const right = landmarks[454];
-      const nose = landmarks[1];
-      const top = landmarks[10];
-      const bottom = landmarks[152];
+      const pose = calculateFacePose(landmarks);
+      const alignment = evaluateStep(step, pose);
 
-      const yaw = nose.x - ((left.x + right.x) / 2);
-      const pitch = nose.y - ((top.y + bottom.y) / 2);
-      const aligned = evaluateStep(step, yaw, pitch);
+      drawOverlay(context, width, height, alignment.aligned ? "aligned" : "detected");
 
-      drawOverlay(context, width, height, aligned ? "aligned" : "detected");
+      const softThreshold = Math.max((step.minScore || 0.7) - 0.14, 0.5);
+      const stableEnough = alignment.score >= softThreshold
+        && alignment.yawScore >= 0.35
+        && alignment.pitchScore >= 0.28
+        && alignment.rollScore >= 0.18;
+      const nowMs = Date.now();
 
-      if (Date.now() >= state.face.cooldownUntil) {
-        state.face.alignFrames = aligned ? state.face.alignFrames + 1 : 0;
+      if (nowMs >= state.face.cooldownUntil) {
+        if (!stableEnough) {
+          state.face.alignFrames = 0;
+          state.face.stableSince = 0;
+          state.face.stableMode = "";
+        } else {
+          state.face.alignFrames += 1;
+          if (!state.face.stableSince) {
+            state.face.stableSince = nowMs;
+          }
+          state.face.stableMode = alignment.aligned ? "locked" : (state.face.stableMode || "soft");
+        }
       }
 
-      refs.faceStatus.textContent = aligned ? `Alignment locked for ${step.label}. Hold still...` : `Adjust for ${step.label}.`;
+      refs.faceStatus.textContent = alignment.aligned
+        ? `Alignment locked for ${step.label}. Hold still...`
+        : stableEnough
+          ? `Almost there for ${step.label}. Hold the angle a little more.`
+          : `Adjust for ${step.label}.`;
 
-      if (state.face.alignFrames >= 4 && Date.now() >= state.face.cooldownUntil) {
-        captureCurrentFrame(step, landmarks, width, height, { yaw, pitch });
+      const lockedStable = state.face.stableMode === "locked" || alignment.aligned;
+      const requiredStableFrames = lockedStable ? FACE_CAPTURE_STABLE_FRAME_TARGET : FACE_CAPTURE_SOFT_FRAME_TARGET;
+      const requiredStableMs = lockedStable ? FACE_CAPTURE_LOCKED_HOLD_MS : FACE_CAPTURE_SOFT_HOLD_MS;
+      const stableLongEnough = state.face.stableSince && (nowMs - state.face.stableSince) >= requiredStableMs;
+      if (stableEnough && stableLongEnough && state.face.alignFrames >= requiredStableFrames && nowMs >= state.face.cooldownUntil) {
+        captureCurrentFrame(step, landmarks, width, height, pose);
       }
     } catch (_error) {
       refs.faceStatus.textContent = "Face detection processing error.";

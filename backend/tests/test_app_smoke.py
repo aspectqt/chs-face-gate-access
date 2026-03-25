@@ -58,6 +58,29 @@ class AppSmokeTests(unittest.TestCase):
         self.assertNotIn("Scanner Status", html)
         self.assertNotIn("Manual IN", html)
         self.assertNotIn("Manual OUT", html)
+        self.assertIn("Status: ${data.count} faces detected", html)
+        self.assertNotIn("showScanEventBadge('warning', `${data.count} faces detected`)", html)
+
+    def test_staff_dashboard_focuses_on_centered_live_recognition_layout(self):
+        client = self.make_client(username="staff_user", role=self.app_module.ROLE_STAFF)
+
+        response = client.get("/dashboard")
+        self.assertEqual(response.status_code, 200)
+
+        html = response.get_data(as_text=True)
+        self.assertIn("staff-dashboard", html)
+        self.assertIn('id="gateConsoleCard"', html)
+        self.assertIn('id="gateConsoleColumn"', html)
+        self.assertIn('id="gateSecondaryColumn"', html)
+        self.assertIn('id="gateConsoleLayout"', html)
+        self.assertIn('id="gateControlsColumn"', html)
+        self.assertIn('id="gateCameraColumn"', html)
+        self.assertIn("body.staff-dashboard .dashboard-main > *:not(#gate-scanning)", html)
+        self.assertIn("body.staff-dashboard #gateSecondaryColumn", html)
+        self.assertIn("body.staff-dashboard #gateConsoleLayout", html)
+        self.assertIn("grid-template-columns: minmax(0, 1fr) 18rem", html)
+        self.assertIn("body.staff-dashboard #scanFrame", html)
+        self.assertIn("scanActivityFeed", html)
 
     def test_shared_stat_card_layout_is_present_on_key_pages(self):
         client = self.make_client()
@@ -308,6 +331,75 @@ class AppSmokeTests(unittest.TestCase):
         finally:
             attendance_collection.delete_many({"student_id": student_id})
             self.app_module.last_scanned.pop(student_id, None)
+
+    def test_process_client_frame_verifies_multiple_students_without_multi_face_warning(self):
+        original_active = None
+        original_encodings = None
+        original_students = None
+        original_model_status = None
+        with self.app_module.scan_lock:
+            original_active = self.app_module.scan_state.get("active")
+            original_encodings = self.app_module.scan_state.get("known_encodings")
+            original_students = self.app_module.scan_state.get("known_students")
+            original_model_status = self.app_module.scan_state.get("model_status")
+            self.app_module.scan_state["active"] = True
+            self.app_module.scan_state["known_encodings"] = self.app_module.np.array(
+                [
+                    [0.11] * 128,
+                    [0.77] * 128,
+                ],
+                dtype=self.app_module.np.float64,
+            )
+            self.app_module.scan_state["known_students"] = [
+                {"student_id": "MF-001", "name": "Multi Face One"},
+                {"student_id": "MF-002", "name": "Multi Face Two"},
+            ]
+            self.app_module.scan_state["model_status"] = "ready"
+
+        frame = self.app_module.np.zeros((240, 320, 3), dtype=self.app_module.np.uint8)
+        encodings = [
+            self.app_module.np.array([0.10] * 128, dtype=self.app_module.np.float64),
+            self.app_module.np.array([0.78] * 128, dtype=self.app_module.np.float64),
+        ]
+
+        try:
+            with patch.object(self.app_module.cv2, "imdecode", return_value=frame), \
+                    patch.object(self.app_module.face_recognition, "face_locations", return_value=[(10, 110, 110, 10), (40, 250, 160, 140)]), \
+                    patch.object(self.app_module.face_recognition, "face_encodings", return_value=encodings), \
+                    patch.object(
+                        self.app_module.face_recognition,
+                        "face_distance",
+                        side_effect=[
+                            self.app_module.np.array([0.21, 0.74], dtype=self.app_module.np.float64),
+                            self.app_module.np.array([0.72, 0.19], dtype=self.app_module.np.float64),
+                        ],
+                    ), \
+                    patch.object(self.app_module, "calculate_match_confidence", side_effect=[99.2, 98.6]), \
+                    patch.object(
+                        self.app_module,
+                        "handle_verified_student",
+                        side_effect=[
+                            {"student_id": "MF-001", "gate_action": "IN"},
+                            {"student_id": "MF-002", "gate_action": "IN"},
+                        ],
+                    ) as verified_mock, \
+                    patch.object(self.app_module, "push_not_registered_event") as not_registered_mock, \
+                    patch.object(self.app_module, "push_multi_face_event") as multi_face_mock:
+                success, message = self.app_module.process_client_frame(b"frame")
+
+            self.assertTrue(success)
+            self.assertIn("Verified 2 students", message)
+            self.assertIn("Multi Face One", message)
+            self.assertIn("Multi Face Two", message)
+            self.assertEqual(verified_mock.call_count, 2)
+            not_registered_mock.assert_not_called()
+            multi_face_mock.assert_not_called()
+        finally:
+            with self.app_module.scan_lock:
+                self.app_module.scan_state["active"] = original_active
+                self.app_module.scan_state["known_encodings"] = original_encodings
+                self.app_module.scan_state["known_students"] = original_students
+                self.app_module.scan_state["model_status"] = original_model_status
 
     def test_dynamic_schedule_changes_runtime_late_and_cooldown_behavior(self):
         client = self.make_client()

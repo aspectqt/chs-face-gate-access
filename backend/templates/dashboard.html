@@ -355,20 +355,159 @@
                 padding: 1rem;
             }
         }
+
+        body.staff-dashboard {
+            background:
+                radial-gradient(circle at top, rgba(16, 185, 129, 0.08), transparent 32rem),
+                linear-gradient(180deg, var(--app-surface-2) 0%, var(--app-surface-3) 100%);
+        }
+
+        body.staff-dashboard .dashboard-shell {
+            width: 100%;
+        }
+
+        body.staff-dashboard .dashboard-main {
+            display: flex;
+            min-height: 100vh;
+            min-height: 100svh;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+            overflow: hidden;
+        }
+
+        body.staff-dashboard .dashboard-main > *:not(#gate-scanning) {
+            display: none !important;
+        }
+
+        body.staff-dashboard #gate-scanning {
+            display: flex;
+            width: min(100%, 1180px);
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto;
+        }
+
+        body.staff-dashboard #gateConsoleColumn {
+            width: 100%;
+            max-width: 1180px;
+        }
+
+        body.staff-dashboard #gateSecondaryColumn {
+            display: none !important;
+        }
+
+        body.staff-dashboard #gateConsoleCard {
+            margin: 0 auto;
+            width: min(100%, 1180px);
+            max-height: calc(100svh - 2rem);
+            padding: 1.25rem;
+            display: flex;
+            flex-direction: column;
+        }
+
+        body.staff-dashboard .gate-console-shell {
+            border-color: rgba(148, 163, 184, 0.16);
+            box-shadow: 0 20px 48px rgba(15, 23, 42, 0.08);
+        }
+
+        body.staff-dashboard #gateConsoleCard .gate-console-divider {
+            padding-bottom: 1rem;
+        }
+
+        body.staff-dashboard #gateConsoleLayout {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 18rem;
+            gap: 1rem;
+            margin-top: 1rem;
+            min-height: 0;
+            flex: 1 1 auto;
+            align-items: stretch;
+        }
+
+        body.staff-dashboard #gateCameraColumn {
+            order: 1;
+            min-width: 0;
+        }
+
+        body.staff-dashboard #gateControlsColumn {
+            order: 2;
+            min-width: 0;
+            align-self: stretch;
+        }
+
+        body.staff-dashboard #gateControlsColumn .gate-console-panel {
+            display: flex;
+            height: 100%;
+            min-height: 0;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        body.staff-dashboard #gateControlsColumn .gate-console-control-actions {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        body.staff-dashboard #gateControlsColumn .gate-console-control-actions > button {
+            justify-content: center;
+            width: 100%;
+        }
+
+        body.staff-dashboard #gateCameraColumn .gate-console-panel {
+            height: 100%;
+        }
+
+        body.staff-dashboard #scanFrame {
+            aspect-ratio: auto;
+            min-height: 0;
+            height: clamp(20rem, calc(100svh - 18rem), 40rem);
+        }
+
+        @media (max-width: 768px) {
+            body.staff-dashboard .dashboard-main {
+                padding: 1rem;
+            }
+
+            body.staff-dashboard #gate-scanning {
+                width: 100%;
+            }
+
+            body.staff-dashboard #gateConsoleCard {
+                max-height: none;
+            }
+
+            body.staff-dashboard #gateConsoleLayout {
+                grid-template-columns: 1fr;
+            }
+
+            body.staff-dashboard #gateControlsColumn,
+            body.staff-dashboard #gateCameraColumn {
+                order: initial;
+            }
+
+            body.staff-dashboard #scanFrame {
+                aspect-ratio: 16 / 9;
+                height: auto;
+                min-height: 18rem;
+            }
+        }
     </style>
 </head>
 
-<body class="bg-slate-100 min-h-screen min-h-[100svh] w-full overflow-hidden text-slate-800 dashboard-page" data-authenticated="1"
+<body class="bg-slate-100 min-h-screen min-h-[100svh] w-full overflow-hidden text-slate-800 dashboard-page {% if is_staff_dashboard %}staff-dashboard{% endif %}" data-authenticated="1"
     data-user-theme="{{ current_theme|default('') }}" data-can-manage-alerts="{% if can_manage_alerts %}1{% else %}0{% endif %}" x-data="{ mobileMenuOpen: false }">
     <div class="flex h-full w-full min-w-0">
 
-        {% include 'partials/sidebar.html' %}
+        <div class="{% if is_staff_dashboard %}hidden {% endif %}shrink-0">
+            {% include 'partials/sidebar.html' %}
+        </div>
 
         <!-- MAIN -->
         <div class="dashboard-shell flex h-full w-full flex-1 flex-col min-w-0 overflow-hidden">
 
             <!-- HEADER -->
-            <header class="dashboard-header relative z-20 flex shrink-0 items-center justify-between gap-4 bg-white px-4 shadow-sm md:px-6">
+            <header class="{% if is_staff_dashboard %}hidden {% endif %}dashboard-header relative z-20 flex shrink-0 items-center justify-between gap-4 bg-white px-4 shadow-sm md:px-6">
                 <div class="flex min-w-0 items-center gap-3">
                     <button @click="mobileMenuOpen = true" class="md:hidden text-gray-500 hover:text-gray-700 focus:outline-none">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -629,7 +768,7 @@
 
                 <!-- GATE + SEARCH -->
                 <section id="gate-scanning" class="grid w-full grid-cols-1 gap-5 xl:grid-cols-12 items-stretch">
-                    <div class="xl:col-span-10">
+                    <div id="gateConsoleColumn" class="xl:col-span-10">
                         <div id="gateConsoleCard"
                             class="gate-console-shell p-5 lg:p-6">
                             <div class="gate-console-divider flex flex-wrap items-start justify-between gap-4 border-b pb-5">
@@ -653,8 +792,8 @@
                                     Mode: Smart IN/OUT Tracking</span>
                             </div>
 
-                            <div class="mt-6 grid gap-4">
-                                <aside class="order-2 grid min-h-0 min-w-0 content-start gap-4">
+                            <div id="gateConsoleLayout" class="mt-6 grid gap-4">
+                                <aside id="gateControlsColumn" class="order-2 grid min-h-0 min-w-0 content-start gap-4">
                                     <div class="gate-console-panel gate-console-panel-soft p-4 lg:p-5">
                                         <div class="flex flex-wrap items-center justify-between gap-3">
                                             <div>
@@ -677,7 +816,7 @@
                                         </div>
                                     </div>
                                 </aside>
-                                <div class="order-1 xl:order-2 grid min-w-0 gap-4">
+                                <div id="gateCameraColumn" class="order-1 xl:order-2 grid min-w-0 gap-4">
                                     <div class="gate-console-panel gate-console-camera min-w-0 overflow-hidden p-4 lg:p-5">
                                         <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
                                             <div>
@@ -752,7 +891,7 @@
                         </div>
                     </div>
 
-                    <div class="xl:col-span-2 flex min-h-0 w-full">
+                    <div id="gateSecondaryColumn" class="xl:col-span-2 flex min-h-0 w-full">
                         <a href="/early-timeout" class="dashboard-card rounded-2xl border border-amber-200 bg-white p-4 shadow-sm flex flex-col h-full w-full hover:bg-amber-50/30 transition group">
                             <div class="flex items-start justify-between gap-2 mb-2">
                                 <span class="rounded-xl bg-amber-100 p-2 text-amber-700">
@@ -1543,7 +1682,9 @@
         
         clientCamera.onMultipleFaces = function(data) {
             console.log('[Multiple Faces]', data);
-            showScanEventBadge('warning', `${data.count} faces detected`);
+            if (data.count > 1) {
+                setScanState('scanning', `Status: ${data.count} faces detected`);
+            }
         };
         
         clientCamera.onVoiceFeedback = function(name, studentId) {
@@ -1592,6 +1733,7 @@
         const scanActivityCount = document.getElementById('scanActivityCount');
         const alertsSummaryCount = document.getElementById('alertsSummaryCount');
         let scanPollingTimer = null;
+        let scanEventsRequestInFlight = false;
         let lastEventId = 0;
         let isScanning = false;
         let audioCtx = null;
@@ -1610,6 +1752,7 @@
         let smsBalancePollTimer = null;
         let smsBalanceLoading = false;
         let scanStoppedAt = null;
+        let scanFrameRequestInFlight = false;
         const SCAN_ACTIVITY_LIMIT = 10;
         const VOICE_FEEDBACK_HISTORY_LIMIT = 40;
         const voiceFeedbackQueue = [];
@@ -2511,111 +2654,120 @@
             connect();
         }
 
-        function startPollingEvents() {
-            if (scanPollingTimer) return;
-            scanPollingTimer = setInterval(async () => {
-                try {
-                    const res = await fetch(`/scan_events?since=${lastEventId}`);
-                    if (!res.ok) return;
-                    const data = await res.json();
-                    const events = data.events || [];
-                    if (data.scan_session_mode) {
-                        applyScanSessionMode(data.scan_session_mode, data.effective_session || null);
-                    }
-                    if (typeof data.model_status === 'string') {
-                        applyScanModelStatus(data.model_status, data.registered_faces || 0, false);
-                    }
+        async function pollScanEventsOnce() {
+            if (scanEventsRequestInFlight) return;
+            scanEventsRequestInFlight = true;
+            try {
+                const res = await fetch(`/scan_events?since=${lastEventId}`);
+                if (!res.ok) return;
+                const data = await res.json();
+                const events = data.events || [];
+                if (data.scan_session_mode) {
+                    applyScanSessionMode(data.scan_session_mode, data.effective_session || null);
+                }
+                if (typeof data.model_status === 'string') {
+                    applyScanModelStatus(data.model_status, data.registered_faces || 0, false);
+                }
 
-                    events.forEach(evt => {
-                        lastEventId = Math.max(lastEventId, evt.id || 0);
+                events.forEach(evt => {
+                    lastEventId = Math.max(lastEventId, evt.id || 0);
 
-                        if (evt.type === 'verified') {
-                            const gateAction = String(evt.gate_action || '').toUpperCase() === 'OUT' ? 'OUT' : 'IN';
-                            const displayMessage = evt.display_message || evt.verification_label || 'Verified';
-                            const confidenceText = Number.isFinite(Number(evt.confidence_pct)) && Number(evt.confidence_pct) > 0
-                                ? ` (${Number(evt.confidence_pct).toFixed(1)}%)`
-                                : '';
-                            
-                            scanOverlay.textContent = `${evt.name} (${gateAction}) - ${displayMessage}${confidenceText}`;
-                            scanOverlay.classList.remove('hidden');
-                            
-                            const nameText = document.getElementById('scanNameText');
-                            const nameOverlay = document.getElementById('scanNameOverlay');
-                            const statusBadge = document.getElementById('scanStatusBadge');
-                            
-                            if (nameText) nameText.textContent = evt.name || 'Student';
-                            if (statusBadge) statusBadge.textContent = `${gateAction} - ${displayMessage}`;
-                            if (nameOverlay) {
-                                nameOverlay.classList.remove('hidden');
-                                setTimeout(() => {
-                                    nameOverlay.querySelector('div')?.classList.remove('scale-90', 'opacity-0');
-                                    nameOverlay.querySelector('div')?.classList.add('scale-100', 'opacity-100');
-                                }, 10);
-                            }
-
-                            setScanState('success', `Status: ${displayMessage} - ${evt.name}`);
-                            showScanEventBadge(evt.duplicate ? 'warning' : 'success', `${gateAction} - ${displayMessage}${confidenceText}`);
-                            scheduleScanningStateRestore(evt.duplicate ? 800 : 1500);
-
-                            if (evt.feed_update && evt.activity_entry) {
-                                upsertScanActivityEntry(evt.activity_entry);
-                            }
-
-                            if (!evt.duplicate) {
-                                playNotificationTone();
-                                queueVoiceFeedback(evt.voice_message || displayMessage, buildVoiceEventKey(evt));
-                            }
-                            
-                            const smsStatus = String(evt.sms_status || '').toLowerCase();
-                            setStatusChip(faceStatusChip, 'Face: Detected', 'success');
-                            setStatusChip(accessStatusChip, `Access: ${gateAction}`, gateAction === 'OUT' ? 'warning' : 'success');
-                            
-                            if (smsStatus === 'sent') {
-                                setStatusChip(smsStatusChip, 'SMS: Sent', 'success');
-                            } else if (smsStatus === 'failed') {
-                                setStatusChip(smsStatusChip, 'SMS: Failed', 'danger');
-                            } else if (smsStatus) {
-                                setStatusChip(smsStatusChip, `SMS: ${smsStatus.toUpperCase()}`, 'warning');
-                            } else {
-                                setStatusChip(smsStatusChip, 'SMS: --', 'neutral');
-                            }
-                            
-                            if (smsStatus === 'sent' || smsStatus === 'failed') {
-                                queueSmsBalanceRefresh(500);
-                            }
+                    if (evt.type === 'verified') {
+                        const gateAction = String(evt.gate_action || '').toUpperCase() === 'OUT' ? 'OUT' : 'IN';
+                        const displayMessage = evt.display_message || evt.verification_label || 'Verified';
+                        const confidenceText = Number.isFinite(Number(evt.confidence_pct)) && Number(evt.confidence_pct) > 0
+                            ? ` (${Number(evt.confidence_pct).toFixed(1)}%)`
+                            : '';
+                        
+                        scanOverlay.textContent = `${evt.name} (${gateAction}) - ${displayMessage}${confidenceText}`;
+                        scanOverlay.classList.remove('hidden');
+                        
+                        const nameText = document.getElementById('scanNameText');
+                        const nameOverlay = document.getElementById('scanNameOverlay');
+                        const statusBadge = document.getElementById('scanStatusBadge');
+                        
+                        if (nameText) nameText.textContent = evt.name || 'Student';
+                        if (statusBadge) statusBadge.textContent = `${gateAction} - ${displayMessage}`;
+                        if (nameOverlay) {
+                            nameOverlay.classList.remove('hidden');
+                            setTimeout(() => {
+                                nameOverlay.querySelector('div')?.classList.remove('scale-90', 'opacity-0');
+                                nameOverlay.querySelector('div')?.classList.add('scale-100', 'opacity-100');
+                            }, 10);
                         }
 
-                        if (evt.type === 'not_registered') {
-                            scanOverlay.classList.remove('hidden');
-                            const confidenceText = Number.isFinite(Number(evt.confidence_pct)) && Number(evt.confidence_pct) > 0
-                                ? ` (${Number(evt.confidence_pct).toFixed(1)}%)`
-                                : '';
-                            scanOverlay.textContent = `Not Registered!${confidenceText}`;
-                            setScanState('warning', `Status: Not Registered${confidenceText}`);
-                            showScanEventBadge('warning', `Not Registered${confidenceText}`);
-                            scheduleScanningStateRestore(1500);
-                            playErrorTone();
-                            setStatusChip(faceStatusChip, 'Face: Unknown', 'warning');
-                            setStatusChip(accessStatusChip, 'Access: Denied', 'danger');
-                            setStatusChip(smsStatusChip, 'SMS: Skipped', 'neutral');
+                        setScanState('success', `Status: ${displayMessage} - ${evt.name}`);
+                        showScanEventBadge(evt.duplicate ? 'warning' : 'success', `${gateAction} - ${displayMessage}${confidenceText}`);
+                        scheduleScanningStateRestore(evt.duplicate ? 800 : 1500);
+
+                        if (evt.feed_update && evt.activity_entry) {
+                            upsertScanActivityEntry(evt.activity_entry);
                         }
 
-                        if (evt.type === 'scan_warning') {
-                            scanOverlay.classList.remove('hidden');
-                            scanOverlay.textContent = evt.message || 'Scan warning.';
-                            setScanState('error', `Status: ${evt.message || 'Scan warning.'}`);
-                            showScanEventBadge('error', evt.message || 'Scan warning.');
-                            scheduleScanningStateRestore(1500);
-                            playErrorTone();
-                            setStatusChip(faceStatusChip, 'Face: Review', 'warning');
-                            setStatusChip(accessStatusChip, 'Access: Review', 'warning');
+                        if (!evt.duplicate) {
+                            playNotificationTone();
+                            queueVoiceFeedback(evt.voice_message || displayMessage, buildVoiceEventKey(evt));
+                        }
+                        
+                        const smsStatus = String(evt.sms_status || '').toLowerCase();
+                        setStatusChip(faceStatusChip, 'Face: Detected', 'success');
+                        setStatusChip(accessStatusChip, `Access: ${gateAction}`, gateAction === 'OUT' ? 'warning' : 'success');
+                        
+                        if (smsStatus === 'sent') {
+                            setStatusChip(smsStatusChip, 'SMS: Sent', 'success');
+                        } else if (smsStatus === 'failed') {
+                            setStatusChip(smsStatusChip, 'SMS: Failed', 'danger');
+                        } else if (smsStatus) {
+                            setStatusChip(smsStatusChip, `SMS: ${smsStatus.toUpperCase()}`, 'warning');
+                        } else {
                             setStatusChip(smsStatusChip, 'SMS: --', 'neutral');
                         }
-                    });
-                } catch (error) {
-                    console.error('Event polling failed:', error);
-                }
-            }, 350);
+                        
+                        if (smsStatus === 'sent' || smsStatus === 'failed') {
+                            queueSmsBalanceRefresh(500);
+                        }
+                    }
+
+                    if (evt.type === 'not_registered') {
+                        scanOverlay.classList.remove('hidden');
+                        const confidenceText = Number.isFinite(Number(evt.confidence_pct)) && Number(evt.confidence_pct) > 0
+                            ? ` (${Number(evt.confidence_pct).toFixed(1)}%)`
+                            : '';
+                        scanOverlay.textContent = `Not Registered!${confidenceText}`;
+                        setScanState('warning', `Status: Not Registered${confidenceText}`);
+                        showScanEventBadge('warning', `Not Registered${confidenceText}`);
+                        scheduleScanningStateRestore(1500);
+                        playErrorTone();
+                        setStatusChip(faceStatusChip, 'Face: Unknown', 'warning');
+                        setStatusChip(accessStatusChip, 'Access: Denied', 'danger');
+                        setStatusChip(smsStatusChip, 'SMS: Skipped', 'neutral');
+                    }
+
+                    if (evt.type === 'scan_warning') {
+                        scanOverlay.classList.remove('hidden');
+                        scanOverlay.textContent = evt.message || 'Scan warning.';
+                        setScanState('error', `Status: ${evt.message || 'Scan warning.'}`);
+                        showScanEventBadge('error', evt.message || 'Scan warning.');
+                        scheduleScanningStateRestore(1500);
+                        playErrorTone();
+                        setStatusChip(faceStatusChip, 'Face: Review', 'warning');
+                        setStatusChip(accessStatusChip, 'Access: Review', 'warning');
+                        setStatusChip(smsStatusChip, 'SMS: --', 'neutral');
+                    }
+                });
+            } catch (error) {
+                console.error('Event polling failed:', error);
+            } finally {
+                scanEventsRequestInFlight = false;
+            }
+        }
+
+        function startPollingEvents() {
+            if (scanPollingTimer) return;
+            void pollScanEventsOnce();
+            scanPollingTimer = setInterval(() => {
+                void pollScanEventsOnce();
+            }, 180);
         }
 
         function stopPollingEvents() {
@@ -2623,34 +2775,43 @@
                 clearInterval(scanPollingTimer);
                 scanPollingTimer = null;
             }
+            scanEventsRequestInFlight = false;
         }
 
         let frameProcessingTimer = null;
-        const FRAME_SEND_INTERVAL = 250; // Send a frame every 250ms for high-speed processing (4 fps)
+        const FRAME_SEND_INTERVAL = 180;
+
+        async function sendScanFrameOnce() {
+            if (!isScanning || !clientCamera.isActive() || scanFrameRequestInFlight) return;
+            scanFrameRequestInFlight = true;
+            
+            try {
+                const frameBlob = await clientCamera.getFrameAsBlob('image/jpeg');
+                if (!frameBlob) return;
+                
+                const formData = new FormData();
+                formData.append('frame', frameBlob, 'frame.jpg');
+                
+                const response = await fetch('/process_scan_frame', {
+                    method: 'POST',
+                    body: formData
+                });
+                if (response.ok) {
+                    void pollScanEventsOnce();
+                }
+            } catch (error) {
+                console.debug('Frame capture error:', error.message);
+            } finally {
+                scanFrameRequestInFlight = false;
+            }
+        }
 
         function startFrameProcessing() {
             if (frameProcessingTimer) return; // Already running
             
-            frameProcessingTimer = setInterval(async () => {
-                if (!isScanning || !clientCamera.isActive()) return;
-                
-                try {
-                    const frameBlob = await clientCamera.getFrameAsBlob('image/jpeg');
-                    if (!frameBlob) return;
-                    
-                    // Send frame to server for face recognition processing
-                    const formData = new FormData();
-                    formData.append('frame', frameBlob, 'frame.jpg');
-                    
-                    // Fire and forget - don't wait for response
-                    fetch('/process_scan_frame', {
-                        method: 'POST',
-                        body: formData
-                    }).catch(err => console.debug('Frame send failed (expected):', err.message));
-                    
-                } catch (error) {
-                    console.debug('Frame capture error:', error.message);
-                }
+            void sendScanFrameOnce();
+            frameProcessingTimer = setInterval(() => {
+                void sendScanFrameOnce();
             }, FRAME_SEND_INTERVAL);
         }
 
@@ -2659,6 +2820,7 @@
                 clearInterval(frameProcessingTimer);
                 frameProcessingTimer = null;
             }
+            scanFrameRequestInFlight = false;
         }
 
         function stopScanning() {

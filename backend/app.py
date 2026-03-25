@@ -3135,6 +3135,7 @@ def sidebar_context(current_page, school_year=""):
         "current_user": display_user,
         "current_role": role_name,
         "is_full_admin": is_full_admin,
+        "is_staff_dashboard": role_name == ROLE_STAFF,
         "can_manage_students": has_permission("students_write"),
         "can_register_faces": has_permission("face_register"),
         "can_view_logs": has_permission("logs"),
@@ -6635,6 +6636,10 @@ def process_client_frame(frame_bytes):
             return True, "Face(s) not encoded"
 
         results = []
+        verified_students = []
+        duplicate_students = []
+        unknown_confidences = []
+        seen_student_ids = set()
         for enc in face_encs:
             distances = face_recognition.face_distance(db_encodings, enc)
             
@@ -6646,23 +6651,44 @@ def process_client_frame(frame_bytes):
                 
                 if is_match and best_idx < len(db_students):
                     candidate = db_students[best_idx]
+                    candidate_student_id = str(candidate.get("student_id") or "").strip()
+                    if candidate_student_id and candidate_student_id in seen_student_ids:
+                        duplicate_students.append(candidate.get("name", "Unknown"))
+                        continue
+                    if candidate_student_id:
+                        seen_student_ids.add(candidate_student_id)
                     verification = handle_verified_student(candidate, confidence_pct)
                     if verification:
+                        verified_students.append(candidate.get("name", "Unknown"))
                         results.append(f"Verified: {candidate.get('name', 'Unknown')}")
                     else:
+                        duplicate_students.append(candidate.get("name", "Unknown"))
                         results.append(f"Duplicate scan (cooldown) - {candidate.get('name', 'Unknown')}")
                 else:
-                    push_not_registered_event("low_confidence", confidence_pct)
+                    unknown_confidences.append(confidence_pct)
                     results.append(f"Low confidence: {confidence_pct:.1f}%")
             else:
-                push_not_registered_event("no_face_index", 0.0)
+                unknown_confidences.append(0.0)
                 results.append("No face index")
-                
+
+        if not verified_students and unknown_confidences:
+            push_not_registered_event("low_confidence", max(unknown_confidences))
+
+        if verified_students:
+            verified_count = len(verified_students)
+            duplicate_count = len(duplicate_students)
+            unknown_count = len(unknown_confidences)
+            summary = f"Verified {verified_count} student{'s' if verified_count != 1 else ''}: " + ", ".join(verified_students)
+            if duplicate_count:
+                summary += f" | {duplicate_count} duplicate scan{'s' if duplicate_count != 1 else ''} ignored"
+            if unknown_count and not verified_count:
+                summary += f" | {unknown_count} unmatched face{'s' if unknown_count != 1 else ''}"
+            return True, summary
+
         if len(face_locations_small) > 1:
-            push_multi_face_event(len(face_locations_small))
-            return True, f"Multi-face ({len(face_locations_small)}): " + " | ".join(results)
-            
-        return True, results[0]
+            return True, f"Processed {len(face_locations_small)} faces: " + " | ".join(results)
+
+        return True, results[0] if results else "Frame processed"
         
     except Exception as exc:
         error_msg = f"Frame processing error: {str(exc)}"
@@ -7992,17 +8018,21 @@ def validate_face_capture_image(raw_face):
         top, right, bottom, left = face_locations[0]
         face_height = max(0, bottom - top)
         face_width = max(0, right - left)
-        if face_height < img_np.shape[0] * 0.28 or face_width < img_np.shape[1] * 0.22:
+        if face_height < img_np.shape[0] * 0.22 or face_width < img_np.shape[1] * 0.18:
             return None
 
         gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
         brightness = float(np.mean(gray))
         contrast = float(np.std(gray))
         sharpness = float(cv2.Laplacian(gray, cv2.CV_64F).var())
-        if brightness < 40 or brightness > 220 or contrast < 20 or sharpness < 35:
+        if brightness < 22 or brightness > 242 or contrast < 10 or sharpness < 12:
             return None
 
-        enc_rows = face_recognition.face_encodings(img_np, known_face_locations=face_locations)
+        enc_rows = face_recognition.face_encodings(
+            img_np,
+            known_face_locations=face_locations,
+            num_jitters=2,
+        )
         if not enc_rows:
             return None
         return {
@@ -8060,7 +8090,7 @@ def parse_faces_payload(data):
         if seen_encodings:
             try:
                 distances = face_recognition.face_distance(seen_encodings, encoding)
-                if len(distances) and float(np.min(distances)) < 0.04:
+                if len(distances) and float(np.min(distances)) < 0.015:
                     continue
             except Exception:
                 pass
