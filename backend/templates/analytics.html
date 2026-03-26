@@ -15,23 +15,23 @@
   {% include 'partials/sidebar.html' %}
 
   <div class="flex h-full w-full flex-1 flex-col min-w-0 overflow-hidden">
-    <header class="h-16 bg-white shadow-sm flex shrink-0 items-center justify-between px-4 md:px-6">
-      <div class="flex items-center gap-3">
-        <button @click="mobileMenuOpen = true" class="md:hidden text-gray-500 hover:text-gray-700 focus:outline-none">
+    <header class="app-page-header shrink-0">
+      <div class="app-header-leading">
+        <button @click="mobileMenuOpen = true" class="app-header-icon-btn md:hidden">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
-        <h1 class="text-lg font-semibold hidden sm:block">Analytics</h1>
+        <h1 class="app-header-title hidden sm:block">Analytics</h1>
       </div>
-      <div class="flex items-center gap-2">
-        {% set theme_toggle_classes = 'relative p-2 rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200 transition focus:outline-none focus:ring-2 focus:ring-emerald-400' %}
+      <div class="app-header-actions">
+        {% set theme_toggle_classes = 'app-header-icon-btn' %}
         {% include 'partials/theme_toggle_button.html' %}
       </div>
     </header>
 
-    <main class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
-      <section class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 lg:p-5">
+    <main class="app-main-content flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+      <section class="app-content-card p-4 lg:p-5">
         <div class="flex flex-col gap-4">
           <div class="flex flex-wrap items-start justify-between gap-4">
             <div class="flex-1 min-w-[220px]">
@@ -54,29 +54,29 @@
             </div>
           </div>
           <div class="grid grid-cols-1 gap-4 lg:grid-cols-12">
-            <div class="rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-cyan-50 p-4 shadow-sm lg:col-span-7">
+            <div class="app-content-pane lg:col-span-7">
               <div class="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-700">Current View</p>
+                  <p class="app-content-kicker">Current View</p>
                   <h3 class="mt-1 text-lg font-semibold text-slate-900">{{ chart_meta.view_label }} Analytics</h3>
                   <p class="mt-1 text-sm text-slate-600">{{ chart_meta.view_description }}</p>
                 </div>
-                <span class="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-[11px] font-semibold text-blue-700">
+                <span class="app-content-badge">
                   {{ chart_meta.granularity_label }} chart buckets
                 </span>
               </div>
               <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div class="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                <div class="app-content-pane app-content-pane--dense">
                   <p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Selected Range</p>
                   <p class="mt-1 text-sm font-semibold text-slate-900">{{ chart_meta.summary_label }}</p>
                 </div>
-                <div class="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                <div class="app-content-pane app-content-pane--dense">
                   <p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">School Year Scope</p>
                   <p class="mt-1 text-sm font-semibold text-slate-900">{{ selected_school_year }}</p>
                 </div>
               </div>
             </div>
-            <form method="GET" action="{{ url_for('analytics') }}" class="grid grid-cols-1 gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm lg:col-span-5 sm:grid-cols-2">
+            <form method="GET" action="{{ url_for('analytics') }}" class="app-content-pane grid grid-cols-1 gap-3 lg:col-span-5 sm:grid-cols-2">
               <input type="hidden" name="school_year" value="{{ selected_school_year }}">
               <input type="hidden" name="range" value="custom">
               <div class="sm:col-span-2">
@@ -144,24 +144,24 @@
       </section>
 
       <section class="space-y-5">
-        <article class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+        <article class="app-content-card p-5">
           <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
             <div>
               <h3 class="text-lg font-semibold text-slate-800">{{ chart_meta.gate_title }}</h3>
               <p class="text-xs text-slate-500 mt-1">{{ chart_meta.gate_subtitle }}</p>
             </div>
             <div class="grid grid-cols-3 gap-2 text-xs">
-              <div class="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-center">
+              <div class="app-metric-tile px-2.5 py-2 text-center">
                 <p class="font-semibold text-slate-800">{{ gate_series|sum }}</p>
                 <p class="text-slate-500">Range Total</p>
               </div>
-              <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-2 text-center">
-                <p class="font-semibold text-emerald-700">{{ stats.present_on_reference }}</p>
-                <p class="text-emerald-700/80">Present</p>
+              <div class="app-metric-tile px-2.5 py-2 text-center">
+                <p class="font-semibold text-slate-800">{{ stats.present_on_reference }}</p>
+                <p class="text-slate-500">Present</p>
               </div>
-              <div class="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-center">
-                <p class="font-semibold text-amber-700">{{ stats.late_on_reference }}</p>
-                <p class="text-amber-700/80">Late</p>
+              <div class="app-metric-tile px-2.5 py-2 text-center">
+                <p class="font-semibold text-slate-800">{{ stats.late_on_reference }}</p>
+                <p class="text-slate-500">Late</p>
               </div>
             </div>
           </div>
@@ -171,13 +171,12 @@
         </article>
 
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
-          <article class="bg-white rounded-2xl border border-slate-200 shadow-sm lg:col-span-7 flex flex-col overflow-hidden relative">
-            <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-400 to-blue-600"></div>
+          <article class="app-content-card lg:col-span-7 flex flex-col overflow-hidden">
             <div class="p-5 flex-1 flex flex-col">
               <div class="flex items-start justify-between gap-3 mb-6 pb-4 border-b border-slate-100">
                 <div>
                   <div class="flex items-center gap-2">
-                    <span class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+                    <span class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-700">
                       <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M21 12c0 4.418-4.03 8-9 8s-9-3.582-9-8 4.03-8 9-8 9 3.582 9 8z" />
                       </svg>
@@ -197,13 +196,12 @@
             </div>
           </article>
 
-          <article class="bg-white rounded-2xl border border-slate-200 shadow-sm lg:col-span-5 flex flex-col overflow-hidden relative">
-            <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-400 to-amber-400"></div>
+          <article class="app-content-card lg:col-span-5 flex flex-col overflow-hidden">
             <div class="p-5 flex-1 flex flex-col">
               <div class="flex items-start justify-between gap-3 mb-6 pb-4 border-b border-slate-100">
                 <div>
                   <div class="flex items-center gap-2">
-                    <span class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+                    <span class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-700">
                       <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" />
                         <path stroke-linecap="round" stroke-linejoin="round" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" />
@@ -220,24 +218,24 @@
                   <canvas id="attendancePieChart" class="h-full w-full"></canvas>
                 </div>
                 <div class="grid grid-cols-3 gap-3 border-t border-slate-100 pt-5">
-                  <div class="flex flex-col items-center justify-center p-2 rounded-xl border border-slate-100 bg-slate-50/50">
+                  <div class="app-metric-tile flex flex-col items-center justify-center p-2">
                     <p class="text-xl font-bold text-slate-800">{{ attendance_distribution.present }}</p>
                     <div class="flex items-center gap-1.5 mt-1">
-                      <div class="w-2 h-2 rounded-full bg-emerald-500"></div>
+                      <div class="w-2 h-2 rounded-full bg-slate-500"></div>
                       <p class="text-[10px] uppercase font-semibold tracking-wider text-slate-500">Present</p>
                     </div>
                   </div>
-                  <div class="flex flex-col items-center justify-center p-2 rounded-xl border border-slate-100 bg-slate-50/50">
+                  <div class="app-metric-tile flex flex-col items-center justify-center p-2">
                     <p class="text-xl font-bold text-slate-800">{{ attendance_distribution.absent }}</p>
                     <div class="flex items-center gap-1.5 mt-1">
-                      <div class="w-2 h-2 rounded-full bg-rose-500"></div>
+                      <div class="w-2 h-2 rounded-full bg-slate-400"></div>
                       <p class="text-[10px] uppercase font-semibold tracking-wider text-slate-500">Absent</p>
                     </div>
                   </div>
-                  <div class="flex flex-col items-center justify-center p-2 rounded-xl border border-slate-100 bg-slate-50/50">
+                  <div class="app-metric-tile flex flex-col items-center justify-center p-2">
                     <p class="text-xl font-bold text-slate-800">{{ attendance_distribution.late }}</p>
                     <div class="flex items-center gap-1.5 mt-1">
-                      <div class="w-2 h-2 rounded-full bg-amber-500"></div>
+                      <div class="w-2 h-2 rounded-full bg-slate-600"></div>
                       <p class="text-[10px] uppercase font-semibold tracking-wider text-slate-500">Late</p>
                     </div>
                   </div>

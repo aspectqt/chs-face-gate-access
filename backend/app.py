@@ -139,6 +139,9 @@ PREFERRED_URL_SCHEME = (
     os.getenv("PREFERRED_URL_SCHEME", "https" if HTTPS_ENABLED else "http").strip().lower()
     or ("https" if HTTPS_ENABLED else "http")
 )
+REPORT_PREPARED_BY_TITLE = os.getenv("REPORT_PREPARED_BY_TITLE", "Administrator").strip() or "Administrator"
+REPORT_PRINCIPAL_NAME = os.getenv("REPORT_PRINCIPAL_NAME", "").strip()
+REPORT_PRINCIPAL_TITLE = os.getenv("REPORT_PRINCIPAL_TITLE", "Principal").strip() or "Principal"
 
 # =====================================
 # FLASK SETUP
@@ -8561,6 +8564,41 @@ def build_students_export_section_breakdown(rows):
     return ordered_rows
 
 
+def resolve_current_admin_export_name(default_name="Admin"):
+    admin_name = str(default_name or session.get("admin", "Admin") or "Admin").strip() or "Admin"
+    try:
+        _user_doc, profile = current_user_profile()
+        full_name = str((profile or {}).get("fullName") or "").strip()
+        if full_name:
+            admin_name = full_name
+    except Exception:
+        pass
+    return admin_name
+
+
+def resolve_report_principal_name():
+    try:
+        signatory_settings = system_settings.find_one({"key": "report_signatories"}) or {}
+        principal_name = str(signatory_settings.get("principal_name") or "").strip()
+        if principal_name:
+            return principal_name
+    except Exception:
+        pass
+    return REPORT_PRINCIPAL_NAME or REPORT_PRINCIPAL_TITLE or "School Principal"
+
+
+def build_report_signatories(prepared_by_name=""):
+    prepared_name = str(prepared_by_name or "").strip() or "Admin"
+    return {
+        "prepared_by_label": "Prepared by",
+        "prepared_by_name": prepared_name,
+        "prepared_by_title": REPORT_PREPARED_BY_TITLE,
+        "approved_by_label": "Approved by",
+        "approved_by_name": resolve_report_principal_name(),
+        "approved_by_title": REPORT_PRINCIPAL_TITLE,
+    }
+
+
 def build_school_export_footer(canvas_obj, doc):
     footer_title = getattr(doc, "export_footer_title", "Cawitan High School Export")
     document_title = getattr(doc, "export_title", footer_title)
@@ -8571,7 +8609,7 @@ def build_school_export_footer(canvas_obj, doc):
         canvas_obj.setAuthor(getattr(doc, "export_author", "Cawitan High School"))
         canvas_obj.setSubject(document_subject)
     canvas_obj.setFont("Helvetica", 8.5)
-    canvas_obj.setFillColor(colors.HexColor("#475569"))
+    canvas_obj.setFillColor(colors.black)
     canvas_obj.drawString(doc.leftMargin, 36, footer_title)
     canvas_obj.drawRightString(doc.pagesize[0] - doc.rightMargin, 36, f"Page {canvas_obj.getPageNumber()}")
     canvas_obj.restoreState()
@@ -8584,10 +8622,19 @@ def build_school_export_styles():
             "SchoolExportHeaderTitle",
             parent=styles["Normal"],
             fontName="Helvetica-Bold",
-            fontSize=18,
-            leading=22,
+            fontSize=16,
+            leading=20,
             alignment=TA_CENTER,
-            textColor=colors.HexColor("#0f172a"),
+            textColor=colors.black,
+        ),
+        "subtitle": ParagraphStyle(
+            "SchoolExportSubtitle",
+            parent=styles["Normal"],
+            fontName="Helvetica",
+            fontSize=9.5,
+            leading=12,
+            alignment=TA_CENTER,
+            textColor=colors.black,
         ),
         "doc_title": ParagraphStyle(
             "SchoolExportDocTitle",
@@ -8596,8 +8643,8 @@ def build_school_export_styles():
             fontSize=11,
             leading=14,
             alignment=TA_CENTER,
-            textColor=colors.HexColor("#14532d"),
-            spaceBefore=4,
+            textColor=colors.black,
+            spaceBefore=2,
         ),
         "metadata_label": ParagraphStyle(
             "SchoolExportMetaLabel",
@@ -8606,7 +8653,7 @@ def build_school_export_styles():
             fontSize=8.5,
             leading=11,
             alignment=TA_LEFT,
-            textColor=colors.HexColor("#0f172a"),
+            textColor=colors.black,
         ),
         "metadata_value": ParagraphStyle(
             "SchoolExportMetaValue",
@@ -8615,7 +8662,7 @@ def build_school_export_styles():
             fontSize=8.5,
             leading=11,
             alignment=TA_LEFT,
-            textColor=colors.HexColor("#334155"),
+            textColor=colors.black,
         ),
         "section_title": ParagraphStyle(
             "SchoolExportSectionTitle",
@@ -8624,7 +8671,7 @@ def build_school_export_styles():
             fontSize=12,
             leading=15,
             alignment=TA_LEFT,
-            textColor=colors.HexColor("#0f172a"),
+            textColor=colors.black,
             spaceAfter=2,
         ),
         "table_header": ParagraphStyle(
@@ -8634,7 +8681,7 @@ def build_school_export_styles():
             fontSize=7.2,
             leading=8.6,
             alignment=TA_CENTER,
-            textColor=colors.HexColor("#0f172a"),
+            textColor=colors.black,
         ),
         "table_cell": ParagraphStyle(
             "SchoolExportTableCell",
@@ -8643,7 +8690,7 @@ def build_school_export_styles():
             fontSize=7,
             leading=8.4,
             alignment=TA_LEFT,
-            textColor=colors.HexColor("#111827"),
+            textColor=colors.black,
         ),
         "table_cell_center": ParagraphStyle(
             "SchoolExportTableCellCenter",
@@ -8652,7 +8699,7 @@ def build_school_export_styles():
             fontSize=7,
             leading=8.4,
             alignment=TA_CENTER,
-            textColor=colors.HexColor("#111827"),
+            textColor=colors.black,
         ),
         "footer_value": ParagraphStyle(
             "SchoolExportFooterValue",
@@ -8661,7 +8708,7 @@ def build_school_export_styles():
             fontSize=9,
             leading=12,
             alignment=TA_LEFT,
-            textColor=colors.HexColor("#0f172a"),
+            textColor=colors.black,
         ),
         "signature": ParagraphStyle(
             "SchoolExportSignature",
@@ -8669,17 +8716,26 @@ def build_school_export_styles():
             fontName="Helvetica",
             fontSize=9,
             leading=12,
-            alignment=TA_CENTER,
-            textColor=colors.HexColor("#0f172a"),
+            alignment=TA_LEFT,
+            textColor=colors.black,
+        ),
+        "signature_block": ParagraphStyle(
+            "SchoolExportSignatureBlock",
+            parent=styles["Normal"],
+            fontName="Helvetica",
+            fontSize=9,
+            leading=12,
+            alignment=TA_LEFT,
+            textColor=colors.black,
         ),
         "note": ParagraphStyle(
             "SchoolExportNote",
             parent=styles["Normal"],
-            fontName="Helvetica-Oblique",
+            fontName="Helvetica",
             fontSize=8,
             leading=10,
             alignment=TA_LEFT,
-            textColor=colors.HexColor("#475569"),
+            textColor=colors.black,
         ),
     }
 
@@ -8689,10 +8745,11 @@ def build_school_export_document(document_title, header_caption, metadata_items,
     doc = SimpleDocTemplate(
         buffer,
         pagesize=landscape(letter),
-        rightMargin=72,
-        leftMargin=72,
-        topMargin=72,
-        bottomMargin=72,
+        rightMargin=42,
+        leftMargin=42,
+        topMargin=42,
+        bottomMargin=42,
+        pageCompression=0,
     )
     doc.export_author = export_author
     doc.export_title = document_title
@@ -8701,55 +8758,13 @@ def build_school_export_document(document_title, header_caption, metadata_items,
 
     styles = build_school_export_styles()
     story = []
-
-    logo_path = resolve_students_export_logo_path()
-    logo_flowable = Spacer(1, 0.85 * inch)
-    if logo_path:
-        logo_width = 0.8 * inch
-        logo_height = 0.8 * inch
-        try:
-            with Image.open(logo_path) as logo_image:
-                src_width, src_height = logo_image.size
-                if src_width and src_height:
-                    ratio = min(float(logo_width) / float(src_width), float(logo_height) / float(src_height))
-                    logo_width = max(src_width * ratio, 1)
-                    logo_height = max(src_height * ratio, 1)
-        except Exception:
-            logo_width = 0.8 * inch
-            logo_height = 0.8 * inch
-        logo_flowable = RLImage(logo_path, width=logo_width, height=logo_height)
-
-    header_style = ParagraphStyle(
-        "SchoolExportHeaderBlock",
-        parent=styles["header_title"],
-        fontSize=17,
-        leading=20,
-    )
-    school_header = Paragraph(
-        "<b>Cawitan High School</b><br/>"
-        "<font size='9'>Cawitan, Sta. Catalina, Negros Oriental</font><br/>"
-        f"<font size='8'>{xml_escape(header_caption)}</font>",
-        header_style,
-    )
-    header_table = Table(
-        [[logo_flowable, school_header, Spacer(1, 0.85 * inch)]],
-        colWidths=[1.0 * inch, 7.0 * inch, 1.0 * inch],
-    )
-    header_table.setStyle(TableStyle([
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("ALIGN", (0, 0), (0, 0), "CENTER"),
-        ("ALIGN", (1, 0), (1, 0), "CENTER"),
-        ("ALIGN", (2, 0), (2, 0), "CENTER"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 0),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-        ("TOPPADDING", (0, 0), (-1, -1), 0),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
-    ]))
-    story.append(header_table)
+    story.append(Paragraph(xml_escape(document_title), styles["header_title"]))
+    story.append(Spacer(1, 0.06 * inch))
+    story.append(Paragraph("Cawitan High School", styles["subtitle"]))
+    story.append(Paragraph("Cawitan, Sta. Catalina, Negros Oriental", styles["subtitle"]))
+    story.append(Paragraph(xml_escape(header_caption), styles["subtitle"]))
     story.append(Spacer(1, 0.12 * inch))
-    story.append(Paragraph(xml_escape(document_title), styles["doc_title"]))
-    story.append(Spacer(1, 0.08 * inch))
-    story.append(HRFlowable(width="100%", thickness=1.6, color=colors.HexColor("#0f172a")))
+    story.append(HRFlowable(width="100%", thickness=1.2, color=colors.black))
     story.append(Spacer(1, 0.16 * inch))
 
     metadata_rows = []
@@ -8772,9 +8787,9 @@ def build_school_export_document(document_title, header_caption, metadata_items,
             colWidths=[1.15 * inch, 3.35 * inch, 1.15 * inch, 3.35 * inch],
         )
         metadata_table.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f8fafc")),
-            ("BOX", (0, 0), (-1, -1), 0.75, colors.HexColor("#94a3b8")),
-            ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
+            ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f7f7f7")),
+            ("BOX", (0, 0), (-1, -1), 0.75, colors.black),
+            ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.black),
             ("VALIGN", (0, 0), (-1, -1), "TOP"),
             ("LEFTPADDING", (0, 0), (-1, -1), 6),
             ("RIGHTPADDING", (0, 0), (-1, -1), 6),
@@ -8789,18 +8804,18 @@ def build_school_export_document(document_title, header_caption, metadata_items,
 
 def append_school_export_section_title(story, title, styles):
     story.append(Paragraph(xml_escape(title), styles["section_title"]))
-    story.append(HRFlowable(width="100%", thickness=1.4, color=colors.HexColor("#0f172a")))
+    story.append(HRFlowable(width="100%", thickness=1.0, color=colors.black))
     story.append(Spacer(1, 0.1 * inch))
 
 
 def build_school_export_table(data, col_widths, styles, span_empty_row=False):
     table = LongTable(data, repeatRows=1, colWidths=col_widths)
     table_style = [
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#dbeafe")),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#0f172a")),
-        ("BOX", (0, 0), (-1, -1), 0.75, colors.HexColor("#94a3b8")),
-        ("INNERGRID", (0, 0), (-1, -1), 0.45, colors.HexColor("#cbd5e1")),
-        ("LINEBELOW", (0, 0), (-1, 0), 1.1, colors.HexColor("#0f172a")),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e9e9e9")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
+        ("BOX", (0, 0), (-1, -1), 0.75, colors.black),
+        ("INNERGRID", (0, 0), (-1, -1), 0.45, colors.black),
+        ("LINEBELOW", (0, 0), (-1, 0), 1.1, colors.black),
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ("LEFTPADDING", (0, 0), (-1, -1), 4),
         ("RIGHTPADDING", (0, 0), (-1, -1), 4),
@@ -8812,7 +8827,7 @@ def build_school_export_table(data, col_widths, styles, span_empty_row=False):
             "BACKGROUND",
             (0, index),
             (-1, index),
-            colors.HexColor("#f8fafc") if index % 2 == 0 else colors.white,
+            colors.HexColor("#f7f7f7") if index % 2 == 0 else colors.white,
         ))
     if span_empty_row and len(data) == 2:
         table_style.append(("SPAN", (0, 1), (-1, 1)))
@@ -8821,27 +8836,44 @@ def build_school_export_table(data, col_widths, styles, span_empty_row=False):
     return table
 
 
-def build_school_export_footer_block(styles):
+def build_report_signature_markup(label, name, title=""):
+    safe_label = xml_escape(str(label or "").strip() or "Signature")
+    safe_name = xml_escape(str(name or "").strip() or "Pending")
+    safe_title = xml_escape(str(title or "").strip())
+    title_line = f"<br/>{safe_title}" if safe_title else ""
+    return (
+        f"<b>{safe_label}</b><br/><br/><br/>"
+        "______________________________<br/>"
+        f"{safe_name}{title_line}"
+    )
+
+
+def build_report_signature_footer_block(styles, signatories=None):
+    signatories = signatories or build_report_signatories()
+    prepared_markup = build_report_signature_markup(
+        signatories.get("prepared_by_label", "Prepared by"),
+        signatories.get("prepared_by_name", "Admin"),
+        signatories.get("prepared_by_title", REPORT_PREPARED_BY_TITLE),
+    )
+    approved_markup = build_report_signature_markup(
+        signatories.get("approved_by_label", "Approved by"),
+        signatories.get("approved_by_name", resolve_report_principal_name()),
+        signatories.get("approved_by_title", REPORT_PRINCIPAL_TITLE),
+    )
     return KeepTogether([
         Spacer(1, 0.24 * inch),
-        HRFlowable(width="100%", thickness=1.2, color=colors.HexColor("#0f172a")),
+        HRFlowable(width="100%", thickness=1.0, color=colors.black),
         Spacer(1, 0.14 * inch),
         Table(
             [[
-                Paragraph(
-                    "<b>Exported By:</b><br/><br/>______________________________",
-                    styles["footer_value"],
-                ),
-                Paragraph(
-                    "______________________________<br/>Principal",
-                    styles["signature"],
-                ),
+                Paragraph(prepared_markup, styles["signature_block"]),
+                Paragraph(approved_markup, styles["signature_block"]),
             ]],
-            colWidths=[4.5 * inch, 4.5 * inch],
+            colWidths=[4.35 * inch, 4.35 * inch],
             style=TableStyle([
                 ("VALIGN", (0, 0), (-1, -1), "BOTTOM"),
                 ("ALIGN", (0, 0), (0, 0), "LEFT"),
-                ("ALIGN", (1, 0), (1, 0), "CENTER"),
+                ("ALIGN", (1, 0), (1, 0), "LEFT"),
                 ("LEFTPADDING", (0, 0), (-1, -1), 0),
                 ("RIGHTPADDING", (0, 0), (-1, -1), 0),
                 ("TOPPADDING", (0, 0), (-1, -1), 0),
@@ -8849,8 +8881,12 @@ def build_school_export_footer_block(styles):
             ]),
         ),
         Spacer(1, 0.14 * inch),
-        Paragraph("This document is system-generated and valid without signature.", styles["note"]),
+        Paragraph("This document was generated by the CHS Gate Access system.", styles["note"]),
     ])
+
+
+def build_school_export_footer_block(styles, signatories=None):
+    return build_report_signature_footer_block(styles, signatories=signatories)
 
 
 def sanitize_students_export_filename_part(value, fallback="records"):
@@ -8949,6 +8985,15 @@ def build_students_plain_export_styles():
             alignment=TA_CENTER,
             textColor=colors.black,
         ),
+        "signature_block": ParagraphStyle(
+            "StudentsPlainExportSignatureBlock",
+            parent=styles["Normal"],
+            fontName="Helvetica",
+            fontSize=9,
+            leading=12,
+            alignment=TA_LEFT,
+            textColor=colors.black,
+        ),
         "note": ParagraphStyle(
             "StudentsPlainExportNote",
             parent=styles["Normal"],
@@ -8991,6 +9036,7 @@ def build_students_plain_metadata_table(metadata_items, styles):
 
     table = Table(rows, colWidths=[1.2 * inch, 3.1 * inch, 1.2 * inch, 3.1 * inch])
     table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f7f7f7")),
         ("BOX", (0, 0), (-1, -1), 0.75, colors.black),
         ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.black),
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
@@ -9011,6 +9057,7 @@ def build_students_plain_key_value_table(details, styles):
         ])
     table = Table(rows, colWidths=[1.9 * inch, 6.9 * inch])
     table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f7f7f7")),
         ("BOX", (0, 0), (-1, -1), 0.75, colors.black),
         ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.black),
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
@@ -9064,6 +9111,7 @@ def build_students_plain_records_table(rows, styles):
         colWidths=[1.15 * inch, 2.3 * inch, 0.8 * inch, 1.1 * inch, 0.9 * inch, 0.95 * inch, 1.1 * inch, 1.5 * inch],
     )
     table_style = [
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e9e9e9")),
         ("BOX", (0, 0), (-1, -1), 0.75, colors.black),
         ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.black),
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
@@ -9072,6 +9120,13 @@ def build_students_plain_records_table(rows, styles):
         ("TOPPADDING", (0, 0), (-1, -1), 4),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
     ]
+    for index in range(1, len(data)):
+        table_style.append((
+            "BACKGROUND",
+            (0, index),
+            (-1, index),
+            colors.HexColor("#f7f7f7") if index % 2 == 0 else colors.white,
+        ))
     if len(data) == 2 and not rows:
         table_style.append(("SPAN", (0, 1), (-1, 1)))
         table_style.append(("ALIGN", (0, 1), (-1, 1), "CENTER"))
@@ -9234,7 +9289,7 @@ def build_students_export_payload(args, school_year_label):
     }
 
 
-def build_students_plain_export_pdf(export_payload, admin_name):
+def build_students_plain_export_pdf(export_payload, signatories):
     generated_at_label = now_local().strftime("%B %d, %Y %I:%M:%S %p")
     rows = export_payload["rows"]
     scope = export_payload["scope"]
@@ -9251,7 +9306,7 @@ def build_students_plain_export_pdf(export_payload, admin_name):
         bottomMargin=42,
         pageCompression=0,
     )
-    doc.export_author = admin_name
+    doc.export_author = signatories.get("prepared_by_name", "Admin")
     doc.export_title = "Official Student Records Report"
     doc.export_subject = f"Student records export - {export_payload['scope_label']}"
 
@@ -9308,7 +9363,7 @@ def build_students_plain_export_pdf(export_payload, admin_name):
         story.append(Paragraph("Student Records", styles["section_title"]))
         story.append(build_students_plain_records_table(rows, styles))
 
-    story.extend([Spacer(1, 0.18 * inch), Paragraph("This document is system-generated.", styles["note"])])
+    story.append(build_report_signature_footer_block(styles, signatories=signatories))
     doc.build(story, onFirstPage=build_students_plain_export_footer, onLaterPages=build_students_plain_export_footer)
     buffer.seek(0)
     return buffer
@@ -9354,17 +9409,10 @@ def send_generated_pdf(buffer, filename):
 def students_export_pdf():
     selected_school_year = resolve_selected_school_year(request.args.get("school_year", ""))
     school_year_label = selected_school_year or get_current_school_year_label()
-    admin_username = session.get("admin", "Admin")
-    admin_name = admin_username
-    try:
-        user_doc, profile = current_user_profile()
-        if profile and profile.get("fullName"):
-            admin_name = profile.get("fullName")
-    except Exception:
-        pass
+    signatories = build_report_signatories(resolve_current_admin_export_name())
 
     export_payload = build_students_export_payload(request.args, school_year_label)
-    buffer = build_students_plain_export_pdf(export_payload, admin_name)
+    buffer = build_students_plain_export_pdf(export_payload, signatories)
     timestamp_suffix = now_local().strftime("%Y%m%d_%H%M%S")
     filename = f"{export_payload['filename_prefix']}_{timestamp_suffix}.pdf"
     return send_generated_pdf(buffer, filename)
@@ -10586,6 +10634,7 @@ def gate_logs_export():
     query, sort_spec, filters_payload, selected_school_year = build_gate_logs_query(request.args)
     logs_collection, selected_school_year, _ = get_attendance_logs_storage(selected_school_year)
     rows = list(logs_collection.find(query).sort(sort_spec).limit(5000))
+    signatories = build_report_signatories(resolve_current_admin_export_name())
     generated_at_label = now_local().strftime("%B %d, %Y %I:%M:%S %p")
     metadata_items = [
         ("Generated At", generated_at_label),
@@ -10603,6 +10652,7 @@ def gate_logs_export():
         metadata_items=metadata_items,
         footer_title="Cawitan High School Gate Logs Export",
         export_subject="Gate logs export",
+        export_author=signatories.get("prepared_by_name", "Admin"),
     )
 
     append_school_export_section_title(story, "Gate Log Summary", styles)
@@ -10688,7 +10738,7 @@ def gate_logs_export():
         styles=styles,
         span_empty_row=len(gate_table_data) == 2 and not rows,
     ))
-    story.append(build_school_export_footer_block(styles))
+    story.append(build_school_export_footer_block(styles, signatories=signatories))
 
     doc.build(story, onFirstPage=build_school_export_footer, onLaterPages=build_school_export_footer)
     buffer.seek(0)
@@ -11116,6 +11166,7 @@ def sms_logs_export():
     query, sort_spec, filters_payload, selected_school_year = build_sms_logs_query(request.args)
     logs_collection, selected_school_year, _ = get_sms_logs_storage(selected_school_year)
     rows = list(logs_collection.find(query).sort(sort_spec).limit(5000))
+    signatories = build_report_signatories(resolve_current_admin_export_name())
     generated_at_label = now_local().strftime("%B %d, %Y %I:%M:%S %p")
     metadata_items = [
         ("Generated At", generated_at_label),
@@ -11132,6 +11183,7 @@ def sms_logs_export():
         metadata_items=metadata_items,
         footer_title="Cawitan High School SMS Logs Export",
         export_subject="SMS logs export",
+        export_author=signatories.get("prepared_by_name", "Admin"),
     )
 
     append_school_export_section_title(story, "SMS Delivery Summary", styles)
@@ -11213,7 +11265,7 @@ def sms_logs_export():
         styles=styles,
         span_empty_row=len(sms_table_data) == 2 and not rows,
     ))
-    story.append(build_school_export_footer_block(styles))
+    story.append(build_school_export_footer_block(styles, signatories=signatories))
 
     doc.build(story, onFirstPage=build_school_export_footer, onLaterPages=build_school_export_footer)
     buffer.seek(0)

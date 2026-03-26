@@ -16,17 +16,17 @@
     {% include 'partials/sidebar.html' %}
 
   <div class="flex-1 flex flex-col min-w-0 h-full overflow-hidden" x-data="smsLogsPage()">
-    <header class="h-16 bg-white shadow-sm flex shrink-0 items-center justify-between px-4 md:px-6">
-      <div class="flex items-center gap-3">
-        <button @click="mobileMenuOpen = true" class="md:hidden text-gray-500 hover:text-gray-700 focus:outline-none">
+    <header class="app-page-header shrink-0">
+      <div class="app-header-leading">
+        <button @click="mobileMenuOpen = true" class="app-header-icon-btn md:hidden">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
-        <h1 class="text-lg font-semibold text-gray-800 hidden sm:block">SMS Logs</h1>
+        <h1 class="app-header-title hidden sm:block">SMS Logs</h1>
       </div>
-      <div class="flex items-center gap-2">
-        {% set theme_toggle_classes = 'relative p-2 rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200 transition focus:outline-none focus:ring-2 focus:ring-emerald-400' %}
+      <div class="app-header-actions">
+        {% set theme_toggle_classes = 'app-header-icon-btn' %}
         {% include 'partials/theme_toggle_button.html' %}
         <div
           id="smsLogsPdfActions"
@@ -112,7 +112,7 @@
       </div>
     </header>
 
-    <main class="flex-1 overflow-y-auto p-6 space-y-5">
+    <main class="app-main-content flex-1 overflow-y-auto p-6 space-y-5">
       <div x-show="toastMessage" x-transition class="fixed top-5 right-5 z-[70]">
         <div class="rounded-xl px-4 py-3 text-sm shadow-lg border"
           :class="toastType === 'error' ? 'bg-red-50 border-red-200 text-red-700' : 'bg-emerald-50 border-emerald-200 text-emerald-700'"
@@ -154,7 +154,7 @@
         </article>
       </section>
 
-      <section class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 lg:p-5 space-y-4">
+      <section class="app-content-card p-4 lg:p-5 space-y-4">
         <div class="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 class="text-base font-semibold text-slate-800">Attendance SMS Template</h2>
@@ -213,7 +213,7 @@
         </form>
       </section>
 
-      <section class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 lg:p-5">
+      <section class="app-content-card p-4 lg:p-5">
         {% set active_filters = (1 if filters.q else 0) + (1 if filters.start_date else 0) + (1 if filters.end_date else 0) + (1 if filters.status else 0) + (1 if filters.sort == 'oldest' else 0) %}
         <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
           <div>
@@ -279,9 +279,9 @@
         </form>
       </section>
 
-      <section class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      <section class="app-table-shell">
         <div class="overflow-x-auto">
-          <table class="min-w-full divide-y divide-slate-200">
+          <table class="app-data-table min-w-full divide-y divide-slate-200">
             <thead class="bg-slate-900 text-white text-xs uppercase">
               <tr>
                 <th class="px-4 py-3 text-left">Student</th>
@@ -323,7 +323,7 @@
             </tbody>
           </table>
         </div>
-        <div class="border-t border-slate-200 px-4 py-3 flex flex-col md:flex-row md:items-center md:justify-between gap-3 bg-slate-50/70">
+        <div class="app-table-footer px-4 py-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <p class="text-xs text-slate-600">Showing {{ ((pagination.page - 1) * pagination.per_page) + 1 if pagination.total else 0 }}-{{ ((pagination.page - 1) * pagination.per_page) + (logs|length) if pagination.total else 0 }} of {{ pagination.total }} logs</p>
           <div class="flex gap-1.5">
             {% if pagination.has_prev %}<a href="{{ pagination.prev_url }}" class="px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-semibold hover:bg-slate-100">Previous</a>{% else %}<span class="px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-100 text-xs text-slate-400">Previous</span>{% endif %}
@@ -338,7 +338,7 @@
   </div>
 </div>
 
-<script src="{{ url_for('static', filename='download_utils.js', v='20260312d') }}"></script>
+<script src="{{ url_for('static', filename='download_utils.js', v='20260326a') }}"></script>
 <script>
 function smsLogsPage() {
   return {

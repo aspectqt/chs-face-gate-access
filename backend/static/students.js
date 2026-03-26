@@ -287,6 +287,7 @@
     confirmDeleteBtn: document.getElementById("confirmDeleteBtn"),
     faceTitle: document.getElementById("faceTitle"),
     faceSubtitle: document.getElementById("faceSubtitle"),
+    facePreviewCanvas: document.getElementById("facePreviewCanvas"),
     faceVideo: document.getElementById("faceVideo"),
     faceOverlay: document.getElementById("faceOverlay"),
     faceCaptureCanvas: document.getElementById("faceCaptureCanvas"),
@@ -2373,6 +2374,27 @@
     setGuideRingState(stateKey);
   };
 
+  const clearFacePreviewFrame = () => {
+    if (!refs.facePreviewCanvas) return;
+    const context = refs.facePreviewCanvas.getContext("2d");
+    context?.clearRect(0, 0, refs.facePreviewCanvas.width || 0, refs.facePreviewCanvas.height || 0);
+  };
+
+  const renderFacePreviewFrame = (video) => {
+    if (!refs.facePreviewCanvas || !video) return;
+    const width = Number(video.videoWidth || video.clientWidth || 0);
+    const height = Number(video.videoHeight || video.clientHeight || 0);
+    if (!width || !height) return;
+
+    if (refs.facePreviewCanvas.width !== width) refs.facePreviewCanvas.width = width;
+    if (refs.facePreviewCanvas.height !== height) refs.facePreviewCanvas.height = height;
+    const context = refs.facePreviewCanvas.getContext("2d", { alpha: false, willReadFrequently: false });
+    if (!context) return;
+    context.setTransform(1, 0, 0, 1, 0, 0);
+    context.clearRect(0, 0, width, height);
+    context.drawImage(video, 0, 0, width, height);
+  };
+
   const clearFaceStatusLock = () => {
     state.face.statusLockUntil = 0;
     state.face.statusLockMessage = "";
@@ -2695,6 +2717,7 @@
       const overlayContext = refs.faceOverlay.getContext("2d");
       overlayContext?.clearRect(0, 0, refs.faceOverlay.width || 0, refs.faceOverlay.height || 0);
     }
+    clearFacePreviewFrame();
     setGuideRingState("idle");
   };
 
@@ -2814,6 +2837,7 @@
 
     try {
       state.face.processing = true;
+      renderFacePreviewFrame(video);
       const detectionFrame = buildFaceDetectionFrame(video);
       await state.face.mesh.send({ image: detectionFrame });
       const results = state.face.lastResults || {};

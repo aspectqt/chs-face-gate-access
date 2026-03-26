@@ -21,68 +21,66 @@
     {% include 'partials/sidebar.html' %}
 
     <div class="flex-1 flex min-w-0 flex-col overflow-hidden">
-      <header class="h-16 shrink-0 bg-white px-4 shadow-sm md:px-6">
-        <div class="flex h-full items-center justify-between gap-4">
-          <div class="flex items-center gap-3">
-            <button @click="mobileMenuOpen = true" class="text-gray-500 hover:text-gray-700 focus:outline-none md:hidden">
+      <header class="app-page-header shrink-0">
+        <div class="flex h-full min-w-0 items-center justify-between gap-4">
+          <div class="app-header-leading">
+            <button @click="mobileMenuOpen = true" class="app-header-icon-btn md:hidden">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
               </svg>
             </button>
             <div class="hidden sm:block">
-              <h1 class="text-lg font-semibold text-slate-900">Archive Summary</h1>
-              <p class="text-xs text-slate-500">Active versus archived record counts by school year.</p>
+              <h1 class="app-header-title">Archive Summary</h1>
+              <p class="app-header-subtitle">Active versus archived record counts by school year.</p>
             </div>
           </div>
-          <div class="flex items-center gap-2">
+          <div class="app-header-actions">
             <span class="hidden rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-600 sm:inline-flex">
               Generated {{ generated_at_label }}
             </span>
-            {% set theme_toggle_classes = 'relative p-2 rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200 transition focus:outline-none focus:ring-2 focus:ring-emerald-400' %}
+            {% set theme_toggle_classes = 'app-header-icon-btn' %}
             {% include 'partials/theme_toggle_button.html' %}
           </div>
         </div>
       </header>
 
-      <main class="flex-1 overflow-y-auto p-4 sm:p-6">
+      <main class="app-main-content flex-1 overflow-y-auto p-4 sm:p-6">
         <div class="space-y-6">
-          <section class="relative overflow-hidden rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-cyan-50 p-6 shadow-sm">
-            <div class="absolute -right-20 -top-16 h-52 w-52 rounded-full bg-emerald-200/40 blur-3xl"></div>
-            <div class="absolute -bottom-20 -left-12 h-44 w-44 rounded-full bg-cyan-200/35 blur-3xl"></div>
+          <section class="app-content-card app-content-card--hero p-6">
             <div class="relative grid gap-6 xl:grid-cols-12">
               <div class="xl:col-span-8">
-                <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">Archive Control Panel</p>
+                <p class="app-content-kicker">Archive Control Panel</p>
                 <h2 class="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Admin archive inventory and storage health</h2>
                 <p class="mt-3 max-w-3xl text-sm leading-relaxed text-slate-600">
                   This page shows where year-scoped data is stored, how many records exist per school year, and whether any operational data leaked into the wrong active or archive collection.
                 </p>
                 <div class="mt-4 flex flex-wrap gap-2">
-                  <span class="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-semibold text-emerald-700">
+                  <span class="app-content-badge">
                     Current active year: {{ current_school_year }}
                   </span>
-                  <span class="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-[11px] font-semibold text-blue-700">
+                  <span class="app-content-badge">
                     Selected workspace: {{ selected_school_year }}
                   </span>
-                  <span class="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-600">
+                  <span class="app-content-badge">
                     {{ archive_totals.school_year_count }} school year{{ '' if archive_totals.school_year_count == 1 else 's' }} tracked
                   </span>
                 </div>
               </div>
               <div class="xl:col-span-4">
-                <div class="rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-sm">
+                <div class="app-content-pane">
                   <h3 class="text-sm font-semibold text-slate-900">Storage Summary</h3>
                   <div class="mt-3 space-y-2 text-xs">
-                    <div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                    <div class="app-content-pane app-content-pane--dense px-3 py-2.5">
                       <p class="text-slate-500">Current year students</p>
                       <p class="mt-1 text-lg font-semibold text-slate-900">{{ archive_totals.current_student_count }}</p>
                     </div>
-                    <div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                    <div class="app-content-pane app-content-pane--dense px-3 py-2.5">
                       <p class="text-slate-500">Archived students</p>
                       <p class="mt-1 text-lg font-semibold text-slate-900">{{ archive_totals.archived_student_count }}</p>
                     </div>
-                    <div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                    <div class="app-content-pane app-content-pane--dense px-3 py-2.5">
                       <p class="text-slate-500">Storage health issues</p>
-                      <p class="mt-1 text-lg font-semibold {% if archive_totals.storage_issue_total > 0 %}text-amber-700{% else %}text-emerald-700{% endif %}">
+                      <p class="mt-1 text-lg font-semibold text-slate-900">
                         {{ archive_totals.storage_issue_total }}
                       </p>
                     </div>
@@ -135,19 +133,20 @@
             </article>
           </section>
 
-          <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <section class="app-content-card p-5">
             <div class="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p class="text-[11px] font-semibold uppercase tracking-[0.15em] text-emerald-700">Per-School-Year Matrix</p>
+                <p class="app-content-kicker">Per-School-Year Matrix</p>
                 <h3 class="mt-1 text-lg font-semibold text-slate-900">Active versus archived record counts</h3>
               </div>
-              <span class="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-600">
+              <span class="app-content-badge">
                 Selected year: {{ selected_school_year }}
               </span>
             </div>
 
-            <div class="mt-4 overflow-x-auto">
-              <table class="min-w-full divide-y divide-slate-200 text-sm">
+            <div class="app-table-shell mt-4 overflow-hidden">
+              <div class="overflow-x-auto">
+              <table class="app-data-table min-w-full divide-y divide-slate-200 text-sm">
                 <thead class="bg-slate-50">
                   <tr class="text-left text-[11px] uppercase tracking-[0.16em] text-slate-500">
                     <th class="px-4 py-3 font-semibold">School Year</th>
@@ -177,11 +176,11 @@
                           </span>
                           {% endif %}
                         </div>
-                        <div class="flex flex-wrap gap-2 text-[11px]">
-                          <a href="{{ row.student_page_url }}" class="font-medium text-emerald-700 hover:text-emerald-800">Students</a>
-                          <a href="{{ row.gate_logs_url }}" class="font-medium text-blue-700 hover:text-blue-800">Gate Logs</a>
-                          <a href="{{ row.sms_logs_url }}" class="font-medium text-cyan-700 hover:text-cyan-800">SMS Logs</a>
-                          <a href="{{ row.analytics_url }}" class="font-medium text-violet-700 hover:text-violet-800">Analytics</a>
+                        <div class="app-neutral-links flex flex-wrap gap-2 text-[11px]">
+                          <a href="{{ row.student_page_url }}" class="font-medium">Students</a>
+                          <a href="{{ row.gate_logs_url }}" class="font-medium">Gate Logs</a>
+                          <a href="{{ row.sms_logs_url }}" class="font-medium">SMS Logs</a>
+                          <a href="{{ row.analytics_url }}" class="font-medium">Analytics</a>
                         </div>
                       </div>
                     </td>
@@ -216,12 +215,12 @@
                       </div>
                     </td>
                     <td class="px-4 py-4 align-top">
-                      <span class="inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold {% if row.misplaced_total > 0 %}border-amber-200 bg-amber-50 text-amber-700{% else %}border-emerald-200 bg-emerald-50 text-emerald-700{% endif %}">
+                      <span class="app-page-tag">
                         {{ row.misplaced_total }}
                       </span>
                     </td>
                     <td class="px-4 py-4 align-top">
-                      <div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+                      <div class="app-content-pane app-content-pane--dense px-3 py-2 text-xs text-slate-700">
                         {{ row.student_collection }}
                       </div>
                     </td>
@@ -229,35 +228,36 @@
                   {% endfor %}
                 </tbody>
               </table>
+              </div>
             </div>
           </section>
 
           <section class="grid gap-6 xl:grid-cols-5">
-            <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-2">
+            <article class="app-content-card p-5 xl:col-span-2">
               <div class="flex items-center justify-between gap-3">
                 <div>
-                  <p class="text-[11px] font-semibold uppercase tracking-[0.15em] text-blue-700">Storage Health</p>
+                  <p class="app-content-kicker">Storage Health</p>
                   <h3 class="mt-1 text-lg font-semibold text-slate-900">Active/archive routing checks</h3>
                 </div>
-                <span class="inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-semibold {% if archive_totals.storage_issue_total > 0 %}border-amber-200 bg-amber-50 text-amber-700{% else %}border-emerald-200 bg-emerald-50 text-emerald-700{% endif %}">
+                <span class="app-content-badge">
                   {{ archive_totals.storage_issue_total }} issue{{ '' if archive_totals.storage_issue_total == 1 else 's' }}
                 </span>
               </div>
               <div class="mt-4 space-y-3">
                 {% for row in storage_health_rows %}
-                <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div class="app-content-pane">
                   <div class="flex items-center justify-between gap-3">
                     <p class="text-sm font-semibold text-slate-900">{{ row.label }}</p>
-                    <span class="inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold {% if row.issue_count > 0 %}border-amber-200 bg-amber-50 text-amber-700{% else %}border-emerald-200 bg-emerald-50 text-emerald-700{% endif %}">
+                    <span class="app-page-tag">
                       {{ row.issue_count }} total
                     </span>
                   </div>
                   <div class="mt-3 grid grid-cols-2 gap-2 text-xs">
-                    <div class="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                    <div class="app-content-pane app-content-pane--dense px-3 py-2">
                       <p class="text-slate-500">Active collection mismatch</p>
                       <p class="mt-1 font-semibold text-slate-900">{{ row.active_mismatches }}</p>
                     </div>
-                    <div class="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                    <div class="app-content-pane app-content-pane--dense px-3 py-2">
                       <p class="text-slate-500">Archive contains current year</p>
                       <p class="mt-1 font-semibold text-slate-900">{{ row.archive_current }}</p>
                     </div>
@@ -267,18 +267,19 @@
               </div>
             </article>
 
-            <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-3">
+            <article class="app-content-card p-5 xl:col-span-3">
               <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <p class="text-[11px] font-semibold uppercase tracking-[0.15em] text-emerald-700">MongoDB Inventory</p>
+                  <p class="app-content-kicker">MongoDB Inventory</p>
                   <h3 class="mt-1 text-lg font-semibold text-slate-900">Relevant collections and document counts</h3>
                 </div>
-                <span class="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-600">
+                <span class="app-content-badge">
                   {{ collection_inventory|length }} collection entries
                 </span>
               </div>
-              <div class="mt-4 overflow-x-auto">
-                <table class="min-w-full divide-y divide-slate-200 text-sm">
+              <div class="app-table-shell mt-4 overflow-hidden">
+                <div class="overflow-x-auto">
+                <table class="app-data-table min-w-full divide-y divide-slate-200 text-sm">
                   <thead class="bg-slate-50">
                     <tr class="text-left text-[11px] uppercase tracking-[0.16em] text-slate-500">
                       <th class="px-4 py-3 font-semibold">Collection</th>
@@ -296,7 +297,7 @@
                       </td>
                       <td class="px-4 py-3 align-top text-slate-700">{{ row.category }}</td>
                       <td class="px-4 py-3 align-top">
-                        <span class="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
+                        <span class="app-page-tag">
                           {{ row.scope }}
                         </span>
                       </td>
@@ -306,6 +307,7 @@
                     {% endfor %}
                   </tbody>
                 </table>
+                </div>
               </div>
             </article>
           </section>

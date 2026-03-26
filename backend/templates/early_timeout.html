@@ -20,17 +20,18 @@
 
         <div class="flex-1 flex flex-col min-w-0 h-full overflow-hidden" x-data="etoPage()" x-init="init()">
             <!-- Header -->
-            <header class="h-16 bg-white shadow-sm flex shrink-0 items-center justify-between px-4 md:px-6">
-                <div class="flex items-center gap-3">
-                    <button @click="mobileMenuOpen = true" class="md:hidden text-gray-500 hover:text-gray-700 focus:outline-none">
+            <header class="app-page-header shrink-0">
+                <div class="app-header-leading">
+                    <button @click="mobileMenuOpen = true" class="app-header-icon-btn md:hidden">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
                         </svg>
                     </button>
-                    <h1 class="text-lg font-semibold hidden sm:block">Early Time-Out Requests</h1>
-                    <h1 class="text-lg font-semibold sm:hidden">Time-Outs</h1>
+                    <h1 class="app-header-title hidden sm:block">Early Time-Out Requests</h1>
+                    <h1 class="app-header-title sm:hidden">Time-Outs</h1>
                 </div>
-                <div class="flex items-center gap-2">
+                <div class="app-header-actions">
+                    {% set theme_toggle_classes = 'app-header-icon-btn' %}
                     {% include 'partials/theme_toggle_button.html' %}
                     <button @click="openNewRequest()" class="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 transition shadow-sm">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
@@ -39,25 +40,25 @@
                 </div>
             </header>
 
-            <main class="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
+            <main class="app-main-content flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
                 <!-- Stats Overview -->
                 <section class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-                        <p class="text-[10px] uppercase font-bold text-slate-400">Pending Approval</p>
-                        <p class="text-3xl font-bold text-amber-600 mt-1" x-text="pendingCount">0</p>
+                    <div class="app-content-card p-4 sm:p-5">
+                        <p class="app-content-kicker">Pending Approval</p>
+                        <p class="mt-3 text-3xl font-bold text-slate-900" x-text="pendingCount">0</p>
                     </div>
-                    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-                        <p class="text-[10px] uppercase font-bold text-slate-400">Approved Today</p>
-                        <p class="text-3xl font-bold text-emerald-600 mt-1" x-text="approvedCount">0</p>
+                    <div class="app-content-card p-4 sm:p-5">
+                        <p class="app-content-kicker">Approved Today</p>
+                        <p class="mt-3 text-3xl font-bold text-slate-900" x-text="approvedCount">0</p>
                     </div>
-                    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-                        <p class="text-[10px] uppercase font-bold text-slate-400">Total requests</p>
-                        <p class="text-3xl font-bold text-slate-800 mt-1" x-text="totalCount">0</p>
+                    <div class="app-content-card p-4 sm:p-5">
+                        <p class="app-content-kicker">Total Requests</p>
+                        <p class="mt-3 text-3xl font-bold text-slate-900" x-text="totalCount">0</p>
                     </div>
                 </section>
 
                 <!-- Filters -->
-                <section class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                <section class="app-content-card p-4">
                     <div class="flex flex-wrap gap-3">
                         <div class="flex-1 min-w-[200px]">
                             <input type="text" x-model="filters.q" @input.debounce.300ms="fetchRequests()" placeholder="Search Student Name or ID..." class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition">
@@ -77,9 +78,9 @@
                 </section>
 
                 <!-- Request Table -->
-                <section class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <section class="app-table-shell">
                     <div class="overflow-x-auto">
-                        <table class="min-w-full divide-y divide-slate-200">
+                        <table class="app-data-table min-w-full divide-y divide-slate-200">
                             <thead class="bg-slate-50 text-[10px] uppercase font-bold text-slate-500 tracking-wider">
                                 <tr>
                                     <th class="px-6 py-3 text-left">Student</th>

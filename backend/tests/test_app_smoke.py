@@ -58,6 +58,8 @@ class AppSmokeTests(unittest.TestCase):
         self.assertNotIn("Scanner Status", html)
         self.assertIn("Manual IN", html)
         self.assertIn("Manual OUT", html)
+        self.assertIn("scan-activity-status-in", html)
+        self.assertIn("scan-activity-glow-out", html)
         self.assertIn("Status: ${data.count} faces detected", html)
         self.assertNotIn("showScanEventBadge('warning', `${data.count} faces detected`)", html)
 
@@ -199,6 +201,8 @@ class AppSmokeTests(unittest.TestCase):
         payload = pdf_response.get_data()
         self.assertTrue(payload.startswith(b"%PDF-"))
         self.assertIn(b"Official Student Records Report", payload)
+        self.assertIn(b"Prepared by", payload)
+        self.assertIn(b"Approved by", payload)
 
         inline_response = client.get("/students/export_pdf?disposition=inline")
         self.assertEqual(inline_response.status_code, 200)
@@ -241,7 +245,14 @@ class AppSmokeTests(unittest.TestCase):
                 response = client.get(route)
                 self.assertEqual(response.status_code, 200)
                 self.assertEqual(response.content_type, "application/pdf")
-                self.assertTrue(response.get_data().startswith(b"%PDF-"))
+                payload = response.get_data()
+                self.assertTrue(payload.startswith(b"%PDF-"))
+                self.assertIn(b"Prepared by", payload)
+                self.assertIn(b"Approved by", payload)
+
+                inline_response = client.get(f"{route}?disposition=inline")
+                self.assertEqual(inline_response.status_code, 200)
+                self.assertIn("inline", inline_response.headers.get("Content-Disposition", "").lower())
 
     def test_simulated_gate_scans_follow_tracked_in_out_rules(self):
         client = self.make_client()

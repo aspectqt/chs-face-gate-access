@@ -47,6 +47,43 @@
     }
   }
 
+  function sanitizeFilename(value, fallback = "download") {
+    const fallbackName = String(fallback || "download").trim() || "download";
+    const cleaned = String(value || "")
+      .trim()
+      .replace(/[<>:"/\\|?*\u0000-\u001f]+/g, "_")
+      .replace(/\s+/g, " ");
+    return cleaned || fallbackName;
+  }
+
+  function resolveResponseFilename({
+    preferredFilename = "",
+    contentDisposition = "",
+    contentType = "",
+    url = "",
+    fallback = "download",
+  } = {}) {
+    const filename = sanitizeFilename(
+      preferredFilename || parseContentDispositionFilename(contentDisposition) || inferFilenameFromUrl(url, fallback),
+      fallback,
+    );
+    if (/\.[A-Za-z0-9]{2,8}$/.test(filename)) {
+      return filename;
+    }
+
+    const normalizedContentType = String(contentType || "").toLowerCase();
+    if (normalizedContentType.includes("application/pdf")) {
+      return `${filename}.pdf`;
+    }
+    if (normalizedContentType.includes("spreadsheetml")) {
+      return `${filename}.xlsx`;
+    }
+    if (normalizedContentType.includes("csv")) {
+      return `${filename}.csv`;
+    }
+    return filename;
+  }
+
   function triggerBlobDownload(blob, filename) {
     const objectUrl = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
@@ -73,10 +110,13 @@
     }
 
     const blob = await response.blob();
-    const contentDisposition = response.headers.get("Content-Disposition");
-    const headerFilename = parseContentDispositionFilename(contentDisposition);
-    const fallbackFilename = inferFilenameFromUrl(url, "download");
-    const filename = String(preferredFilename || headerFilename || fallbackFilename || "download").trim();
+    const filename = resolveResponseFilename({
+      preferredFilename,
+      contentDisposition: response.headers.get("Content-Disposition"),
+      contentType: response.headers.get("Content-Type"),
+      url,
+      fallback: "download",
+    });
 
     triggerBlobDownload(blob, filename);
     return { filename };
@@ -100,7 +140,7 @@
   }
 
   function openPrintWindow(title) {
-    const popup = window.open("", "_blank", "noopener,noreferrer,width=1080,height=860");
+    const popup = window.open("about:blank", "_blank");
     if (!popup) {
       throw new Error("Popup blocked. Allow popups to print the PDF.");
     }
@@ -115,27 +155,80 @@
   <title>${safeTitle}</title>
   <style>
     :root { color-scheme: light; }
-    html, body { height: 100%; margin: 0; background: #f8fafc; color: #0f172a; font-family: "Segoe UI", Arial, sans-serif; }
+    html, body { height: 100%; margin: 0; background: #ffffff; color: #111827; font-family: "Segoe UI", Arial, sans-serif; }
     body { display: flex; flex-direction: column; }
-    .status { display: flex; align-items: center; justify-content: center; gap: 0.75rem; padding: 1rem 1.25rem; border-bottom: 1px solid #e2e8f0; background: linear-gradient(135deg, #fff1f2, #ffffff); font-size: 0.95rem; }
-    .status-badge { display: inline-flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; border-radius: 0.75rem; background: #e11d48; color: white; font-weight: 700; letter-spacing: 0.08em; font-size: 0.75rem; }
-    .status-note { font-size: 0.8rem; color: #64748b; }
+    .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.9rem 1.1rem; border-bottom: 1px solid #d1d5db; background: #f9fafb; }
+    .toolbar-copy { min-width: 0; }
+    .toolbar-title { font-size: 0.98rem; font-weight: 700; }
+    .toolbar-status { margin-top: 0.15rem; font-size: 0.82rem; color: #4b5563; }
+    .toolbar-filename { margin-top: 0.12rem; font-size: 0.76rem; color: #6b7280; word-break: break-word; }
+    .toolbar-actions { display: flex; align-items: center; gap: 0.6rem; }
+    .print-button { border: 1px solid #111827; background: #111827; color: #ffffff; border-radius: 999px; padding: 0.62rem 1rem; font-size: 0.82rem; font-weight: 700; cursor: pointer; }
+    .print-button[disabled] { opacity: 0.45; cursor: wait; }
     iframe { flex: 1 1 auto; width: 100%; border: 0; background: white; }
   </style>
 </head>
 <body>
-  <div class="status">
-    <span class="status-badge">PDF</span>
-    <div>
-      <div>Preparing a print-ready PDF...</div>
-      <div class="status-note">If the print dialog does not open automatically, use Ctrl/Cmd+P.</div>
+  <div class="toolbar">
+    <div class="toolbar-copy">
+      <div class="toolbar-title">Print-ready PDF</div>
+      <div id="pdfPrintStatus" class="toolbar-status">Preparing the PDF preview...</div>
+      <div id="pdfPrintFilename" class="toolbar-filename"></div>
+    </div>
+    <div class="toolbar-actions">
+      <button id="pdfPrintNowButton" type="button" class="print-button" disabled>Print Now</button>
     </div>
   </div>
   <iframe id="pdfPrintFrame" title="${safeTitle}"></iframe>
 </body>
 </html>`);
     popup.document.close();
+    try {
+      popup.focus();
+    } catch (_error) {
+      // Ignore focus failures; the tab is still usable.
+    }
     return popup;
+  }
+
+  function setPrintWindowStatus(popup, message) {
+    try {
+      const statusNode = popup.document.getElementById("pdfPrintStatus");
+      if (statusNode) statusNode.textContent = String(message || "");
+    } catch (_error) {
+      // Ignore cross-document access failures.
+    }
+  }
+
+  function setPrintWindowFilename(popup, filename) {
+    try {
+      const text = String(filename || "").trim();
+      popup.document.title = text || popup.document.title || "Print PDF";
+      const filenameNode = popup.document.getElementById("pdfPrintFilename");
+      if (filenameNode) filenameNode.textContent = text;
+    } catch (_error) {
+      // Ignore cross-document access failures.
+    }
+  }
+
+  function attemptPrint(popup, frame) {
+    try {
+      if (frame && frame.contentWindow) {
+        frame.contentWindow.focus();
+        frame.contentWindow.print();
+        return true;
+      }
+    } catch (_error) {
+      // Fall through to the popup-level print attempt.
+    }
+
+    try {
+      popup.focus();
+      popup.print();
+      return true;
+    } catch (_error) {
+      return false;
+    }
   }
 
   async function fetchPdfBlob(url) {
@@ -151,7 +244,14 @@
       throw new Error(`Print request failed with status ${response.status}.`);
     }
 
-    return response.blob();
+    const blob = await response.blob();
+    const filename = resolveResponseFilename({
+      contentDisposition: response.headers.get("Content-Disposition"),
+      contentType: response.headers.get("Content-Type"),
+      url,
+      fallback: "report.pdf",
+    });
+    return { blob, filename };
   }
 
   async function printPdf(url, title) {
@@ -159,32 +259,39 @@
     let objectUrl = "";
 
     try {
-      const blob = await fetchPdfBlob(url);
+      const { blob, filename } = await fetchPdfBlob(url);
       objectUrl = URL.createObjectURL(blob);
       const frame = popup.document.getElementById("pdfPrintFrame");
+      const printButton = popup.document.getElementById("pdfPrintNowButton");
       if (!frame) {
         throw new Error("Unable to prepare the print frame.");
       }
+      if (!printButton) {
+        throw new Error("Unable to prepare the print controls.");
+      }
+
+      setPrintWindowFilename(popup, filename);
+      setPrintWindowStatus(popup, "Loading PDF preview...");
+
+      const requestPrint = () => {
+        const didPrint = attemptPrint(popup, frame);
+        setPrintWindowStatus(
+          popup,
+          didPrint
+            ? "Print dialog opened. If your browser blocks it, use the Print Now button or Ctrl/Cmd+P."
+            : "Use the Print Now button or Ctrl/Cmd+P if the browser blocks automatic printing.",
+        );
+      };
 
       frame.addEventListener("load", () => {
+        setPrintWindowStatus(popup, "PDF ready. Opening the print dialog...");
         setTimeout(() => {
-          try {
-            if (frame.contentWindow) {
-              frame.contentWindow.focus();
-              frame.contentWindow.print();
-              return;
-            }
-          } catch (_error) {
-            // Fall back to printing the popup window itself.
-          }
-          try {
-            popup.focus();
-            popup.print();
-          } catch (_error) {
-            // Let the user print manually if the browser blocks programmatic printing.
-          }
+          requestPrint();
         }, 350);
       }, { once: true });
+
+      printButton.disabled = false;
+      printButton.addEventListener("click", requestPrint);
 
       popup.addEventListener("beforeunload", () => {
         if (objectUrl) {
@@ -198,8 +305,8 @@
         URL.revokeObjectURL(objectUrl);
       }
       popup.document.body.innerHTML = `<div style="padding: 24px; font-family: 'Segoe UI', Arial, sans-serif;">
-        <h1 style="margin: 0 0 12px; font-size: 20px; color: #991b1b;">Unable to prepare the PDF</h1>
-        <p style="margin: 0; color: #475569;">${escapeHtml(error instanceof Error ? error.message : String(error || "Print failed."))}</p>
+        <h1 style="margin: 0 0 12px; font-size: 20px; color: #111827;">Unable to prepare the PDF</h1>
+        <p style="margin: 0; color: #374151;">${escapeHtml(error instanceof Error ? error.message : String(error || "Print failed."))}</p>
       </div>`;
       throw error;
     }

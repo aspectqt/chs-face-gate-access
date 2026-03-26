@@ -14,17 +14,17 @@
 <div class="flex h-full">
   {% include 'partials/sidebar.html' %}
   <div class="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
-    <header class="h-16 bg-white shadow-sm flex shrink-0 items-center justify-between px-4 md:px-6">
-      <div class="flex items-center gap-3">
-        <button @click="mobileMenuOpen = true" class="md:hidden text-gray-500 hover:text-gray-700 focus:outline-none">
+    <header class="app-page-header shrink-0">
+      <div class="app-header-leading">
+        <button @click="mobileMenuOpen = true" class="app-header-icon-btn md:hidden">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
-        <h1 class="text-lg font-semibold hidden sm:block">Students</h1>
+        <h1 class="app-header-title hidden sm:block">Students</h1>
       </div>
-      <div class="flex items-center gap-2">
-  {% set theme_toggle_classes = 'relative p-2 rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200 transition focus:outline-none focus:ring-2 focus:ring-emerald-400' %}
+      <div class="app-header-actions">
+  {% set theme_toggle_classes = 'app-header-icon-btn' %}
   {% include 'partials/theme_toggle_button.html' %}
 
   <button
@@ -47,7 +47,7 @@
 </div>
     </header>
 
-    <main class="flex-1 overflow-y-auto p-4 sm:p-6">
+    <main class="app-main-content flex-1 overflow-y-auto p-4 sm:p-6">
       <div id="toast" class="fixed top-5 right-5 z-[100] hidden w-full max-w-lg rounded-2xl border shadow-xl" role="status" aria-live="polite">
         <div class="flex items-start gap-3 p-4">
           <div class="min-w-0 flex-1">
@@ -118,7 +118,7 @@
       </section>
 
       <section class="mb-5">
-        <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <article class="app-content-card p-4">
           <div class="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p class="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">School Year</p>
@@ -137,7 +137,7 @@
           </div>
 
           <div class="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-12">
-            <div class="rounded-xl border border-slate-200 bg-slate-50 p-3 lg:col-span-4">
+            <div class="app-content-pane lg:col-span-4">
               <label for="schoolYearSelect" class="text-sm font-semibold text-slate-800">Select School Year</label>
               <select id="schoolYearSelect" class="mt-2 h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-700">
                 {% for option in school_year_options %}
@@ -147,7 +147,7 @@
               <p class="mt-2 text-[11px] text-slate-500">Switch between current and archived enrollment records without deleting old data.</p>
             </div>
 
-            <div class="rounded-xl border border-slate-200 bg-slate-50 p-3 lg:col-span-4">
+            <div class="app-content-pane lg:col-span-4">
               <p class="text-sm font-semibold text-slate-800">Current Active Year</p>
               <p id="currentSchoolYearLabel" class="mt-2 text-2xl font-bold text-slate-900">{{ current_school_year }}</p>
               <p class="mt-1 text-[11px] text-slate-500">Newly created school years become the active enrollment workspace.</p>
@@ -172,7 +172,7 @@
       </section>
 
       <section class="mb-5">
-        <article class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
+        <article class="app-content-card p-4">
           <div class="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 class="text-base font-semibold text-slate-800">Year Level Sections</h2>
@@ -183,7 +183,7 @@
             </div>
           </div>
           <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-12">
-            <article class="rounded-xl border border-slate-200 bg-slate-50 p-3 xl:col-span-3">
+            <article class="app-content-pane xl:col-span-3">
               <p class="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Year Level</p>
               <label for="sectionsGradeSelect" class="mt-2 block text-sm font-semibold text-slate-800">Select Grade</label>
               <select id="sectionsGradeSelect" class="mt-2 h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-700">
@@ -193,7 +193,7 @@
                   {% endfor %}
                 </select>
             </article>
-            <article class="rounded-xl border border-slate-200 bg-slate-50 p-3 xl:col-span-4">
+            <article class="app-content-pane xl:col-span-4">
               <div class="flex flex-wrap items-start justify-between gap-2">
                 <div>
                   <p class="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Available Sections</p>
@@ -203,7 +203,7 @@
               </div>
               <div id="sectionsPanel" class="mt-3 flex max-h-24 flex-wrap gap-2 overflow-y-auto pr-1"></div>
             </article>
-            <article class="rounded-xl border border-slate-200 bg-slate-50 p-3 xl:col-span-2">
+            <article class="app-content-pane xl:col-span-2">
               <p class="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Selected Section</p>
               <h3 id="sectionStatsTitle" class="mt-2 text-sm font-semibold text-slate-900">No section selected</h3>
               <p id="sectionStatsSubtitle" class="mt-1 text-[11px] leading-5 text-slate-500"></p>
@@ -211,24 +211,24 @@
               <p id="sectionStatsUpdated" class="mt-2 text-[11px] text-slate-400">Last updated: -</p>
             </article>
             <div class="grid w-full max-w-full grid-cols-3 gap-2 self-start sm:col-span-2 sm:w-fit xl:col-span-3 xl:justify-self-end">
-              <article class="min-w-[4.5rem] self-start rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-center">
+              <article class="app-metric-tile min-w-[4.5rem] self-start px-3 py-1.5 text-center">
                 <p class="text-[10px] font-semibold uppercase tracking-[0.12em] leading-none text-slate-500">Total</p>
                 <p id="sectionStatsTotal" class="mt-1 text-2xl font-bold leading-none text-slate-900">0</p>
               </article>
-              <article class="min-w-[4.5rem] self-start rounded-xl border border-blue-200 bg-blue-50/80 px-3 py-1.5 text-center">
-                <p class="text-[10px] font-semibold uppercase tracking-[0.12em] leading-none text-blue-600">Male</p>
-                <p id="sectionStatsMale" class="mt-1 text-2xl font-bold leading-none text-blue-700">0</p>
+              <article class="app-metric-tile min-w-[4.5rem] self-start px-3 py-1.5 text-center">
+                <p class="text-[10px] font-semibold uppercase tracking-[0.12em] leading-none text-slate-500">Male</p>
+                <p id="sectionStatsMale" class="mt-1 text-2xl font-bold leading-none text-slate-900">0</p>
               </article>
-              <article class="min-w-[4.5rem] self-start rounded-xl border border-rose-200 bg-rose-50/80 px-3 py-1.5 text-center">
-                <p class="text-[10px] font-semibold uppercase tracking-[0.12em] leading-none text-rose-600">Female</p>
-                <p id="sectionStatsFemale" class="mt-1 text-2xl font-bold leading-none text-rose-700">0</p>
+              <article class="app-metric-tile min-w-[4.5rem] self-start px-3 py-1.5 text-center">
+                <p class="text-[10px] font-semibold uppercase tracking-[0.12em] leading-none text-slate-500">Female</p>
+                <p id="sectionStatsFemale" class="mt-1 text-2xl font-bold leading-none text-slate-900">0</p>
               </article>
             </div>
           </div>
         </article>
       </section>
 
-      <div class="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+      <div class="app-content-card mb-4 flex flex-col gap-3 p-4 sm:p-5 lg:flex-row lg:items-center lg:justify-between">
         <div class="grid w-full min-w-0 grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] lg:flex-1 lg:max-w-3xl">
           <div class="relative min-w-0">
             <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
@@ -260,9 +260,9 @@
         </div>
       </div>
 
-      <section class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+      <section class="app-table-shell">
         <div class="overflow-x-auto">
-          <table class="min-w-full divide-y divide-slate-200">
+          <table class="app-data-table min-w-full divide-y divide-slate-200">
             <thead class="bg-slate-900 text-white">
               <tr class="text-xs uppercase tracking-wide">
                 <th class="px-4 py-3 text-left">Photo</th>
@@ -280,7 +280,7 @@
             </tbody>
           </table>
         </div>
-        <div id="paginationBar" class="border-t border-slate-200 bg-slate-50/70 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div id="paginationBar" class="app-table-footer px-4 py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p id="paginationSummary" class="text-xs text-slate-600">Showing 0-0 of 0 students</p>
           <div id="paginationControls" class="flex items-center gap-1.5"></div>
         </div>
@@ -881,7 +881,8 @@
       <div class="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.95fr)]">
         <div class="space-y-4">
           <div class="relative overflow-hidden rounded-[28px] bg-slate-950 aspect-[4/3] shadow-[0_20px_60px_rgba(15,23,42,0.28)]">
-            <video id="faceVideo" autoplay muted playsinline class="w-full h-full object-cover"></video>
+            <canvas id="facePreviewCanvas" class="absolute inset-0 h-full w-full object-cover"></canvas>
+            <video id="faceVideo" autoplay muted playsinline class="absolute inset-0 h-full w-full object-cover opacity-0 pointer-events-none" aria-hidden="true"></video>
             <div class="pointer-events-none absolute inset-0 flex items-center justify-center">
               <div id="faceGuideRing" class="h-[72%] w-[48%] rounded-[999px] border-2 border-white/70 shadow-[0_0_0_999px_rgba(2,6,23,0.58)] transition-all duration-300"></div>
             </div>
@@ -981,7 +982,7 @@
   </div>
 </div>
 
-<script src="{{ url_for('static', filename='download_utils.js', v='20260312d') }}"></script>
+<script src="{{ url_for('static', filename='download_utils.js', v='20260326a') }}"></script>
 <script src="{{ url_for('static', filename='students.js', v=dev_reload_token or '20260326e') }}"></script>
 </body>
 </html>

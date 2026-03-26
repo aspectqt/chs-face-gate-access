@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 
 <head>
@@ -124,8 +124,19 @@
         }
 
         .scan-activity-feed {
+            position: relative;
+            z-index: 1;
+            isolation: isolate;
             scrollbar-width: thin;
             scrollbar-color: rgba(148, 163, 184, 0.7) transparent;
+        }
+
+        .scan-activity-ghost-layer {
+            position: absolute;
+            inset: 0.625rem;
+            z-index: 2;
+            overflow: hidden;
+            pointer-events: none;
         }
 
         .scan-activity-feed::-webkit-scrollbar {
@@ -138,14 +149,217 @@
         }
 
         .scan-activity-item {
+            position: relative;
+            overflow: hidden;
             opacity: 1;
-            transform: translateY(0);
-            transition: opacity 220ms ease, transform 220ms ease, box-shadow 220ms ease;
+            transform: translateY(0) scale(1);
+            filter: none;
+            border: 1px solid rgba(226, 232, 240, 0.92);
+            background: rgba(255, 255, 255, 0.92);
+            box-shadow: 0 10px 22px rgba(15, 23, 42, 0.08);
+            will-change: transform, opacity, box-shadow;
+            transition: opacity 240ms ease, transform 320ms cubic-bezier(0.22, 1, 0.36, 1), filter 320ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 260ms ease, border-color 260ms ease, background-color 260ms ease;
+        }
+
+        .scan-activity-item::before {
+            content: "";
+            position: absolute;
+            top: -38%;
+            left: -48%;
+            width: 42%;
+            height: 196%;
+            border-radius: 999px;
+            background: linear-gradient(115deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0));
+            opacity: 0;
+            transform: translateX(0) rotate(12deg);
+            pointer-events: none;
+        }
+
+        .scan-activity-item::after {
+            content: "";
+            position: absolute;
+            inset: -1px;
+            border-radius: inherit;
+            pointer-events: none;
+            opacity: 0;
+            box-shadow: 0 0 0 1px transparent;
+            transition: opacity 220ms ease;
         }
 
         .scan-activity-item.scan-activity-enter {
             opacity: 0;
-            transform: translateY(1rem);
+            transform: translateY(0.95rem) scale(0.965);
+            filter: blur(8px);
+        }
+
+        .scan-activity-ghost {
+            position: absolute;
+            margin: 0;
+            z-index: 2;
+            transition: opacity 240ms ease, transform 280ms cubic-bezier(0.22, 1, 0.36, 1), filter 280ms cubic-bezier(0.22, 1, 0.36, 1);
+        }
+
+        .scan-activity-ghost.scan-activity-exit-active {
+            opacity: 0;
+            filter: blur(7px);
+        }
+
+        .scan-activity-ghost.scan-activity-exit-refresh.scan-activity-exit-active {
+            transform: translateY(-0.6rem) scale(0.972);
+        }
+
+        .scan-activity-ghost.scan-activity-exit-overflow.scan-activity-exit-active {
+            transform: translateY(0.75rem) scale(0.965);
+        }
+
+        .scan-activity-item.scan-activity-announce::before {
+            animation: scanActivitySweep 780ms cubic-bezier(0.22, 1, 0.36, 1);
+        }
+
+        .scan-activity-layout {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            align-items: start;
+            gap: 0.75rem;
+        }
+
+        .scan-activity-copy {
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+        }
+
+        .scan-activity-name {
+            margin: 0;
+            font-size: 1.02rem;
+            line-height: 1.08;
+            font-weight: 800;
+            letter-spacing: 0.035em;
+            text-transform: uppercase;
+            color: #0f172a;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+        }
+
+        .scan-activity-time {
+            display: flex;
+            align-items: center;
+            gap: 0.45rem;
+            margin: 0;
+            font-size: 0.72rem;
+            font-weight: 600;
+            color: #475569;
+        }
+
+        .scan-activity-time::before {
+            content: "";
+            width: 0.4rem;
+            height: 0.4rem;
+            border-radius: 999px;
+            background: currentColor;
+            opacity: 0.4;
+            flex-shrink: 0;
+        }
+
+        .scan-activity-badge {
+            display: inline-flex;
+            min-width: 3.65rem;
+            align-items: center;
+            justify-content: center;
+            align-self: start;
+            padding: 0.45rem 0.75rem;
+            border-radius: 999px;
+            font-size: 0.72rem;
+            font-weight: 800;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+        }
+
+        .scan-activity-item.scan-activity-status-in {
+            border-color: rgba(16, 185, 129, 0.58);
+            background: linear-gradient(135deg, rgba(220, 252, 231, 0.98), rgba(255, 255, 255, 0.96));
+            box-shadow: 0 16px 34px rgba(5, 150, 105, 0.18), 0 0 0 1px rgba(16, 185, 129, 0.08);
+        }
+
+        .scan-activity-item.scan-activity-status-in::after {
+            opacity: 1;
+            box-shadow: inset 0 0 0 1px rgba(52, 211, 153, 0.28), 0 0 24px rgba(16, 185, 129, 0.12);
+        }
+
+        .scan-activity-item.scan-activity-status-in .scan-activity-badge {
+            border: 1px solid rgba(16, 185, 129, 0.2);
+            background: rgba(236, 253, 245, 0.96);
+            color: #047857;
+        }
+
+        .scan-activity-item.scan-activity-status-out {
+            border-color: rgba(244, 63, 94, 0.58);
+            background: linear-gradient(135deg, rgba(255, 228, 230, 0.98), rgba(255, 255, 255, 0.96));
+            box-shadow: 0 16px 34px rgba(225, 29, 72, 0.18), 0 0 0 1px rgba(244, 63, 94, 0.08);
+        }
+
+        .scan-activity-item.scan-activity-status-out::after {
+            opacity: 1;
+            box-shadow: inset 0 0 0 1px rgba(251, 113, 133, 0.28), 0 0 24px rgba(244, 63, 94, 0.12);
+        }
+
+        .scan-activity-item.scan-activity-status-out .scan-activity-badge {
+            border: 1px solid rgba(244, 63, 94, 0.2);
+            background: rgba(255, 241, 242, 0.96);
+            color: #be123c;
+        }
+
+        .scan-activity-item.scan-activity-glow-in {
+            animation: scanActivityGlowIn 1.8s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+
+        .scan-activity-item.scan-activity-glow-out {
+            animation: scanActivityGlowOut 1.8s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+
+        @keyframes scanActivitySweep {
+            0% {
+                opacity: 0;
+                transform: translateX(0) rotate(12deg);
+            }
+            22% {
+                opacity: 0.8;
+            }
+            100% {
+                opacity: 0;
+                transform: translateX(22rem) rotate(12deg);
+            }
+        }
+
+        @keyframes scanActivityGlowIn {
+            0% {
+                box-shadow: 0 0 0 rgba(16, 185, 129, 0), 0 16px 34px rgba(5, 150, 105, 0.18), 0 0 0 1px rgba(16, 185, 129, 0.08);
+            }
+            30% {
+                box-shadow: 0 0 0 7px rgba(52, 211, 153, 0.24), 0 0 44px rgba(16, 185, 129, 0.42), 0 18px 36px rgba(5, 150, 105, 0.28);
+            }
+            58% {
+                box-shadow: 0 0 0 12px rgba(110, 231, 183, 0.08), 0 0 30px rgba(16, 185, 129, 0.2), 0 18px 34px rgba(5, 150, 105, 0.24);
+            }
+            100% {
+                box-shadow: 0 16px 34px rgba(5, 150, 105, 0.18), 0 0 0 1px rgba(16, 185, 129, 0.08);
+            }
+        }
+
+        @keyframes scanActivityGlowOut {
+            0% {
+                box-shadow: 0 0 0 rgba(244, 63, 94, 0), 0 16px 34px rgba(225, 29, 72, 0.18), 0 0 0 1px rgba(244, 63, 94, 0.08);
+            }
+            30% {
+                box-shadow: 0 0 0 7px rgba(251, 113, 133, 0.24), 0 0 44px rgba(244, 63, 94, 0.42), 0 18px 36px rgba(225, 29, 72, 0.28);
+            }
+            58% {
+                box-shadow: 0 0 0 12px rgba(253, 164, 175, 0.08), 0 0 30px rgba(244, 63, 94, 0.2), 0 18px 34px rgba(225, 29, 72, 0.24);
+            }
+            100% {
+                box-shadow: 0 16px 34px rgba(225, 29, 72, 0.18), 0 0 0 1px rgba(244, 63, 94, 0.08);
+            }
         }
 
         .gate-console-shell {
@@ -237,6 +451,7 @@
         }
 
         .gate-console-feed-overlay-surface {
+            position: relative;
             margin-top: 0.75rem;
             flex: 1 1 auto;
             min-height: 0;
@@ -306,6 +521,94 @@
             background: rgba(15, 23, 42, 0.72);
         }
 
+        html[data-theme="dark"] .scan-activity-item {
+            border-color: rgba(71, 85, 105, 0.66);
+            background: rgba(15, 23, 42, 0.82);
+            box-shadow: 0 12px 28px rgba(2, 6, 23, 0.34);
+        }
+
+        html[data-theme="dark"] .scan-activity-item::before {
+            background: linear-gradient(115deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0));
+        }
+
+        html[data-theme="dark"] .scan-activity-name {
+            color: #f8fafc;
+        }
+
+        html[data-theme="dark"] .scan-activity-time {
+            color: #cbd5e1;
+        }
+
+        html[data-theme="dark"] .scan-activity-item.scan-activity-status-in {
+            border-color: rgba(52, 211, 153, 0.68);
+            background: linear-gradient(135deg, rgba(6, 95, 70, 0.78), rgba(15, 23, 42, 0.9));
+            box-shadow: 0 16px 34px rgba(6, 95, 70, 0.42), 0 0 0 1px rgba(16, 185, 129, 0.14);
+        }
+
+        html[data-theme="dark"] .scan-activity-item.scan-activity-status-in::after {
+            box-shadow: inset 0 0 0 1px rgba(110, 231, 183, 0.26), 0 0 28px rgba(16, 185, 129, 0.18);
+        }
+
+        html[data-theme="dark"] .scan-activity-item.scan-activity-status-in .scan-activity-badge {
+            border-color: rgba(52, 211, 153, 0.26);
+            background: rgba(6, 95, 70, 0.44);
+            color: #bbf7d0;
+        }
+
+        html[data-theme="dark"] .scan-activity-item.scan-activity-status-out {
+            border-color: rgba(251, 113, 133, 0.68);
+            background: linear-gradient(135deg, rgba(136, 19, 55, 0.72), rgba(15, 23, 42, 0.9));
+            box-shadow: 0 16px 34px rgba(159, 18, 57, 0.42), 0 0 0 1px rgba(244, 63, 94, 0.14);
+        }
+
+        html[data-theme="dark"] .scan-activity-item.scan-activity-status-out::after {
+            box-shadow: inset 0 0 0 1px rgba(253, 164, 175, 0.26), 0 0 28px rgba(244, 63, 94, 0.18);
+        }
+
+        html[data-theme="dark"] .scan-activity-item.scan-activity-status-out .scan-activity-badge {
+            border-color: rgba(251, 113, 133, 0.26);
+            background: rgba(136, 19, 55, 0.46);
+            color: #fecdd3;
+        }
+
+        html[data-theme="dark"] .scan-activity-item.scan-activity-glow-in {
+            animation: scanActivityGlowInDark 1.8s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+
+        html[data-theme="dark"] .scan-activity-item.scan-activity-glow-out {
+            animation: scanActivityGlowOutDark 1.8s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+
+        @keyframes scanActivityGlowInDark {
+            0% {
+                box-shadow: 0 0 0 rgba(16, 185, 129, 0), 0 16px 34px rgba(6, 95, 70, 0.42), 0 0 0 1px rgba(16, 185, 129, 0.14);
+            }
+            30% {
+                box-shadow: 0 0 0 7px rgba(52, 211, 153, 0.22), 0 0 46px rgba(16, 185, 129, 0.38), 0 20px 38px rgba(6, 95, 70, 0.46);
+            }
+            58% {
+                box-shadow: 0 0 0 12px rgba(110, 231, 183, 0.08), 0 0 34px rgba(16, 185, 129, 0.24), 0 18px 34px rgba(6, 95, 70, 0.42);
+            }
+            100% {
+                box-shadow: 0 16px 34px rgba(6, 95, 70, 0.42), 0 0 0 1px rgba(16, 185, 129, 0.14);
+            }
+        }
+
+        @keyframes scanActivityGlowOutDark {
+            0% {
+                box-shadow: 0 0 0 rgba(244, 63, 94, 0), 0 16px 34px rgba(159, 18, 57, 0.42), 0 0 0 1px rgba(244, 63, 94, 0.14);
+            }
+            30% {
+                box-shadow: 0 0 0 7px rgba(251, 113, 133, 0.22), 0 0 46px rgba(244, 63, 94, 0.38), 0 20px 38px rgba(159, 18, 57, 0.46);
+            }
+            58% {
+                box-shadow: 0 0 0 12px rgba(253, 164, 175, 0.08), 0 0 34px rgba(244, 63, 94, 0.24), 0 18px 34px rgba(159, 18, 57, 0.42);
+            }
+            100% {
+                box-shadow: 0 16px 34px rgba(159, 18, 57, 0.42), 0 0 0 1px rgba(244, 63, 94, 0.14);
+            }
+        }
+
         html[data-theme="dark"] .gate-console-feed-overlay-panel {
             border-color: rgba(148, 163, 184, 0.16);
             background: rgba(2, 6, 23, 0.42);
@@ -332,6 +635,41 @@
                 max-width: none;
                 height: 10rem;
             }
+
+            .scan-activity-layout {
+                gap: 0.65rem;
+            }
+
+            .scan-activity-name {
+                font-size: 0.92rem;
+                letter-spacing: 0.03em;
+            }
+
+            .scan-activity-badge {
+                min-width: 3.2rem;
+                padding: 0.38rem 0.62rem;
+                font-size: 0.66rem;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .scan-activity-item {
+                transition: none !important;
+            }
+
+            .scan-activity-item::before,
+            .scan-activity-item::after,
+            .scan-activity-item.scan-activity-glow-in,
+            .scan-activity-item.scan-activity-glow-out,
+            .scan-activity-item.scan-activity-announce::before {
+                animation: none !important;
+            }
+
+            .scan-activity-item.scan-activity-enter {
+                opacity: 1;
+                transform: none;
+                filter: none;
+            }
         }
 
         .gate-console-stat {
@@ -348,6 +686,399 @@
             text-transform: uppercase;
             letter-spacing: 0.14em;
             color: rgb(100 116 139);
+        }
+
+        .dashboard-section-card {
+            --section-accent: 5 150 105;
+            border: 1px solid rgba(var(--section-accent), 0.16);
+            border-radius: 1.5rem;
+            background:
+                linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.94)),
+                linear-gradient(135deg, rgba(var(--section-accent), 0.06), rgba(var(--section-accent), 0.015));
+            box-shadow: 0 10px 28px rgba(15, 23, 42, 0.05);
+        }
+
+        .dashboard-section-card--emerald {
+            --section-accent: 5 150 105;
+        }
+
+        .dashboard-section-header {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 1rem;
+        }
+
+        .dashboard-section-copy {
+            min-width: 0;
+            max-width: 44rem;
+        }
+
+        .dashboard-section-kicker {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.55rem;
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+            color: rgba(var(--section-accent), 0.96);
+        }
+
+        .dashboard-section-kicker svg {
+            width: 1rem;
+            height: 1rem;
+            flex-shrink: 0;
+        }
+
+        .dashboard-section-title {
+            margin-top: 0.7rem;
+            font-size: 1.125rem;
+            line-height: 1.2;
+            font-weight: 700;
+            color: var(--app-text);
+        }
+
+        .dashboard-section-note {
+            margin-top: 0.4rem;
+            font-size: 0.82rem;
+            line-height: 1.55;
+            color: var(--app-text-soft);
+        }
+
+        .dashboard-section-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            border-radius: 999px;
+            border: 1px solid rgba(var(--section-accent), 0.16);
+            background:
+                linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.9)),
+                linear-gradient(135deg, rgba(var(--section-accent), 0.04), rgba(var(--section-accent), 0.01));
+            padding: 0.45rem 0.8rem;
+            font-size: 0.71rem;
+            font-weight: 700;
+            color: rgb(71 85 105);
+        }
+
+        .dashboard-surface-card {
+            border: 1px solid rgba(var(--section-accent), 0.16);
+            border-radius: 1.25rem;
+            background:
+                linear-gradient(180deg, rgba(255, 255, 255, 0.97), rgba(248, 250, 252, 0.92)),
+                linear-gradient(135deg, rgba(var(--section-accent), 0.05), rgba(var(--section-accent), 0.012));
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+        }
+
+        .dashboard-metric-card {
+            min-height: 7.75rem;
+            padding: 1rem;
+        }
+
+        .dashboard-metric-label {
+            display: block;
+            font-size: 0.7rem;
+            font-weight: 700;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            color: rgba(var(--section-accent), 0.88);
+        }
+
+        .dashboard-metric-value {
+            margin-top: 0.85rem;
+            font-size: 1.05rem;
+            line-height: 1.3;
+            font-weight: 700;
+            color: var(--app-text);
+        }
+
+        .dashboard-metric-value--ok {
+            color: rgb(4 120 87);
+        }
+
+        .dashboard-metric-value--warn {
+            color: rgb(180 83 9);
+        }
+
+        .dashboard-metric-value--error {
+            color: rgb(190 24 93);
+        }
+
+        .dashboard-metric-note {
+            margin-top: 0.35rem;
+            font-size: 0.72rem;
+            line-height: 1.5;
+            color: var(--app-text-soft);
+            word-break: break-word;
+        }
+
+        .dashboard-list-label {
+            display: block;
+            margin-bottom: 0.65rem;
+            font-size: 0.7rem;
+            font-weight: 700;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            color: rgba(var(--section-accent), 0.88);
+        }
+
+        .dashboard-list-item {
+            border: 1px solid rgba(var(--section-accent), 0.16);
+            border-radius: 1rem;
+            background:
+                linear-gradient(180deg, rgba(255, 255, 255, 0.97), rgba(248, 250, 252, 0.92)),
+                linear-gradient(135deg, rgba(var(--section-accent), 0.05), rgba(var(--section-accent), 0.012));
+            padding: 0.85rem 0.95rem;
+        }
+
+        .dashboard-table-shell {
+            border: 1px solid rgba(var(--section-accent), 0.16);
+            border-radius: 1.25rem;
+            background:
+                linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.94)),
+                linear-gradient(135deg, rgba(var(--section-accent), 0.06), rgba(var(--section-accent), 0.015));
+            overflow: hidden;
+        }
+
+        .dashboard-table-shell thead tr {
+            background: rgba(248, 250, 252, 0.96);
+            border-bottom: 1px solid rgba(var(--section-accent), 0.16);
+        }
+
+        .dashboard-table-shell tbody tr {
+            transition: background-color 160ms ease;
+        }
+
+        .dashboard-table-shell tbody tr:hover {
+            background: rgba(248, 250, 252, 0.75);
+        }
+
+        .dashboard-mini-stat {
+            position: relative;
+            overflow: hidden;
+            min-height: 8.5rem;
+            padding: 1rem 1.1rem;
+        }
+
+        .dashboard-mini-stat-value {
+            margin-top: 0.85rem;
+            font-size: 2rem;
+            line-height: 1;
+            font-weight: 800;
+            letter-spacing: -0.04em;
+            color: var(--app-text);
+        }
+
+        .dashboard-eto-card {
+            display: flex;
+            min-height: 100%;
+            flex-direction: column;
+            gap: 1rem;
+            padding: 1.35rem;
+            text-decoration: none;
+        }
+
+        .dashboard-eto-icon {
+            display: inline-flex;
+            height: 2.5rem;
+            width: 2.5rem;
+            align-items: center;
+            justify-content: center;
+            border-radius: 1rem;
+            border: 1px solid rgba(var(--section-accent), 0.16);
+            background:
+                linear-gradient(180deg, rgba(255, 255, 255, 0.97), rgba(248, 250, 252, 0.92)),
+                linear-gradient(135deg, rgba(var(--section-accent), 0.05), rgba(var(--section-accent), 0.012));
+            color: rgba(var(--section-accent), 0.96);
+        }
+
+        .dashboard-eto-card:hover {
+            background:
+                linear-gradient(180deg, rgba(255, 255, 255, 1), rgba(248, 250, 252, 0.96)),
+                linear-gradient(135deg, rgba(var(--section-accent), 0.08), rgba(var(--section-accent), 0.02));
+        }
+
+        .gate-console-shell.dashboard-section-card {
+            background:
+                linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.94)),
+                linear-gradient(135deg, rgba(var(--section-accent), 0.06), rgba(var(--section-accent), 0.015));
+            border-color: rgba(var(--section-accent), 0.16);
+            box-shadow: 0 10px 28px rgba(15, 23, 42, 0.05);
+        }
+
+        .gate-console-shell.dashboard-section-card .gate-console-divider {
+            border-color: rgba(var(--section-accent), 0.12);
+        }
+
+        .gate-console-shell.dashboard-section-card .gate-console-panel {
+            border-color: rgba(var(--section-accent), 0.16);
+            background:
+                linear-gradient(180deg, rgba(255, 255, 255, 0.97), rgba(248, 250, 252, 0.92)),
+                linear-gradient(135deg, rgba(var(--section-accent), 0.05), rgba(var(--section-accent), 0.012));
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+        }
+
+        .gate-console-shell.dashboard-section-card .gate-console-panel-soft {
+            background:
+                linear-gradient(180deg, rgba(255, 255, 255, 0.97), rgba(248, 250, 252, 0.92)),
+                linear-gradient(135deg, rgba(var(--section-accent), 0.05), rgba(var(--section-accent), 0.012));
+        }
+
+        .gate-console-shell.dashboard-section-card .gate-console-count {
+            border-color: rgba(var(--section-accent), 0.16);
+            background:
+                linear-gradient(180deg, rgba(255, 255, 255, 0.97), rgba(248, 250, 252, 0.92)),
+                linear-gradient(135deg, rgba(var(--section-accent), 0.05), rgba(var(--section-accent), 0.012));
+            color: rgb(71 85 105);
+        }
+
+        .gate-console-shell.dashboard-section-card .gate-console-feed-overlay-panel {
+            border-color: rgba(255, 255, 255, 0.22);
+            background: linear-gradient(180deg, rgba(15, 23, 42, 0.38), rgba(15, 23, 42, 0.26));
+            box-shadow: 0 12px 28px rgba(2, 6, 23, 0.2);
+        }
+
+        .gate-console-shell.dashboard-section-card .gate-console-feed-overlay-surface {
+            border-color: rgba(255, 255, 255, 0.18);
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .gate-console-shell.dashboard-section-card .gate-console-feed-empty {
+            border-color: rgba(255, 255, 255, 0.18);
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        #smsUnitsCard.border-amber-200 {
+            border-color: rgba(5, 150, 105, 0.16);
+            background:
+                linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.94)),
+                linear-gradient(135deg, rgba(5, 150, 105, 0.06), rgba(5, 150, 105, 0.015));
+        }
+
+        #smsUnitsCard.border-rose-200 {
+            border-color: rgba(5, 150, 105, 0.16);
+            background:
+                linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.94)),
+                linear-gradient(135deg, rgba(5, 150, 105, 0.06), rgba(5, 150, 105, 0.015));
+        }
+
+        #gateConsoleCard.border-amber-200 {
+            border-color: rgba(5, 150, 105, 0.16) !important;
+        }
+
+        #user-management > .absolute {
+            display: none;
+        }
+
+        html[data-theme="dark"] .dashboard-section-card {
+            border-color: rgba(var(--section-accent), 0.28);
+            background:
+                linear-gradient(180deg, rgba(17, 28, 47, 0.96), rgba(12, 19, 33, 0.98)),
+                linear-gradient(135deg, rgba(var(--section-accent), 0.18), rgba(var(--section-accent), 0.045));
+            box-shadow: 0 16px 36px rgba(2, 6, 23, 0.36);
+        }
+
+        html[data-theme="dark"] .dashboard-section-kicker {
+            color: rgba(var(--section-accent), 0.92);
+        }
+
+        html[data-theme="dark"] .dashboard-section-title,
+        html[data-theme="dark"] .dashboard-metric-value,
+        html[data-theme="dark"] .dashboard-mini-stat-value {
+            color: #f8fafc;
+        }
+
+        html[data-theme="dark"] .dashboard-metric-value--ok {
+            color: #6ee7b7;
+        }
+
+        html[data-theme="dark"] .dashboard-metric-value--warn {
+            color: #fbbf24;
+        }
+
+        html[data-theme="dark"] .dashboard-metric-value--error {
+            color: #fda4af;
+        }
+
+        html[data-theme="dark"] .dashboard-section-note,
+        html[data-theme="dark"] .dashboard-section-badge,
+        html[data-theme="dark"] .dashboard-metric-note {
+            color: #a5b4c7;
+        }
+
+        html[data-theme="dark"] .dashboard-section-badge,
+        html[data-theme="dark"] .dashboard-surface-card,
+        html[data-theme="dark"] .dashboard-list-item,
+        html[data-theme="dark"] .dashboard-table-shell {
+            border-color: rgba(var(--section-accent), 0.28);
+            background:
+                linear-gradient(180deg, rgba(17, 28, 47, 0.96), rgba(12, 19, 33, 0.98)),
+                linear-gradient(135deg, rgba(var(--section-accent), 0.18), rgba(var(--section-accent), 0.045));
+            box-shadow: none;
+        }
+
+        html[data-theme="dark"] .dashboard-table-shell thead tr {
+            background: rgba(15, 23, 42, 0.86);
+            border-bottom-color: rgba(var(--section-accent), 0.18);
+        }
+
+        html[data-theme="dark"] .dashboard-table-shell tbody tr:hover {
+            background: rgba(30, 41, 59, 0.62);
+        }
+
+        html[data-theme="dark"] .dashboard-eto-icon {
+            border-color: rgba(var(--section-accent), 0.28);
+            background:
+                linear-gradient(180deg, rgba(17, 28, 47, 0.96), rgba(12, 19, 33, 0.98)),
+                linear-gradient(135deg, rgba(var(--section-accent), 0.18), rgba(var(--section-accent), 0.045));
+            color: rgba(var(--section-accent), 0.92);
+        }
+
+        html[data-theme="dark"] .gate-console-shell.dashboard-section-card {
+            border-color: rgba(var(--section-accent), 0.28);
+        }
+
+        html[data-theme="dark"] .gate-console-shell.dashboard-section-card .gate-console-divider {
+            border-color: rgba(var(--section-accent), 0.18);
+        }
+
+        html[data-theme="dark"] .gate-console-shell.dashboard-section-card .gate-console-panel,
+        html[data-theme="dark"] .gate-console-shell.dashboard-section-card .gate-console-panel-soft {
+            border-color: rgba(var(--section-accent), 0.28);
+            background:
+                linear-gradient(180deg, rgba(17, 28, 47, 0.96), rgba(12, 19, 33, 0.98)),
+                linear-gradient(135deg, rgba(var(--section-accent), 0.18), rgba(var(--section-accent), 0.045));
+            box-shadow: none;
+        }
+
+        html[data-theme="dark"] #smsUnitsCard.border-amber-200 {
+            border-color: rgba(5, 150, 105, 0.28);
+            background:
+                linear-gradient(180deg, rgba(17, 28, 47, 0.96), rgba(12, 19, 33, 0.98)),
+                linear-gradient(135deg, rgba(5, 150, 105, 0.18), rgba(5, 150, 105, 0.045));
+        }
+
+        html[data-theme="dark"] #smsUnitsCard.border-rose-200 {
+            border-color: rgba(5, 150, 105, 0.28);
+            background:
+                linear-gradient(180deg, rgba(17, 28, 47, 0.96), rgba(12, 19, 33, 0.98)),
+                linear-gradient(135deg, rgba(5, 150, 105, 0.18), rgba(5, 150, 105, 0.045));
+        }
+
+        @media (max-width: 640px) {
+            .dashboard-section-title {
+                font-size: 1rem;
+            }
+
+            .dashboard-section-badge {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .dashboard-eto-card {
+                padding: 1.1rem;
+            }
         }
 
         @media (max-width: 640px) {
@@ -566,28 +1297,26 @@
         <div class="dashboard-shell flex h-full w-full flex-1 flex-col min-w-0 overflow-hidden">
 
             <!-- HEADER -->
-            <header class="{% if is_staff_dashboard %}hidden {% endif %}dashboard-header relative z-20 flex shrink-0 items-center justify-between gap-4 bg-white px-4 shadow-sm md:px-6">
-                <div class="flex min-w-0 items-center gap-3">
-                    <button @click="mobileMenuOpen = true" class="md:hidden text-gray-500 hover:text-gray-700 focus:outline-none">
+            <header class="{% if is_staff_dashboard %}hidden {% endif %}dashboard-header app-page-header relative z-20 shrink-0">
+                <div class="app-header-leading">
+                    <button @click="mobileMenuOpen = true" class="app-header-icon-btn md:hidden" aria-label="Open navigation">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
                         </svg>
                     </button>
-                    <h1 class="truncate text-lg font-semibold text-gray-800 hidden sm:block">Dashboard</h1>
+                    <h1 class="app-header-title hidden truncate sm:block">Dashboard</h1>
                 </div>
 
-                <div class="dashboard-header-actions flex items-center gap-2 md:gap-4">
-                    <a href="/developers"
-                        class="text-xs font-medium text-emerald-700 border border-emerald-200 px-3 py-1.5 rounded-full hover:bg-emerald-50 transition">Help</a>
+                <div class="dashboard-header-actions app-header-actions md:gap-3">
+                    <a href="/developers" class="app-header-text-link">Help</a>
 
-                    {% set theme_toggle_classes = 'relative p-2 rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200
-                    transition focus:outline-none focus:ring-2 focus:ring-emerald-400' %}
+                    {% set theme_toggle_classes = 'app-header-icon-btn' %}
                     {% include 'partials/theme_toggle_button.html' %}
 
                     {% if can_manage_alerts %}
                     <div class="relative shrink-0">
                         <button id="alertsButton" aria-expanded="false"
-                            class="relative rounded-full bg-gray-100 p-2 transition hover:bg-gray-200"
+                            class="app-header-icon-btn relative"
                             title="Notifications" aria-label="Open notifications">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-700" fill="none"
                                 viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -637,17 +1366,17 @@
                     {% endif %}
 
                     <button id="profileAvatarButton" type="button"
-                        class="relative h-10 w-10 shrink-0 overflow-hidden rounded-full border border-slate-300 bg-slate-100 hover:ring-2 hover:ring-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                        class="app-header-avatar-btn relative shrink-0 overflow-hidden"
                         aria-label="Open personal information">
                         <img id="headerAvatarImage" src="" alt="Profile avatar"
                             class="h-full w-full object-cover hidden">
                         <span id="headerAvatarFallback"
-                            class="absolute inset-0 flex items-center justify-center text-sm font-semibold text-slate-700">A</span>
+                            class="app-header-avatar-fallback absolute inset-0 flex items-center justify-center text-sm font-semibold text-slate-700">A</span>
                     </button>
 
                     <div class="relative min-w-0">
                         <button id="userMenuButton" aria-expanded="false"
-                            class="flex max-w-full items-center gap-2 rounded-full bg-gray-100 px-3 py-1.5 transition hover:bg-gray-200 md:px-4 md:py-2">
+                            class="app-header-menu-btn">
                             <span id="headerDisplayName" class="hidden truncate text-gray-700 font-medium sm:block">{{ current_user }}</span>
                             <span class="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] text-emerald-700">{{
                                 current_role }}</span>
@@ -779,47 +1508,53 @@
                     </article>
                 </section>
 
-                <section class="dashboard-card w-full rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                    <div class="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                            <h3 class="text-base font-semibold text-slate-800">Operations Health</h3>
-                            <p class="mt-1 text-xs text-slate-500"></p>
+                <section class="dashboard-card dashboard-section-card dashboard-section-card--emerald w-full p-5">
+                    <div class="dashboard-section-header">
+                        <div class="dashboard-section-copy">
+                            <p class="dashboard-section-kicker">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 12h4l3 8 4-16 3 8h4" />
+                                </svg>
+                                <span>Operations Health</span>
+                            </p>
+                            <h3 class="dashboard-section-title"></h3>
+                            <p class="dashboard-section-note"></p>
                         </div>
                         <span id="healthGeneratedAt"
-                            class="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-600">Updated:
+                            class="dashboard-section-badge">Updated:
                             -</span>
                     </div>
-                    <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-6">
-                        <article class="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                            <p class="text-[11px] uppercase font-semibold tracking-wide text-slate-500">Database</p>
-                            <p id="healthDbStatus" class="mt-2 text-sm font-semibold text-slate-700">Checking...</p>
-                            <p id="healthDbMessage" class="mt-1 text-[11px] text-slate-500">-</p>
+                    <div class="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-6">
+                        <article class="dashboard-surface-card dashboard-metric-card">
+                            <p class="dashboard-metric-label">Database</p>
+                            <p id="healthDbStatus" class="dashboard-metric-value">Checking...</p>
+                            <p id="healthDbMessage" class="dashboard-metric-note">-</p>
                         </article>
-                        <article class="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                            <p class="text-[11px] uppercase font-semibold tracking-wide text-slate-500">SMS Provider</p>
-                            <p id="healthSmsStatus" class="mt-2 text-sm font-semibold text-slate-700">Checking...</p>
-                            <p id="healthSmsMessage" class="mt-1 text-[11px] text-slate-500">-</p>
+                        <article class="dashboard-surface-card dashboard-metric-card">
+                            <p class="dashboard-metric-label">SMS Provider</p>
+                            <p id="healthSmsStatus" class="dashboard-metric-value">Checking...</p>
+                            <p id="healthSmsMessage" class="dashboard-metric-note">-</p>
                         </article>
-                        <article class="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                            <p class="text-[11px] uppercase font-semibold tracking-wide text-slate-500">Email</p>
-                            <p id="healthEmailStatus" class="mt-2 text-sm font-semibold text-slate-700">Checking...</p>
-                            <p id="healthEmailMessage" class="mt-1 text-[11px] text-slate-500">-</p>
+                        <article class="dashboard-surface-card dashboard-metric-card">
+                            <p class="dashboard-metric-label">Email</p>
+                            <p id="healthEmailStatus" class="dashboard-metric-value">Checking...</p>
+                            <p id="healthEmailMessage" class="dashboard-metric-note">-</p>
                         </article>
-                        <article class="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                            <p class="text-[11px] uppercase font-semibold tracking-wide text-slate-500">Scanner</p>
-                            <p id="healthScannerStatus" class="mt-2 text-sm font-semibold text-slate-700">Checking...
+                        <article class="dashboard-surface-card dashboard-metric-card">
+                            <p class="dashboard-metric-label">Scanner</p>
+                            <p id="healthScannerStatus" class="dashboard-metric-value">Checking...
                             </p>
-                            <p id="healthScannerMessage" class="mt-1 text-[11px] text-slate-500">-</p>
+                            <p id="healthScannerMessage" class="dashboard-metric-note">-</p>
                         </article>
-                        <article class="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                            <p class="text-[11px] uppercase font-semibold tracking-wide text-slate-500">Queues</p>
-                            <p id="healthQueuesStatus" class="mt-2 text-sm font-semibold text-slate-700">Checking...</p>
-                            <p id="healthQueuesMessage" class="mt-1 text-[11px] text-slate-500">-</p>
+                        <article class="dashboard-surface-card dashboard-metric-card">
+                            <p class="dashboard-metric-label">Queues</p>
+                            <p id="healthQueuesStatus" class="dashboard-metric-value">Checking...</p>
+                            <p id="healthQueuesMessage" class="dashboard-metric-note">-</p>
                         </article>
-                        <article class="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                            <p class="text-[11px] uppercase font-semibold tracking-wide text-slate-500">Uptime</p>
-                            <p id="healthUptimeStatus" class="mt-2 text-sm font-semibold text-slate-700">-</p>
-                            <p id="healthUptimeMessage" class="mt-1 text-[11px] text-slate-500">Runtime</p>
+                        <article class="dashboard-surface-card dashboard-metric-card">
+                            <p class="dashboard-metric-label">Uptime</p>
+                            <p id="healthUptimeStatus" class="dashboard-metric-value">-</p>
+                            <p id="healthUptimeMessage" class="dashboard-metric-note">Runtime</p>
                         </article>
                     </div>
                 </section>
@@ -828,10 +1563,10 @@
                 <section id="gate-scanning" class="grid w-full grid-cols-1 gap-5 xl:grid-cols-12 items-stretch">
                     <div id="gateConsoleColumn" class="xl:col-span-10">
                         <div id="gateConsoleCard"
-                            class="gate-console-shell p-5 lg:p-6">
+                            class="gate-console-shell dashboard-section-card dashboard-section-card--emerald p-5 lg:p-6">
                             <div class="gate-console-divider flex flex-wrap items-start justify-between gap-4 border-b pb-5">
-                                <div class="min-w-0">
-                                    <p class="gate-console-kicker text-[11px] font-semibold uppercase text-slate-500">Live Recognition</p>
+                                <div class="dashboard-section-copy min-w-0">
+                                    <p class="gate-console-kicker dashboard-section-kicker">Live Recognition</p>
                                     <div class="gate-console-heading mt-2">
                                         <svg xmlns="http://www.w3.org/2000/svg" fill="none"
                                             viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -840,8 +1575,8 @@
                                             <rect x="3" y="6" width="12" height="12" rx="2" ry="2" />
                                         </svg>
                                         <div>
-                                            <h2 class="text-xl font-semibold text-slate-900">Gate Scanning Console</h2>
-                                            <p class="mt-1 text-sm text-slate-500"></p>
+                                            <h2 class="dashboard-section-title mt-0 text-slate-900">Gate Scanning Console</h2>
+                                            <p class="dashboard-section-note"></p>
                                         </div>
                                     </div>
                                 </div>
@@ -854,7 +1589,7 @@
 
                             <div id="gateConsoleLayout" class="mt-6 grid gap-4">
                                 <aside id="gateControlsColumn" class="order-2 grid min-h-0 min-w-0 content-start gap-4">
-                                    <div class="gate-console-panel gate-console-panel-soft p-4 lg:p-5">
+                                    <div class="gate-console-panel gate-console-panel-soft dashboard-surface-card p-4 lg:p-5">
                                         <div class="flex flex-wrap items-center justify-between gap-3">
                                             <div>
                                                 <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Controls</p>
@@ -875,7 +1610,7 @@
                                             </button>
                                         </div>
                                     </div>
-                                    <div class="gate-console-panel p-4 lg:p-5">
+                                    <div class="gate-console-panel dashboard-surface-card p-4 lg:p-5">
                                         <div class="flex flex-wrap items-start justify-between gap-3">
                                             <div>
                                                 <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Manual Session</p>
@@ -901,7 +1636,7 @@
                                     </div>
                                 </aside>
                                 <div id="gateCameraColumn" class="order-1 xl:order-2 grid min-w-0 gap-4">
-                                    <div class="gate-console-panel gate-console-camera min-w-0 overflow-hidden p-4 lg:p-5">
+                                    <div class="gate-console-panel gate-console-camera dashboard-surface-card min-w-0 overflow-hidden p-4 lg:p-5">
                                         <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
                                             <div>
                                                 <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Camera / Scanning Area</p>
@@ -930,15 +1665,16 @@
                                                             class="gate-console-count inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold">{{ search_gate_logs[:10]|length }}</span>
                                                     </div>
                                                     <div class="gate-console-feed-overlay-surface p-2.5">
+                                                        <div id="scanActivityGhostLayer" class="scan-activity-ghost-layer" aria-hidden="true"></div>
                                                         <div id="scanActivityFeed" class="scan-activity-feed flex h-full flex-col gap-2 overflow-y-auto pr-1">
                                                             {% for g in search_gate_logs[:10] %}
-                                                            <article class="scan-activity-item gate-console-feed-item rounded-2xl px-3 py-3" data-student-id="{{ g.student_id }}" data-gate-action="{{ g.gate_action or 'IN' }}">
-                                                                <div class="flex items-start justify-between gap-3">
-                                                                    <div class="min-w-0">
-                                                                        <p class="truncate text-sm font-semibold text-slate-800">{{ g.student_name }}</p>
-                                                                        <p class="mt-1 text-[11px] text-slate-500">{{ g.time or g.timestamp or 'Recently scanned' }}</p>
+                                                            <article class="scan-activity-item gate-console-feed-item rounded-2xl px-3 py-3 {% if (g.gate_action or 'IN') == 'OUT' %}scan-activity-status-out{% else %}scan-activity-status-in{% endif %}" data-student-id="{{ g.student_id }}" data-gate-action="{{ g.gate_action or 'IN' }}">
+                                                                <div class="scan-activity-layout">
+                                                                    <div class="scan-activity-copy">
+                                                                        <p class="scan-activity-name">{{ g.student_name }}</p>
+                                                                        <p class="scan-activity-time">{{ g.time or g.timestamp or 'Recently scanned' }}</p>
                                                                     </div>
-                                                                    <span class="inline-flex shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold {% if (g.gate_action or 'IN') == 'OUT' %}border border-blue-200 bg-blue-50 text-blue-700{% else %}border border-emerald-200 bg-emerald-50 text-emerald-700{% endif %}">{{ g.gate_action or 'IN' }}</span>
+                                                                    <span class="scan-activity-badge">{{ g.gate_action or 'IN' }}</span>
                                                                 </div>
                                                             </article>
                                                             {% endfor %}
@@ -977,9 +1713,9 @@
                     </div>
 
                     <div id="gateSecondaryColumn" class="xl:col-span-2 flex min-h-0 w-full">
-                        <a href="/early-timeout" class="dashboard-card rounded-2xl border border-amber-200 bg-white p-4 shadow-sm flex flex-col h-full w-full hover:bg-amber-50/30 transition group">
-                            <div class="flex items-start justify-between gap-2 mb-2">
-                                <span class="rounded-xl bg-amber-100 p-2 text-amber-700">
+                        <a href="/early-timeout" class="dashboard-card dashboard-section-card dashboard-section-card--emerald dashboard-eto-card h-full w-full group">
+                            <div class="flex items-start justify-between gap-3">
+                                <span class="dashboard-eto-icon">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-6 0v-1m6 0H9" />
                                     </svg>
@@ -988,9 +1724,12 @@
                                     {{ pending_eto_count|default(0) }}
                                 </span>
                             </div>
-                            <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider">Early Time-Outs</h3>
-                            <p class="text-xl font-bold text-slate-800 mt-1">Pending</p>
-                            <div class="mt-auto pt-2 flex items-center text-[10px] font-bold text-amber-600 uppercase group-hover:translate-x-1 transition">
+                            <div>
+                                <p class="dashboard-section-kicker">Early Time-Out</p>
+                                <h3 class="dashboard-section-title">Pending Requests</h3>
+                                <p class="dashboard-section-note">Review and process early dismissal requests without leaving the dashboard.</p>
+                            </div>
+                            <div class="mt-auto flex items-center text-[11px] font-semibold text-emerald-700 transition group-hover:translate-x-1">
                                 View Requests &rarr;
                             </div>
                         </a>
@@ -1000,22 +1739,19 @@
                 <section class="grid w-full grid-cols-1 gap-5 xl:grid-cols-12">
                     <div class="xl:col-span-12">
                         <div id="smsUnitsCard"
-                            class="dashboard-card rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                            <div class="flex items-start justify-between gap-3">
-                                <div class="flex items-center gap-3">
-                                    <span
-                                        class="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-violet-100 text-violet-700">
+                            class="dashboard-card dashboard-section-card dashboard-section-card--emerald rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                            <div class="dashboard-section-header">
+                                <div class="dashboard-section-copy">
+                                    <p class="dashboard-section-kicker">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
                                             viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                             <path stroke-linecap="round" stroke-linejoin="round"
                                                 d="M21 11.25a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7H7.5l-4.5 2.25 1.35-3.6A8.5 8.5 0 115.25 3.75h7.25c4.7 0 8.5 3.8 8.5 8.5z" />
                                         </svg>
-                                    </span>
-                                    <div>
-                                        <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">SMS
-                                            Units Status</p>
-                                        <p class="text-sm font-semibold text-slate-800">PhilSMS Balance</p>
-                                    </div>
+                                        <span>SMS Units Status</span>
+                                    </p>
+                                    <h3 class="dashboard-section-title">PhilSMS Balance</h3>
+                                    <p class="dashboard-section-note">Track available messaging credits and refresh the provider balance on demand.</p>
                                 </div>
                                 <button id="smsUnitsRefreshBtn" type="button"
                                     class="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-600 transition hover:bg-slate-100">
@@ -1037,7 +1773,7 @@
                                     <p id="smsUnitsMeta" class="text-[11px] text-slate-500">Updated: --</p>
                                 </div>
                                 <div
-                                    class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-right text-[11px] text-slate-500">
+                                    class="dashboard-surface-card rounded-xl px-3 py-2 text-right text-[11px] text-slate-500">
                                     <p class="font-semibold text-slate-700">Monitoring</p>
                                     <p>Auto-refreshes after SMS sends</p>
                                 </div>
@@ -1048,27 +1784,28 @@
 
                 <section id="system-activity" class="grid w-full grid-cols-1 gap-5 xl:grid-cols-12 items-stretch">
                     <article
-                        class="dashboard-card bg-white rounded-2xl shadow-sm border border-slate-200 p-5 xl:col-span-7">
-                        <div class="flex items-start justify-between gap-3 mb-3">
-                            <div>
-                                <h3 class="text-lg font-semibold text-slate-800">Log Matches</h3>
-                                <p class="text-xs text-slate-500 mt-1">Latest matched gate and SMS records.</p>
+                        class="dashboard-card dashboard-section-card dashboard-section-card--emerald bg-white rounded-2xl shadow-sm border border-slate-200 p-5 xl:col-span-7">
+                        <div class="dashboard-section-header mb-4">
+                            <div class="dashboard-section-copy">
+                                <p class="dashboard-section-kicker">Log Matches</p>
+                                <h3 class="dashboard-section-title"></h3>
+                                <p class="dashboard-section-note">Compare the latest gate scans and SMS deliveries side by side in one clean view.</p>
                             </div>
                             <div class="flex items-center gap-2 text-[11px]">
                                 <span
-                                    class="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 font-semibold text-emerald-700">Gate
+                                    class="dashboard-section-badge">Gate
                                     {{ search_gate_logs|length }}</span>
                                 <span
-                                    class="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 font-semibold text-blue-700">SMS
+                                    class="dashboard-section-badge">SMS
                                     {{ search_sms_logs|length }}</span>
                             </div>
                         </div>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-72 overflow-y-auto pr-1 text-sm">
                             <div class="space-y-2">
-                                <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Gate Logs
+                                <p class="dashboard-list-label">Gate Logs
                                 </p>
                                 {% for g in search_gate_logs %}
-                                <div class="rounded-lg border border-slate-200 bg-slate-50 p-2.5">
+                                <div class="dashboard-list-item">
                                     <p class="font-medium text-slate-800 truncate">{{ g.student_name }} ({{ g.student_id
                                         }})</p>
                                     <p class="text-slate-500 text-xs">{{ g.status }} | {{ g.timestamp }}</p>
@@ -1078,9 +1815,9 @@
                                 {% endfor %}
                             </div>
                             <div class="space-y-2">
-                                <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">SMS Logs</p>
+                                <p class="dashboard-list-label">SMS Logs</p>
                                 {% for s in search_sms_logs %}
-                                <div class="rounded-lg border border-slate-200 bg-slate-50 p-2.5">
+                                <div class="dashboard-list-item">
                                     <p class="font-medium text-slate-800 truncate">{{ s.name }} ({{ s.student_id }})</p>
                                     <p class="text-slate-500 text-xs">{{ s.status }} | {{ s.timestamp }}</p>
                                 </div>
@@ -1092,19 +1829,20 @@
                     </article>
 
                     <article
-                        class="dashboard-card bg-white rounded-2xl shadow-sm border border-slate-200 p-5 xl:col-span-5">
-                        <div class="flex items-start justify-between gap-3 mb-3">
-                            <div>
-                                <h3 class="text-lg font-semibold text-slate-800">Login History</h3>
-                                <p class="text-xs text-slate-500 mt-1">Recent authentication activity.</p>
+                        class="dashboard-card dashboard-section-card dashboard-section-card--emerald bg-white rounded-2xl shadow-sm border border-slate-200 p-5 xl:col-span-5">
+                        <div class="dashboard-section-header mb-4">
+                            <div class="dashboard-section-copy">
+                                <p class="dashboard-section-kicker">Login History</p>
+                                <h3 class="dashboard-section-title"></h3>
+                                <p class="dashboard-section-note">Review recent authentication activity and the most recent access attempts.</p>
                             </div>
                             <span
-                                class="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-600">{{
+                                class="dashboard-section-badge">{{
                                 login_rows|length }}</span>
                         </div>
                         <div class="max-h-72 overflow-y-auto text-sm pr-1 space-y-2">
                             {% for row in login_rows %}
-                            <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                            <div class="dashboard-list-item">
                                 <p class="font-medium text-slate-800 truncate">{{ row.username }} <span
                                         class="text-slate-500">({{ row.role }})</span></p>
                                 <p class="text-slate-500 text-xs truncate">{{ row.timestamp }}</p>
@@ -1120,23 +1858,22 @@
                 {% if can_manage_users %}
                 <section class="space-y-5">
                     <article id="user-management"
-                        class="dashboard-card bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden relative">
-                        <!-- Top Accent Bar -->
-                        <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-violet-500 to-indigo-600"></div>
-                        
+                        class="dashboard-card dashboard-section-card dashboard-section-card--emerald bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden relative">
+
                         <!-- Header Section -->
-                        <div class="p-5 border-b border-slate-100 bg-slate-50/30">
-                            <div class="flex flex-wrap items-start justify-between gap-4">
-                                <div>
-                                    <div class="flex items-center gap-2 mb-1">
-                                        <span class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 shadow-sm border border-indigo-100">
+                        <div class="p-5">
+                            <div class="dashboard-section-header">
+                                <div class="dashboard-section-copy">
+                                    <div class="flex items-center gap-2">
+                                        <span class="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 shadow-sm">
                                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                                 <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
                                             </svg>
                                         </span>
-                                        <h3 class="text-lg font-bold text-slate-800 tracking-tight">System Access & Roles</h3>
+                                        <p class="dashboard-section-kicker">System Access &amp; Roles</p>
                                     </div>
-                                    <p class="text-[12px] text-slate-500 ml-10">Manage administrative privileges and monitor active accounts.</p>
+                                    <h3 class="dashboard-section-title"></h3>
+                                    <p class="dashboard-section-note">Manage administrative privileges, provision accounts, and review the active identity roster.</p>
                                 </div>
                                 <div class="flex items-center gap-3">
                                     <a href="/dashboard#user-management"
@@ -1151,23 +1888,23 @@
 
                             <!-- Stat Cards -->
                             <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-5">
-                                <div class="relative overflow-hidden rounded-xl border border-slate-200 bg-white p-4 shadow-sm group hover:border-indigo-200 transition-colors">
-                                    <p class="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-1">Total Active Users</p>
-                                    <p id="identityTotalUsersCount" class="text-2xl font-black text-slate-800 group-hover:text-indigo-600 transition-colors">{{ users_stats.total }}</p>
+                                <div class="dashboard-surface-card dashboard-mini-stat">
+                                    <p class="dashboard-metric-label">Total Active Users</p>
+                                    <p id="identityTotalUsersCount" class="dashboard-mini-stat-value">{{ users_stats.total }}</p>
                                     <div class="absolute -right-2 -bottom-2 h-16 w-16 opacity-[0.03] group-hover:opacity-[0.06] transition-opacity">
                                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
                                     </div>
                                 </div>
-                                <div class="relative overflow-hidden rounded-xl border border-slate-200 bg-white p-4 shadow-sm group hover:border-emerald-200 transition-colors">
-                                    <p class="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-1">Full Administrators</p>
-                                    <p id="identityFullAdminCount" class="text-2xl font-black text-slate-800 group-hover:text-emerald-600 transition-colors">{{ users_stats.full_admin }}</p>
+                                <div class="dashboard-surface-card dashboard-mini-stat">
+                                    <p class="dashboard-metric-label">Full Administrators</p>
+                                    <p id="identityFullAdminCount" class="dashboard-mini-stat-value">{{ users_stats.full_admin }}</p>
                                     <div class="absolute -right-2 -bottom-2 h-16 w-16 opacity-[0.03] text-emerald-900 group-hover:opacity-[0.08] transition-opacity">
                                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/></svg>
                                     </div>
                                 </div>
-                                <div class="relative overflow-hidden rounded-xl border border-slate-200 bg-white p-4 shadow-sm group hover:border-cyan-200 transition-colors">
-                                    <p class="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-1">Staff</p>
-                                    <p id="identityStaffCount" class="text-2xl font-black text-slate-800 group-hover:text-cyan-600 transition-colors">{{ users_stats.staff }}</p>
+                                <div class="dashboard-surface-card dashboard-mini-stat">
+                                    <p class="dashboard-metric-label">Staff</p>
+                                    <p id="identityStaffCount" class="dashboard-mini-stat-value">{{ users_stats.staff }}</p>
                                     <div class="absolute -right-2 -bottom-2 h-16 w-16 opacity-[0.03] text-cyan-900 group-hover:opacity-[0.08] transition-opacity">
                                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
                                     </div>
@@ -1179,8 +1916,8 @@
                         <div class="p-5">
                             <!-- Provisioning Form -->
                             {% if can_manage_users %}
-                            <div class="bg-indigo-50/40 rounded-xl border border-indigo-100 p-4 mb-6">
-                                <p class="text-[11px] font-semibold uppercase tracking-wider text-indigo-800 mb-3 flex items-center gap-2">
+                            <div class="dashboard-surface-card rounded-xl p-4 mb-6">
+                                <p class="dashboard-metric-label mb-3 flex items-center gap-2">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
                                     Provision New Account
                                 </p>
@@ -1188,25 +1925,25 @@
                                     <input type="hidden" name="school_year" value="{{ selected_school_year }}">
                                     <div class="relative xl:col-span-1">
                                         <input type="text" name="username" placeholder="Username"
-                                            class="w-full min-w-0 border border-indigo-200 bg-white rounded-lg pl-3 pr-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 outline-none transition-shadow placeholder:text-slate-400" required>
+                                            class="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition-shadow placeholder:text-slate-400 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/10" required>
                                     </div>
                                     <div class="relative xl:col-span-1">
                                         <input type="text" name="password" placeholder="Temporary Password"
-                                            class="w-full min-w-0 border border-indigo-200 bg-white rounded-lg pl-3 pr-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 outline-none transition-shadow placeholder:text-slate-400" required>
+                                            class="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition-shadow placeholder:text-slate-400 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/10" required>
                                     </div>
                                     <div class="relative xl:col-span-1">
                                         <input type="email" name="email" placeholder="Corporate Email"
-                                            class="w-full min-w-0 border border-indigo-200 bg-white rounded-lg pl-3 pr-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 outline-none transition-shadow placeholder:text-slate-400" required>
+                                            class="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition-shadow placeholder:text-slate-400 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/10" required>
                                     </div>
                                     <div class="relative xl:col-span-1">
                                         <select name="role"
-                                            class="w-full min-w-0 border border-indigo-200 bg-white rounded-lg pl-3 pr-8 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 outline-none transition-shadow font-medium text-slate-700">
+                                            class="w-full min-w-0 rounded-lg border border-slate-300 bg-white pl-3 pr-8 py-2 text-sm font-medium text-slate-700 outline-none transition-shadow focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/10">
                                             <option value="Staff" selected>Staff</option>
                                             <option value="Full Admin">Full Admin</option>
                                         </select>
                                     </div>
                                     <button
-                                        class="xl:col-span-1 w-full bg-indigo-600 text-white shadow-sm shadow-indigo-200 rounded-lg py-2 text-sm font-semibold hover:bg-indigo-700 hover:shadow transform active:scale-[0.98] transition-all">
+                                        class="xl:col-span-1 w-full rounded-lg bg-emerald-600 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-emerald-700 hover:shadow transform active:scale-[0.98]">
                                         Create Account
                                     </button>
                                 </form>
@@ -1221,8 +1958,8 @@
                             {% endif %}
 
                             <!-- User List Data Table -->
-                            <p class="text-[11px] font-semibold uppercase tracking-widest text-slate-400 mb-3 pl-1">Identities Roster</p>
-                            <div class="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
+                            <p class="dashboard-list-label mb-3 pl-1">Identities Roster</p>
+                            <div class="dashboard-table-shell rounded-xl overflow-hidden shadow-sm">
                                 <div class="overflow-x-auto">
                                     <table class="w-full text-left border-collapse">
                                         <thead>
@@ -1237,13 +1974,13 @@
                                             <tr class="hover:bg-slate-50/50 transition-colors group">
                                                 <td class="py-3 px-4">
                                                     <div class="flex items-center gap-3">
-                                                        <div class="relative h-10 w-10 shrink-0 overflow-hidden rounded-full border border-slate-200 bg-indigo-100 ring-2 ring-white shadow-sm">
+                                                        <div class="relative h-10 w-10 shrink-0 overflow-hidden rounded-full border border-slate-200 bg-emerald-100 ring-2 ring-white shadow-sm">
                                                             {% if user.avatarUrl %}
                                                             <img src="{{ user.avatarUrl }}" alt="{{ user.displayName }} avatar"
                                                                 class="h-full w-full object-cover"
                                                                 onerror="this.classList.add('hidden'); this.nextElementSibling.classList.remove('hidden'); this.nextElementSibling.classList.add('flex');">
                                                             {% endif %}
-                                                            <span class="absolute inset-0 {% if user.avatarUrl %}hidden{% else %}flex{% endif %} items-center justify-center text-xs font-bold text-indigo-700">
+                                                            <span class="absolute inset-0 {% if user.avatarUrl %}hidden{% else %}flex{% endif %} items-center justify-center text-xs font-bold text-emerald-700">
                                                                 {{ user.displayName[0]|upper }}
                                                             </span>
                                                         </div>
@@ -1736,7 +2473,7 @@
     <script>
         // Initialize enhanced client-side camera
         let clientCamera = new EnhancedClientCamera();
-        
+
         // Setup enhanced camera callbacks
         clientCamera.onError = function(message) {
             console.error('[Camera Error]', message);
@@ -1745,11 +2482,11 @@
                 setScanState('error', 'Status: Camera Error - ' + message);
             }
         };
-        
+
         clientCamera.onSuccess = function(message) {
             console.log('[Camera Success]', message);
         };
-        
+
         // Enhanced face detection callbacks
         clientCamera.onFaceDetected = function(data) {
             console.log('[Face Detection]', data);
@@ -1758,20 +2495,20 @@
                 setScanState('scanning', `Status: ${data.count} face(s) detected`);
             }
         };
-        
+
         clientCamera.onFaceRecognized = function(data) {
             console.log('[Face Recognition]', data);
             // Show recognition overlay with student name
             showRecognitionSuccess(data.name, data.student_id);
         };
-        
+
         clientCamera.onMultipleFaces = function(data) {
             console.log('[Multiple Faces]', data);
             if (data.count > 1) {
                 setScanState('scanning', `Status: ${data.count} faces detected`);
             }
         };
-        
+
         clientCamera.onVoiceFeedback = function(name, studentId) {
             console.log('[Voice Feedback]', name);
             void studentId;
@@ -1816,6 +2553,7 @@
         const accessStatusChip = document.getElementById('accessStatusChip');
         const smsStatusChip = document.getElementById('smsStatusChip');
         const scanActivityFeed = document.getElementById('scanActivityFeed');
+        const scanActivityGhostLayer = document.getElementById('scanActivityGhostLayer');
         const scanActivityEmpty = document.getElementById('scanActivityEmpty');
         const scanActivityCount = document.getElementById('scanActivityCount');
         const alertsSummaryCount = document.getElementById('alertsSummaryCount');
@@ -1841,6 +2579,7 @@
         let scanStoppedAt = null;
         let scanFrameRequestInFlight = false;
         const SCAN_ACTIVITY_LIMIT = 10;
+        const SCAN_ACTIVITY_OUTRO_MS = 280;
         const VOICE_FEEDBACK_HISTORY_LIMIT = 40;
         const voiceFeedbackQueue = [];
         const spokenVoiceKeys = [];
@@ -1861,7 +2600,7 @@
             const scanPlaceholder = document.getElementById('scanPlaceholder');
             const video = document.getElementById('videoFeed');
             const scanOverlay = document.getElementById('scanOverlay');
-            
+
             if (isPreviousYearSelected()) {
                 // Disable scanning console for previous years
                 if (startBtn) {
@@ -1872,7 +2611,7 @@
                     stopBtn.disabled = true;
                     stopBtn.classList.add('opacity-60', 'cursor-not-allowed');
                 }
-                
+
                 // Show disabled message
                 if (scanPlaceholder && !scanPlaceholder.classList.contains('hidden')) {
                     scanPlaceholder.innerHTML = `
@@ -1883,7 +2622,7 @@
                         </div>
                     `;
                 }
-                
+
                 // Add visual indicator to the console card
                 if (gateConsoleCard) {
                     gateConsoleCard.classList.add('opacity-75', 'border-amber-200');
@@ -1892,7 +2631,7 @@
                         title.innerHTML = 'Gate Scanning Console <span class="text-xs font-normal text-amber-600">(Archived Year)</span>';
                     }
                 }
-                
+
                 // Stop any active scanning
                 if (isScanning) {
                     stopScanning();
@@ -1903,7 +2642,7 @@
                     startBtn.disabled = false;
                     startBtn.classList.remove('opacity-60', 'cursor-not-allowed');
                 }
-                
+
                 // Reset placeholder to original state
                 if (scanPlaceholder && !scanPlaceholder.classList.contains('hidden')) {
                     scanPlaceholder.innerHTML = `
@@ -1913,7 +2652,7 @@
                         </div>
                     `;
                 }
-                
+
                 // Remove visual indicators
                 if (gateConsoleCard) {
                     gateConsoleCard.classList.remove('opacity-75', 'border-amber-200');
@@ -2168,7 +2907,7 @@
                 startBtn.disabled = isScanning;
                 stopBtn.disabled = !isScanning;
             }
-            
+
             startBtn.classList.toggle('opacity-60', startBtn.disabled);
             stopBtn.classList.toggle('opacity-60', stopBtn.disabled);
             startBtn.classList.toggle('cursor-not-allowed', startBtn.disabled);
@@ -2273,7 +3012,7 @@
             if (scanStatusResetTimer) clearTimeout(scanStatusResetTimer);
             scanStatusResetTimer = setTimeout(() => {
                 if (!isScanning) return;
-                
+
                 // Reset UI overlays
                 const nameOverlay = document.getElementById('scanNameOverlay');
                 if (nameOverlay) {
@@ -2498,6 +3237,118 @@
                 .replace(/'/g, '&#39;');
         }
 
+        function normalizeScanActivityAction(action = 'IN') {
+            return String(action || '').toUpperCase() === 'OUT' ? 'OUT' : 'IN';
+        }
+
+        function prefersReducedScanActivityMotion() {
+            return Boolean(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+        }
+
+        function clearScanActivityAnimationState(item) {
+            if (!item) return;
+            if (item._scanActivityGlowTimer) {
+                clearTimeout(item._scanActivityGlowTimer);
+                item._scanActivityGlowTimer = null;
+            }
+            item.classList.remove(
+                'scan-activity-enter',
+                'scan-activity-glow-in',
+                'scan-activity-glow-out',
+                'scan-activity-announce',
+            );
+        }
+
+        function animateScanActivityRemoval(item, { reason = 'refresh' } = {}) {
+            if (!item) return;
+            clearScanActivityAnimationState(item);
+
+            if (!item.isConnected) {
+                if (typeof item.remove === 'function') {
+                    item.remove();
+                }
+                return;
+            }
+
+            if (!scanActivityGhostLayer || prefersReducedScanActivityMotion()) {
+                item.remove();
+                return;
+            }
+
+            const itemRect = item.getBoundingClientRect();
+            const ghostLayerRect = scanActivityGhostLayer.getBoundingClientRect();
+            if (itemRect.width < 1 || itemRect.height < 1 || ghostLayerRect.width < 1 || ghostLayerRect.height < 1) {
+                item.remove();
+                return;
+            }
+
+            const ghost = item.cloneNode(true);
+            ghost.classList.remove(
+                'scan-activity-enter',
+                'scan-activity-glow-in',
+                'scan-activity-glow-out',
+                'scan-activity-announce',
+            );
+            ghost.classList.add(
+                'scan-activity-ghost',
+                reason === 'overflow' ? 'scan-activity-exit-overflow' : 'scan-activity-exit-refresh',
+            );
+            ghost.setAttribute('aria-hidden', 'true');
+            ghost.style.top = `${itemRect.top - ghostLayerRect.top}px`;
+            ghost.style.left = `${itemRect.left - ghostLayerRect.left}px`;
+            ghost.style.width = `${itemRect.width}px`;
+            ghost.style.height = `${itemRect.height}px`;
+
+            item.remove();
+            scanActivityGhostLayer.appendChild(ghost);
+
+            requestAnimationFrame(() => {
+                ghost.classList.add('scan-activity-exit-active');
+            });
+
+            window.setTimeout(() => {
+                ghost.remove();
+            }, SCAN_ACTIVITY_OUTRO_MS + 80);
+        }
+
+        function applyScanActivityVisualState(item, action, { animate = false } = {}) {
+            if (!item) return;
+            const normalizedAction = normalizeScanActivityAction(action);
+            const statusClass = normalizedAction === 'OUT' ? 'scan-activity-status-out' : 'scan-activity-status-in';
+            const glowClass = normalizedAction === 'OUT' ? 'scan-activity-glow-out' : 'scan-activity-glow-in';
+
+            item.dataset.gateAction = normalizedAction;
+            item.classList.remove(
+                'scan-activity-status-in',
+                'scan-activity-status-out',
+                'scan-activity-glow-in',
+                'scan-activity-glow-out',
+                'scan-activity-announce',
+            );
+            item.classList.add(statusClass);
+
+            if (!animate) return;
+
+            if (item._scanActivityGlowTimer) {
+                clearTimeout(item._scanActivityGlowTimer);
+            }
+            void item.offsetWidth;
+            item.classList.add(glowClass);
+            item.classList.add('scan-activity-announce');
+            item._scanActivityGlowTimer = window.setTimeout(() => {
+                item.classList.remove(glowClass);
+                item.classList.remove('scan-activity-announce');
+                item._scanActivityGlowTimer = null;
+            }, 1550);
+        }
+
+        function hydrateScanActivityItems() {
+            if (!scanActivityFeed) return;
+            Array.from(scanActivityFeed.children).forEach((node) => {
+                applyScanActivityVisualState(node, node.dataset.gateAction || 'IN', { animate: false });
+            });
+        }
+
         function updateScanActivityState() {
             if (!scanActivityFeed || !scanActivityEmpty) return;
             const count = scanActivityFeed.children.length;
@@ -2523,27 +3374,25 @@
         }
 
         function createScanActivityItem(entry) {
-            const action = String(entry?.gate_action || 'IN').toUpperCase() === 'OUT' ? 'OUT' : 'IN';
+            const action = normalizeScanActivityAction(entry?.gate_action || 'IN');
             const item = document.createElement('article');
-            item.className = 'scan-activity-item rounded-2xl border border-slate-200 bg-white px-3 py-3 shadow-sm';
+            item.className = 'scan-activity-item gate-console-feed-item rounded-2xl px-3 py-3 shadow-sm';
             item.dataset.studentId = String(entry?.student_id || '').trim();
             item.dataset.gateAction = action;
 
-            const badgeClasses = action === 'OUT'
-                ? 'border border-blue-200 bg-blue-50 text-blue-700'
-                : 'border border-emerald-200 bg-emerald-50 text-emerald-700';
             const timeLabel = formatScanActivityTime(entry?.timestamp, entry?.time || '');
-            const studentName = String(entry?.name || 'Unknown Student').trim() || 'Unknown Student';
+            const studentName = String(entry?.name || entry?.student_name || 'Unknown Student').trim() || 'Unknown Student';
 
             item.innerHTML = `
-                <div class="flex items-start justify-between gap-3">
-                    <div class="min-w-0">
-                        <p class="truncate text-sm font-semibold text-slate-800">${escapeHtml(studentName)}</p>
-                        <p class="mt-1 text-[11px] text-slate-500">${escapeHtml(timeLabel)}</p>
+                <div class="scan-activity-layout">
+                    <div class="scan-activity-copy">
+                        <p class="scan-activity-name">${escapeHtml(studentName)}</p>
+                        <p class="scan-activity-time">${escapeHtml(timeLabel)}</p>
                     </div>
-                    <span class="inline-flex shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${badgeClasses}">${action}</span>
+                    <span class="scan-activity-badge">${action}</span>
                 </div>
             `;
+            applyScanActivityVisualState(item, action, { animate: false });
             return item;
         }
 
@@ -2553,17 +3402,24 @@
             if (!studentId) return;
 
             const existing = Array.from(scanActivityFeed.children).find((node) => node.dataset.studentId === studentId);
-            if (existing) existing.remove();
+            if (existing) {
+                animateScanActivityRemoval(existing, { reason: 'refresh' });
+            }
 
             const item = createScanActivityItem(entry);
             item.classList.add('scan-activity-enter');
             scanActivityFeed.prepend(item);
             while (scanActivityFeed.children.length > SCAN_ACTIVITY_LIMIT) {
-                scanActivityFeed.lastElementChild?.remove();
+                const overflowItem = scanActivityFeed.lastElementChild;
+                if (!overflowItem) break;
+                animateScanActivityRemoval(overflowItem, { reason: 'overflow' });
             }
 
             requestAnimationFrame(() => {
-                requestAnimationFrame(() => item.classList.remove('scan-activity-enter'));
+                requestAnimationFrame(() => {
+                    item.classList.remove('scan-activity-enter');
+                    applyScanActivityVisualState(item, entry.gate_action || 'IN', { animate: true });
+                });
             });
 
             scanActivityFeed.scrollTo({ top: 0, behavior: 'smooth' });
@@ -2843,14 +3699,14 @@
                         const confidenceText = Number.isFinite(Number(evt.confidence_pct)) && Number(evt.confidence_pct) > 0
                             ? ` (${Number(evt.confidence_pct).toFixed(1)}%)`
                             : '';
-                        
+
                         scanOverlay.textContent = `${evt.name} (${gateAction}) - ${displayMessage}${confidenceText}`;
                         scanOverlay.classList.remove('hidden');
-                        
+
                         const nameText = document.getElementById('scanNameText');
                         const nameOverlay = document.getElementById('scanNameOverlay');
                         const statusBadge = document.getElementById('scanStatusBadge');
-                        
+
                         if (nameText) nameText.textContent = evt.name || 'Student';
                         if (statusBadge) statusBadge.textContent = `${gateAction} - ${displayMessage}`;
                         if (nameOverlay) {
@@ -2873,11 +3729,11 @@
                             playNotificationTone();
                             queueVoiceFeedback(evt.voice_message || displayMessage, buildVoiceEventKey(evt));
                         }
-                        
+
                         const smsStatus = String(evt.sms_status || '').toLowerCase();
                         setStatusChip(faceStatusChip, 'Face: Detected', 'success');
                         setStatusChip(accessStatusChip, `Access: ${gateAction}`, gateAction === 'OUT' ? 'warning' : 'success');
-                        
+
                         if (smsStatus === 'sent') {
                             setStatusChip(smsStatusChip, 'SMS: Sent', 'success');
                         } else if (smsStatus === 'failed') {
@@ -2887,7 +3743,7 @@
                         } else {
                             setStatusChip(smsStatusChip, 'SMS: --', 'neutral');
                         }
-                        
+
                         if (smsStatus === 'sent' || smsStatus === 'failed') {
                             queueSmsBalanceRefresh(500);
                         }
@@ -2949,14 +3805,14 @@
         async function sendScanFrameOnce() {
             if (!isScanning || !clientCamera.isActive() || scanFrameRequestInFlight) return;
             scanFrameRequestInFlight = true;
-            
+
             try {
                 const frameBlob = await clientCamera.getFrameAsBlob('image/jpeg');
                 if (!frameBlob) return;
-                
+
                 const formData = new FormData();
                 formData.append('frame', frameBlob, 'frame.jpg');
-                
+
                 const response = await fetch('/process_scan_frame', {
                     method: 'POST',
                     body: formData
@@ -2973,7 +3829,7 @@
 
         function startFrameProcessing() {
             if (frameProcessingTimer) return; // Already running
-            
+
             void sendScanFrameOnce();
             frameProcessingTimer = setInterval(() => {
                 void sendScanFrameOnce();
@@ -2990,13 +3846,13 @@
 
         function stopScanning() {
             if (!isScanning) return;
-            
+
             // Stop frame processing and camera
             stopFrameProcessing();
             clientCamera.stop();
             resetVoiceFeedbackState();
             lastEventId = 0;
-            
+
             // Immediately silence any ongoing speech
             if ('speechSynthesis' in window) {
                 window.speechSynthesis.cancel();
@@ -3006,23 +3862,23 @@
             isScanning = false;
             scanStoppedAt = Date.now();
             setScanButtons();
-            
+
             // Cleanup UI elements
             const video = document.getElementById('videoFeed');
             const scanPlaceholder = document.getElementById('scanPlaceholder');
             const scanOverlay = document.getElementById('scanOverlay');
-            
+
             if (video) video.classList.add('hidden');
             if (scanPlaceholder) scanPlaceholder.classList.remove('hidden');
             if (scanOverlay) scanOverlay.classList.add('hidden');
-            
+
             setScanState('idle', 'Status: Idle');
             showScanEventBadge('info', 'Scan stopped.');
-            
+
             // Stop event polling
             stopPollingEvents();
             applyGateStatusDefaults();
-            
+
             // Notify server
             fetch('/stop_scan', { method: 'POST' }).catch(() => null);
         }
@@ -3053,14 +3909,14 @@
 
         startBtn.addEventListener('click', async () => {
             if (isScanning) return;
-            
+
             // Check if previous year is selected
             if (isPreviousYearSelected()) {
                 showScanEventBadge('error', `Gate scanning is not available for archived school year: ${selectedSchoolYear}`);
                 setScanState('error', 'Status: Scanning disabled for archived years');
                 return;
             }
-            
+
             // Initialize client camera first
             const cameraReady = await clientCamera.initialize('videoFeed');
             if (!cameraReady) {
@@ -3072,7 +3928,7 @@
                 applyGateStatusDefaults();
                 return;
             }
-            
+
             const selectedModeForStart = sessionModeSelect
                 ? (sessionModeSelect.value || scanSessionMode || 'auto').trim()
                 : (scanSessionMode || 'auto');
@@ -3121,7 +3977,7 @@
             isScanning = false;
             scanStoppedAt = Date.now();
             setScanButtons();
-            
+
             // Immediately cancel any ongoing speech
             if ('speechSynthesis' in window) {
                 window.speechSynthesis.cancel();
@@ -3132,7 +3988,7 @@
             clientCamera.stop();
             resetVoiceFeedbackState();
             lastEventId = 0;
-            
+
             // Stop event polling immediately BEFORE UI cleanup so no stale events fire voice
             stopPollingEvents();
 
@@ -3143,7 +3999,7 @@
             scanOverlay.classList.add('hidden');
             setScanState('idle', 'Status: Idle');
             showScanEventBadge('info', 'Scan stopped.');
-            
+
             // Reset scan model status
             scanModelStatus = 'idle';
             if (scanStatusResetTimer) {
@@ -3157,7 +4013,7 @@
 
             // Fire and forget server notification
             fetch('/stop_scan', { method: 'POST' }).catch(() => null);
-            
+
             applyGateStatusDefaults();
         });
 
@@ -3188,6 +4044,7 @@
         setScanState('idle', 'Status: Idle');
         applyGateStatusDefaults();
         normalizeScanActivityFeed();
+        hydrateScanActivityItems();
         updateScanFullscreenButton();
         updateCurrentSessionBadge();
         updateSessionActionHint();
@@ -4432,13 +5289,13 @@
             const initials = escapeIdentityHtml(getInitials(user?.displayName || user?.username || 'User'));
             const avatarUrl = String(user?.avatarUrl || '').trim();
             const fallbackClass = avatarUrl
-                ? 'absolute inset-0 hidden items-center justify-center text-xs font-bold text-indigo-700'
-                : 'absolute inset-0 flex items-center justify-center text-xs font-bold text-indigo-700';
+                ? 'absolute inset-0 hidden items-center justify-center text-xs font-bold text-emerald-700'
+                : 'absolute inset-0 flex items-center justify-center text-xs font-bold text-emerald-700';
             const imageMarkup = avatarUrl
                 ? `<img src="${escapeIdentityHtml(avatarUrl)}" alt="${displayName} avatar" class="h-full w-full object-cover" onerror="this.classList.add('hidden'); this.nextElementSibling.classList.remove('hidden'); this.nextElementSibling.classList.add('flex');">`
                 : '';
             return `
-                <div class="relative h-10 w-10 shrink-0 overflow-hidden rounded-full border border-slate-200 bg-indigo-100 ring-2 ring-white shadow-sm">
+                <div class="relative h-10 w-10 shrink-0 overflow-hidden rounded-full border border-slate-200 bg-emerald-100 ring-2 ring-white shadow-sm">
                     ${imageMarkup}
                     <span class="${fallbackClass}">${initials}</span>
                 </div>
@@ -4595,7 +5452,7 @@
                         // Scroll to scanner to show disabled state
                         document.getElementById('gate-scanning')?.scrollIntoView({ behavior: 'smooth' });
                     }
-                }, 1000); 
+                }, 1000);
             }
         });
     </script>
@@ -4628,16 +5485,16 @@
             if (!element) return;
             const normalized = String(status || '').toLowerCase();
             if (normalized === 'ok' || normalized === 'active') {
-                element.className = 'mt-2 text-sm font-semibold text-emerald-700';
+                element.className = 'dashboard-metric-value dashboard-metric-value--ok';
                 element.textContent = okLabel;
                 return;
             }
             if (normalized === 'warn' || normalized === 'idle') {
-                element.className = 'mt-2 text-sm font-semibold text-amber-700';
+                element.className = 'dashboard-metric-value dashboard-metric-value--warn';
                 element.textContent = normalized === 'idle' ? 'Idle' : 'Warning';
                 return;
             }
-            element.className = 'mt-2 text-sm font-semibold text-rose-700';
+            element.className = 'dashboard-metric-value dashboard-metric-value--error';
             element.textContent = 'Issue';
         }
 
