@@ -9,9 +9,6 @@ class EnhancedClientCamera {
         this.videoElement = null;
         this.canvas = null;
         this.canvasContext = null;
-        this.overlayCanvas = null;
-        this.overlayContext = null;
-        this.ownsOverlayCanvas = false;
         this.isStreaming = false;
         this.onError = null;
         this.onSuccess = null;
@@ -33,7 +30,6 @@ class EnhancedClientCamera {
         this.detectionInterval = 100; // Detect faces every 100ms
         this.trackFadeDuration = 450;
         this.trackSmoothingFactor = 0.42;
-        this.boundUpdateOverlayCanvasSize = this.updateOverlayCanvasSize.bind(this);
         
         // Voice feedback
         this.voiceQueue = [];
@@ -255,61 +251,6 @@ class EnhancedClientCamera {
     }
 
     /**
-     * Create overlay canvas for face detection visualization
-     */
-    createOverlayCanvas() {
-        const videoContainer = this.videoElement?.parentElement;
-        const existingOverlay = videoContainer?.querySelector('#cameraOverlay');
-        this.ownsOverlayCanvas = !existingOverlay;
-        this.overlayCanvas = existingOverlay || document.createElement('canvas');
-        this.overlayContext = this.overlayCanvas.getContext('2d');
-        if (!this.overlayContext) {
-            throw new Error('Unable to create camera overlay context');
-        }
-
-        // Position overlay over video
-        this.overlayCanvas.style.position = 'absolute';
-        this.overlayCanvas.style.top = '0';
-        this.overlayCanvas.style.left = '0';
-        this.overlayCanvas.style.width = '100%';
-        this.overlayCanvas.style.height = '100%';
-        this.overlayCanvas.style.pointerEvents = 'none';
-        this.overlayCanvas.style.zIndex = '10';
-        this.overlayCanvas.style.transform = this.videoElement.style.transform || 'scaleX(-1)';
-        this.overlayCanvas.style.transformOrigin = 'center center';
-        
-        // Add overlay to video container
-        if (videoContainer) {
-            videoContainer.style.position = 'relative';
-            if (this.ownsOverlayCanvas) {
-                videoContainer.appendChild(this.overlayCanvas);
-            }
-        }
-        
-        // Set canvas size
-        this.updateOverlayCanvasSize();
-        window.addEventListener('resize', this.boundUpdateOverlayCanvasSize);
-    }
-
-    /**
-     * Update overlay canvas size to match video
-     */
-    updateOverlayCanvasSize() {
-        if (!this.overlayCanvas || !this.videoElement) return;
-        
-        const videoRect = this.videoElement.getBoundingClientRect();
-        const width = Math.max(1, Math.round(videoRect.width));
-        const height = Math.max(1, Math.round(videoRect.height));
-
-        if (this.overlayCanvas.width !== width) {
-            this.overlayCanvas.width = width;
-        }
-        if (this.overlayCanvas.height !== height) {
-            this.overlayCanvas.height = height;
-        }
-    }
-
-    /**
      * Initialize face tracking system
      */
     initializeFaceTracking() {
@@ -377,9 +318,8 @@ class EnhancedClientCamera {
             const faces = await this.detectFacesInFrame(frame);
             const detectedFaces = Array.isArray(faces) ? faces : [];
             
-            // Update tracked faces and render current overlay state even across short gaps.
+            // Update tracked faces for scan state, but do not render visual face boxes.
             this.updateTrackedFaces(detectedFaces);
-            this.drawFaceOverlay();
 
             if (this.onFaceDetected && typeof this.onFaceDetected === 'function') {
                 const visibleFaces = this.getVisibleTrackedFaces();
@@ -553,21 +493,6 @@ class EnhancedClientCamera {
         ));
     }
 
-    drawRoundedRect(ctx, x, y, width, height, radius) {
-        const rectRadius = Math.max(0, Math.min(radius, width / 2, height / 2));
-        ctx.beginPath();
-        ctx.moveTo(x + rectRadius, y);
-        ctx.lineTo(x + width - rectRadius, y);
-        ctx.quadraticCurveTo(x + width, y, x + width, y + rectRadius);
-        ctx.lineTo(x + width, y + height - rectRadius);
-        ctx.quadraticCurveTo(x + width, y + height, x + width - rectRadius, y + height);
-        ctx.lineTo(x + rectRadius, y + height);
-        ctx.quadraticCurveTo(x, y + height, x, y + height - rectRadius);
-        ctx.lineTo(x, y + rectRadius);
-        ctx.quadraticCurveTo(x, y, x + rectRadius, y);
-        ctx.closePath();
-    }
-
     /**
      * Calculate distance between two face detections
      */
@@ -585,98 +510,6 @@ class EnhancedClientCamera {
             Math.pow(center1.x - center2.x, 2) + 
             Math.pow(center1.y - center2.y, 2)
         );
-    }
-
-    /**
-     * Draw face detection overlay with bounding boxes and names
-     */
-    drawFaceOverlay() {
-        if (!this.overlayContext) return;
-        this.updateOverlayCanvasSize();
-        
-        const canvas = this.overlayCanvas;
-        const ctx = this.overlayContext;
-        
-        // Clear overlay
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        
-        // Scale factors for overlay
-        const scaleX = canvas.width / this.videoElement.videoWidth;
-        const scaleY = canvas.height / this.videoElement.videoHeight;
-        
-        // Draw each tracked face
-        for (const trackedFace of this.getVisibleTrackedFaces()) {
-            const face = trackedFace.renderBox || trackedFace.detection;
-            if (!face) {
-                continue;
-            }
-            
-            // Scale face coordinates to overlay size
-            const x = face.x * scaleX;
-            const y = face.y * scaleY;
-            const width = face.width * scaleX;
-            const height = face.height * scaleY;
-            const age = Date.now() - trackedFace.lastSeen;
-            const freshness = age <= 0 ? 1 : Math.max(0.28, 1 - (age / this.trackFadeDuration));
-            const isStable = trackedFace.stabilityCount >= 2;
-            const lineWidth = isStable ? 3 : 2;
-
-            ctx.save();
-            ctx.globalAlpha = freshness;
-
-            // Green minimal tracker ring with subtle fill.
-            this.drawRoundedRect(ctx, x, y, width, height, 16);
-            ctx.fillStyle = 'rgba(16, 185, 129, 0.12)';
-            ctx.fill();
-            ctx.lineWidth = lineWidth;
-            ctx.strokeStyle = isStable ? '#22c55e' : '#34d399';
-            ctx.stroke();
-
-            this.drawRoundedRect(ctx, x + 4, y + 4, Math.max(width - 8, 1), Math.max(height - 8, 1), 12);
-            ctx.lineWidth = 1;
-            ctx.strokeStyle = 'rgba(134, 239, 172, 0.6)';
-            ctx.stroke();
-            ctx.restore();
-            
-            // Draw student name if recognized
-            if (trackedFace.recognized && trackedFace.studentName) {
-                // Background for text
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-                const textMetrics = ctx.measureText(trackedFace.studentName);
-                const textHeight = 20;
-                const padding = 6;
-                
-                ctx.fillRect(
-                    x, 
-                    y - textHeight - padding * 2, 
-                    textMetrics.width + padding * 2, 
-                    textHeight + padding * 2
-                );
-                
-                // Draw text
-                ctx.fillStyle = '#ffffff';
-                ctx.font = '14px system-ui, -apple-system, sans-serif';
-                ctx.fillText(trackedFace.studentName, x + padding, y - padding);
-            }
-            
-            // Draw confidence score if available
-            if (face.confidence) {
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-                ctx.fillRect(x, y + height + 2, 60, 18);
-                
-                ctx.fillStyle = '#ffffff';
-                ctx.font = '11px system-ui, -apple-system, sans-serif';
-                ctx.fillText(`${(face.confidence * 100).toFixed(1)}%`, x + 4, y + height + 14);
-            }
-        }
-    }
-
-    /**
-     * Clear overlay canvas
-     */
-    clearOverlay() {
-        if (!this.overlayContext) return;
-        this.overlayContext.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
     }
 
     /**
@@ -987,18 +820,6 @@ class EnhancedClientCamera {
                 this.videoElement.srcObject = null;
                 this.videoElement.pause();
             }
-
-            window.removeEventListener('resize', this.boundUpdateOverlayCanvasSize);
-            this.clearOverlay();
-
-            // Remove overlay canvas only if this instance created it
-            if (this.ownsOverlayCanvas && this.overlayCanvas && this.overlayCanvas.parentElement) {
-                this.overlayCanvas.parentElement.removeChild(this.overlayCanvas);
-            }
-
-            this.overlayCanvas = null;
-            this.overlayContext = null;
-            this.ownsOverlayCanvas = false;
 
             console.log('[EnhancedCamera] Camera stopped and cleaned up');
 

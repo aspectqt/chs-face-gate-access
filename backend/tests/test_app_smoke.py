@@ -367,6 +367,7 @@ class AppSmokeTests(unittest.TestCase):
         attendance_collection, _, _ = self.app_module.get_attendance_logs_storage(school_year_label)
         attendance_collection.delete_many({"student_id": student_id})
         self.app_module.last_scanned.pop(student_id, None)
+        self.app_module.scan_presence_locks.pop(student_id, None)
 
         try:
             first_scan_time = datetime(2026, 3, 25, 7, 30, 0)
@@ -401,6 +402,175 @@ class AppSmokeTests(unittest.TestCase):
         finally:
             attendance_collection.delete_many({"student_id": student_id})
             self.app_module.last_scanned.pop(student_id, None)
+            self.app_module.scan_presence_locks.pop(student_id, None)
+
+    def test_load_face_index_uses_current_year_student_ref_link(self):
+        student_oid = self.app_module.ObjectId()
+        student_row = {
+            "_id": student_oid,
+            "student_id": "REF-001",
+            "name": "Reference Linked Student",
+            "parent_contact": "",
+            "face_encodings": [[0.12] * 128],
+        }
+
+        class FakeStudentsCollection:
+            def find(self, query, projection):
+                clauses = query.get("$and", [])
+                roster_clause = clauses[2] if len(clauses) > 2 else {}
+                for clause in roster_clause.get("$or", []):
+                    object_ids = clause.get("_id", {}).get("$in", [])
+                    if student_oid in object_ids:
+                        return [student_row]
+                return []
+
+        class FakeEnrollmentCollection:
+            def find(self, query, projection):
+                return [{
+                    "student_ref_id": str(student_oid),
+                    "student_id": "",
+                    "lrn": "",
+                    "status": "Active",
+                }]
+
+        with patch.object(self.app_module, "students", FakeStudentsCollection()), \
+                patch.object(self.app_module, "get_current_school_year_label", return_value="2025-2026"), \
+                patch.object(self.app_module, "get_student_enrollment_collection", return_value=FakeEnrollmentCollection()):
+            encodings, known_students = self.app_module.load_face_index_from_db()
+
+        self.assertEqual(len(encodings), 1)
+        self.assertEqual(len(known_students), 1)
+        self.assertEqual(known_students[0]["student_id"], "REF-001")
+        self.assertEqual(known_students[0]["name"], "Reference Linked Student")
+
+    def test_load_face_index_falls_back_when_roster_filter_hides_valid_faces(self):
+        student_oid = self.app_module.ObjectId()
+        student_row = {
+            "_id": student_oid,
+            "student_id": "FALLBACK-001",
+            "name": "Fallback Student",
+            "parent_contact": "",
+            "face_encodings": [[0.34] * 128],
+        }
+
+        class FakeStudentsCollection:
+            def find(self, query, projection):
+                clauses = query.get("$and", [])
+                if len(clauses) > 2:
+                    return []
+                return [student_row]
+
+        class FakeEnrollmentCollection:
+            def find(self, query, projection):
+                return [{
+                    "student_ref_id": "",
+                    "student_id": "MISMATCH-999",
+                    "lrn": "MISMATCH-999",
+                    "status": "Active",
+                }]
+
+        with patch.object(self.app_module, "students", FakeStudentsCollection()), \
+                patch.object(self.app_module, "get_current_school_year_label", return_value="2025-2026"), \
+                patch.object(self.app_module, "get_student_enrollment_collection", return_value=FakeEnrollmentCollection()):
+            encodings, known_students = self.app_module.load_face_index_from_db()
+
+        self.assertEqual(len(encodings), 1)
+        self.assertEqual(len(known_students), 1)
+        self.assertEqual(known_students[0]["student_id"], "FALLBACK-001")
+
+    def test_process_client_frame_suppresses_persistent_auto_rescan_until_face_leaves(self):
+        student_id = f"PERSIST-{uuid.uuid4().hex[:10]}"
+        original_active = None
+        original_encodings = None
+        original_students = None
+        original_model_status = None
+        with self.app_module.scan_lock:
+            original_active = self.app_module.scan_state.get("active")
+            original_encodings = self.app_module.scan_state.get("known_encodings")
+            original_students = self.app_module.scan_state.get("known_students")
+            original_model_status = self.app_module.scan_state.get("model_status")
+            self.app_module.scan_state["active"] = True
+            self.app_module.scan_state["known_encodings"] = self.app_module.np.array(
+                [[0.11] * 128],
+                dtype=self.app_module.np.float64,
+            )
+            self.app_module.scan_state["known_students"] = [
+                {"student_id": student_id, "name": "Persistent Student"}
+            ]
+            self.app_module.scan_state["model_status"] = "ready"
+
+        self.app_module.last_scanned.pop(student_id, None)
+        self.app_module.scan_presence_locks.pop(student_id, None)
+
+        frame = self.app_module.np.zeros((240, 320, 3), dtype=self.app_module.np.uint8)
+        face_location = [(0, 32, 32, 0)]
+        encoding = [self.app_module.np.array([0.11] * 128, dtype=self.app_module.np.float64)]
+        start_ts = 1_700_000_000.0
+
+        try:
+            with patch.object(self.app_module.cv2, "imdecode", return_value=frame), \
+                    patch.object(self.app_module.cv2, "cvtColor", return_value=frame), \
+                    patch.object(self.app_module.face_recognition, "face_locations", return_value=face_location), \
+                    patch.object(self.app_module.face_recognition, "face_encodings", return_value=encoding), \
+                    patch.object(
+                        self.app_module.face_recognition,
+                        "face_distance",
+                        return_value=self.app_module.np.array([0.21], dtype=self.app_module.np.float64),
+                    ), \
+                    patch.object(self.app_module, "calculate_match_confidence", return_value=99.1), \
+                    patch.object(
+                        self.app_module,
+                        "handle_verified_student",
+                        wraps=self.app_module.handle_verified_student,
+                    ) as verified_mock, \
+                    patch.object(
+                        self.app_module,
+                        "log_attendance_and_sms",
+                        return_value={
+                            "student_id": student_id,
+                            "student_name": "Persistent Student",
+                            "status": "Present",
+                            "gate_action": "OUT",
+                            "verification_label": "Thank You",
+                            "display_message": "Thank You",
+                            "voice_message": "Thank you",
+                            "timestamp": "2026-03-27T08:00:00",
+                            "time": "08:00:00",
+                            "feed_update": True,
+                            "activity_entry": {"student_id": student_id, "name": "Persistent Student", "gate_action": "OUT"},
+                            "tracking_mode": "auto",
+                            "duplicate": False,
+                            "duplicate_reason": "",
+                            "sms_status": "skipped",
+                        },
+                    ), \
+                    patch.object(self.app_module, "push_scan_event") as push_event_mock, \
+                    patch.object(self.app_module.time, "time", side_effect=[
+                        start_ts,
+                        start_ts,
+                        start_ts + 0.4,
+                        start_ts + 0.4,
+                        start_ts + self.app_module.SCAN_FACE_PRESENCE_RESET_SECONDS + 0.6,
+                        start_ts + self.app_module.SCAN_FACE_PRESENCE_RESET_SECONDS + 0.6,
+                    ]):
+                first_success, _ = self.app_module.process_client_frame(b"frame")
+                second_success, second_message = self.app_module.process_client_frame(b"frame")
+                third_success, _ = self.app_module.process_client_frame(b"frame")
+
+            self.assertTrue(first_success)
+            self.assertTrue(second_success)
+            self.assertTrue(third_success)
+            self.assertIn("Duplicate scan", second_message)
+            self.assertEqual(verified_mock.call_count, 3)
+            self.assertEqual(push_event_mock.call_count, 2)
+        finally:
+            with self.app_module.scan_lock:
+                self.app_module.scan_state["active"] = original_active
+                self.app_module.scan_state["known_encodings"] = original_encodings
+                self.app_module.scan_state["known_students"] = original_students
+                self.app_module.scan_state["model_status"] = original_model_status
+            self.app_module.last_scanned.pop(student_id, None)
+            self.app_module.scan_presence_locks.pop(student_id, None)
 
     def test_process_client_frame_verifies_multiple_students_without_multi_face_warning(self):
         original_active = None

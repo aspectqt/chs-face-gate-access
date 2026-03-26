@@ -419,16 +419,16 @@
   function buildLogoutModal() {
     const modal = document.createElement("div");
     modal.id = "globalLogoutConfirmModal";
-    modal.className = "modal-backdrop-blur fixed inset-0 z-[220] hidden items-center justify-center bg-slate-900/55 p-4";
+    modal.className = "app-logout-modal modal-backdrop-blur fixed inset-0 z-[220] hidden items-center justify-center p-4";
     modal.innerHTML = `
-      <div class="w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-2xl">
-        <div class="border-b border-slate-200 px-5 py-4">
-          <h3 class="text-base font-semibold text-slate-900">Confirm Logout</h3>
-          <p class="mt-1 text-sm text-slate-500">Are you sure you want to log out?</p>
+      <div class="app-logout-panel" role="dialog" aria-modal="true" aria-labelledby="globalLogoutConfirmTitle" aria-describedby="globalLogoutConfirmText">
+        <div class="app-logout-header">
+          <h3 id="globalLogoutConfirmTitle" class="app-logout-title">Confirm Logout</h3>
+          <p id="globalLogoutConfirmText" class="app-logout-copy">Are you sure you want to log out?</p>
         </div>
-        <div class="flex items-center justify-end gap-2 px-5 py-4">
-          <button type="button" data-logout-cancel class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">Cancel</button>
-          <button type="button" data-logout-confirm class="rounded-xl border border-rose-300 bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700">Confirm Logout</button>
+        <div class="app-logout-actions">
+          <button type="button" data-logout-cancel class="app-logout-btn app-logout-btn--cancel">Cancel</button>
+          <button type="button" data-logout-confirm class="app-logout-btn app-logout-btn--confirm">Confirm Logout</button>
         </div>
       </div>
     `;

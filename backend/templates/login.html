@@ -10,35 +10,162 @@
     <script src="https://cdn.tailwindcss.com"></script>
     {% include 'partials/theme_assets.html' %}
     <style>
+        body.login-page {
+            background:
+                radial-gradient(circle at top, rgba(16, 185, 129, 0.10), transparent 34%),
+                linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%) !important;
+            color: #0f172a !important;
+        }
+
+        html[data-theme="dark"] body.login-page {
+            background:
+                radial-gradient(circle at top, rgba(16, 185, 129, 0.16), transparent 30%),
+                linear-gradient(180deg, #0f172a 0%, #111827 100%) !important;
+            color: #e2e8f0 !important;
+        }
+
         .login-shell-card {
             background: #ffffff !important;
-            border: none !important;
-            box-shadow: 0 16px 40px rgba(15, 23, 42, 0.06) !important;
+            border: 1px solid rgba(148, 163, 184, 0.22) !important;
+            box-shadow: 0 18px 46px rgba(15, 23, 42, 0.10) !important;
         }
 
         html[data-theme="dark"] .login-shell-card {
             background: #ffffff !important;
-            border: none !important;
-            box-shadow: 0 18px 44px rgba(15, 23, 42, 0.08) !important;
+            border: 1px solid rgba(148, 163, 184, 0.20) !important;
+            box-shadow: 0 22px 56px rgba(2, 6, 23, 0.42) !important;
+        }
+
+        body.login-page .login-divider {
+            border-color: rgba(148, 163, 184, 0.28) !important;
+        }
+
+        body.login-page .login-title {
+            color: #0f172a !important;
+            line-height: 1.5;
+        }
+
+        body.login-page .login-subtle,
+        body.login-page .login-footer {
+            color: #64748b !important;
+        }
+
+        body.login-page .login-label {
+            color: #334155 !important;
+        }
+
+        body.login-page .login-input-wrap {
+            position: relative;
+        }
+
+        body.login-page .login-icon {
+            color: #94a3b8 !important;
+        }
+
+        body.login-page .login-input {
+            background: #ffffff !important;
+            color: #0f172a !important;
+            border-color: #cbd5e1 !important;
+            box-shadow: none !important;
+        }
+
+        body.login-page .login-input::placeholder {
+            color: #94a3b8 !important;
+        }
+
+        body.login-page .login-input:focus {
+            border-color: #10b981 !important;
+            box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.16) !important;
+        }
+
+        body.login-page .login-toggle {
+            color: #94a3b8 !important;
+        }
+
+        body.login-page .login-toggle:hover {
+            color: #475569 !important;
+        }
+
+        body.login-page .login-link {
+            color: #047857 !important;
+        }
+
+        body.login-page .login-link:hover {
+            color: #065f46 !important;
+        }
+
+        body.login-page .login-modal-card {
+            background: #ffffff !important;
+            border: 1px solid rgba(148, 163, 184, 0.22) !important;
+            box-shadow: 0 24px 64px rgba(15, 23, 42, 0.18) !important;
+        }
+
+        body.login-page .login-modal-title {
+            color: #0f172a !important;
+        }
+
+        body.login-page .login-modal-copy {
+            color: #64748b !important;
+        }
+
+        body.login-page .login-modal-close {
+            color: #94a3b8 !important;
+        }
+
+        body.login-page .login-modal-close:hover {
+            background: #f8fafc !important;
+            color: #334155 !important;
+        }
+
+        html[data-theme="dark"] body.login-page .login-subtle,
+        html[data-theme="dark"] body.login-page .login-footer,
+        html[data-theme="dark"] body.login-page .login-modal-copy {
+            color: #64748b !important;
+        }
+
+        html[data-theme="dark"] body.login-page .login-title,
+        html[data-theme="dark"] body.login-page .login-label,
+        html[data-theme="dark"] body.login-page .login-modal-title {
+            color: #0f172a !important;
+        }
+
+        html[data-theme="dark"] body.login-page .login-input {
+            background: #ffffff !important;
+            color: #0f172a !important;
+            border-color: #cbd5e1 !important;
+        }
+
+        html[data-theme="dark"] body.login-page .login-input::placeholder {
+            color: #94a3b8 !important;
+        }
+
+        html[data-theme="dark"] body.login-page .login-icon,
+        html[data-theme="dark"] body.login-page .login-toggle,
+        html[data-theme="dark"] body.login-page .login-modal-close {
+            color: #94a3b8 !important;
         }
 
         @media (max-width: 640px) {
             .login-shell-card {
                 border-radius: 1.35rem !important;
             }
+
+            body.login-page .login-title {
+                font-size: 1rem !important;
+            }
         }
     </style>
 </head>
-<body class="min-h-screen bg-white text-slate-800" data-authenticated="0" data-user-theme="">
+<body class="login-page min-h-screen" data-authenticated="0" data-user-theme="">
     <main class="min-h-screen flex items-center justify-center px-4 py-10">
         <section class="app-content-card login-shell-card w-full max-w-md">
-            <div class="border-b border-slate-100 px-7 py-6 text-center">
+            <div class="login-divider border-b px-7 py-6 text-center">
                 <div class="mx-auto flex w-fit items-center gap-4">
                     <img src="{{ url_for('static', filename='deped-logo.png') }}" alt="DepEd Logo" class="h-16 w-16 object-contain">
                     <img src="{{ url_for('static', filename='logo.png') }}" alt="CHS Logo" class="h-16 w-16 object-contain">
                 </div>
-                <h1 class="mt-4 text-lg font-semibold text-slate-900">FACE RECOGNITION STUDENT  GATE ACCESS SYSTEM  WITH SMS NOTIFICATION FOR CAWITAN HIGH SCHOOL</h1>
-                <p class="mt-1 text-sm text-slate-500"></p>
+                <h1 class="login-title mt-4 text-lg font-semibold">FACE RECOGNITION STUDENT GATE ACCESS SYSTEM WITH SMS NOTIFICATION FOR CAWITAN HIGH SCHOOL</h1>
+                <p class="login-subtle mt-1 text-sm"></p>
             </div>
 
             <div class="px-7 py-6">
@@ -64,9 +191,9 @@
                     </div>
 
                     <div>
-                        <label for="username" class="text-sm font-medium text-slate-700">Username</label>
-                        <div class="relative mt-1.5">
-                            <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
+                        <label for="username" class="login-label text-sm font-medium">Username</label>
+                        <div class="login-input-wrap mt-1.5">
+                            <span class="login-icon pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M5.121 17.804A9 9 0 1118.878 6.196 9 9 0 015.12 17.804z" />
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M12 12a3 3 0 100-6 3 3 0 000 6z" />
@@ -87,15 +214,15 @@
                                 data-lpignore="true"
                                 data-1p-ignore="true"
                                 data-form-type="other"
-                                class="w-full rounded-xl border border-slate-300 bg-white pl-10 pr-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+                                class="login-input w-full rounded-xl border pl-10 pr-3 py-2.5 text-sm outline-none transition"
                             >
                         </div>
                     </div>
 
                     <div>
-                        <label for="password" class="text-sm font-medium text-slate-700">Password</label>
-                        <div class="relative mt-1.5">
-                            <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
+                        <label for="password" class="login-label text-sm font-medium">Password</label>
+                        <div class="login-input-wrap mt-1.5">
+                            <span class="login-icon pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M12 11c1.657 0 3-1.343 3-3V6a3 3 0 10-6 0v2c0 1.657 1.343 3 3 3z" />
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M5 11h14a2 2 0 012 2v7a2 2 0 01-2 2H5a2 2 0 01-2-2v-7a2 2 0 012-2z" />
@@ -114,9 +241,9 @@
                                 data-lpignore="true"
                                 data-1p-ignore="true"
                                 data-form-type="other"
-                                class="w-full rounded-xl border border-slate-300 bg-white pl-10 pr-11 py-2.5 text-sm text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+                                class="login-input w-full rounded-xl border pl-10 pr-11 py-2.5 text-sm outline-none transition"
                             >
-                            <button type="button" id="togglePassword" aria-label="Show or hide password" class="absolute inset-y-0 right-0 flex items-center px-3 text-slate-400 hover:text-slate-600 transition">
+                            <button type="button" id="togglePassword" aria-label="Show or hide password" class="login-toggle absolute inset-y-0 right-0 flex items-center px-3 transition">
                                 <svg id="toggleIcon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5s8.268 2.943 9.542 7c-1.274 4.057-5.065 7-9.542 7s-8.268-2.943-9.542-7z" />
@@ -124,7 +251,7 @@
                             </button>
                         </div>
                         <div class="mt-2 flex justify-end">
-                            <button type="button" id="forgotPasswordLink" class="text-xs font-semibold text-emerald-700 transition hover:text-emerald-800">
+                            <button type="button" id="forgotPasswordLink" class="login-link text-xs font-semibold transition">
                                 Forgot Password?
                             </button>
                         </div>
@@ -141,20 +268,20 @@
             </div>
 
             <div class="px-7 pb-6 text-center">
-                <p class="text-xs text-slate-500">&copy; {{ current_year }} CHS Gate Access System</p>
+                <p class="login-footer text-xs">&copy; {{ current_year }} CHS Gate Access System</p>
             </div>
         </section>
     </main>
 
     <div id="forgotPasswordModal" class="fixed inset-0 z-50 hidden">
         <div id="forgotPasswordBackdrop" class="modal-backdrop-blur absolute inset-0 bg-slate-900/50"></div>
-        <div class="app-content-card relative mx-auto mt-20 w-[92%] max-w-md p-6">
+        <div class="app-content-card login-modal-card relative mx-auto mt-20 w-[92%] max-w-md p-6">
             <div class="flex items-start justify-between gap-3">
                 <div>
-                    <h3 class="text-lg font-semibold text-slate-900">Password Recovery</h3>
-                    <p class="mt-1 text-sm text-slate-500">Enter your registered email to request a secure password reset link.</p>
+                    <h3 class="login-modal-title text-lg font-semibold">Password Recovery</h3>
+                    <p class="login-modal-copy mt-1 text-sm">Enter your registered email to request a secure password reset link.</p>
                 </div>
-                <button type="button" id="forgotCloseButton" class="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600" aria-label="Close">
+                <button type="button" id="forgotCloseButton" class="login-modal-close rounded-lg p-1.5 transition" aria-label="Close">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                         <path stroke-linecap="round" stroke-linejoin="round" d="m6 6 12 12M18 6 6 18" />
                     </svg>
@@ -166,13 +293,13 @@
 
             <form id="forgotPasswordForm" class="mt-4 space-y-4">
                 <div>
-                    <label for="recoveryEmail" class="text-sm font-medium text-slate-700">Registered Email</label>
+                    <label for="recoveryEmail" class="login-label text-sm font-medium">Registered Email</label>
                     <input
                         type="email"
                         id="recoveryEmail"
                         required
                         placeholder="name@example.com"
-                        class="mt-1.5 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+                        class="login-input mt-1.5 w-full rounded-xl border px-3 py-2.5 text-sm outline-none transition"
                     >
                 </div>
                 <button type="submit" id="forgotSubmitButton" class="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-70">

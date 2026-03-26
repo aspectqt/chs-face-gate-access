@@ -15,7 +15,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap"
         rel="stylesheet">
     {% include 'partials/theme_assets.html' %}
-    <script src="{{ url_for('static', filename='enhanced_client_camera.js', v='20260326c') }}"></script>
+    <script src="{{ url_for('static', filename='enhanced_client_camera.js', v='20260327a') }}"></script>
     <style>
         :root {
             --dash-card-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
@@ -112,14 +112,43 @@
 
         #scanFrame:fullscreen #scanOverlay,
         #scanFrame:-webkit-full-screen #scanOverlay {
+            bottom: clamp(1rem, 3vh, 1.75rem);
+            width: min(78vw, 42rem);
             font-size: 1rem;
-            padding-top: 0.75rem;
-            padding-bottom: 0.75rem;
+            padding: 0.85rem 1.25rem;
         }
 
-        #scanNameOverlay,
-        #scanOverlay,
-        #scanEventBadge {
+        #scanOverlay.scan-camera-status {
+            left: 50%;
+            right: auto;
+            bottom: 1rem;
+            width: min(calc(100% - 1.5rem), 34rem);
+            max-width: calc(100% - 1.5rem);
+            transform: translateX(-50%);
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            border-radius: 1rem;
+            background: rgba(2, 6, 23, 0.78);
+            box-shadow: 0 18px 40px rgba(2, 6, 23, 0.3);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            pointer-events: none;
+            text-align: center;
+            z-index: 20;
+        }
+
+        @media (max-width: 640px) {
+            #scanOverlay.scan-camera-status {
+                bottom: 0.75rem;
+                width: min(calc(100% - 1rem), 26rem);
+                max-width: calc(100% - 1rem);
+                padding: 0.75rem 0.95rem;
+                font-size: 0.82rem;
+                line-height: 1.35;
+            }
+        }
+
+        #scanOverlay.hidden,
+        #scanEventBadge.hidden {
             display: none !important;
         }
 
@@ -1694,17 +1723,8 @@
                                                     <p class="mt-2 text-sm text-slate-400">Start scanning to open the live camera feed and begin recognition.</p>
                                                 </div>
                                             </div>
-                                            <div id="scanNameOverlay" class="hidden absolute inset-0 flex items-center justify-center pointer-events-none z-10 bg-slate-900/40 backdrop-blur-[2px]">
-                                                <div class="bg-slate-900/80 backdrop-blur-md border border-white/20 rounded-2xl px-10 py-6 text-center shadow-2xl transform transition-all duration-300">
-                                                    <div class="mb-3 flex justify-center"><span class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg></span></div>
-                                                    <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-400 mb-1 opacity-80">Recognition Success</p>
-                                                    <h3 id="scanNameText" class="text-3xl font-bold text-white tracking-tight leading-tight">--</h3>
-                                                    <div id="scanStatusBadge" class="mt-3 inline-flex items-center rounded-full bg-slate-700/50 px-3 py-1 text-xs font-bold text-slate-200 border border-white/10 uppercase tracking-wider">Verified</div>
-                                                </div>
-                                            </div>
                                             <video id="videoFeed" class="hidden h-full w-full object-cover" autoplay playsinline style="transform: scaleX(-1);" title="Client device camera stream"></video>
-                                            <canvas id="cameraOverlay" class="hidden absolute top-0 left-0 w-full h-full pointer-events-none z-10"></canvas>
-                                            <div id="scanOverlay" class="hidden absolute bottom-0 left-0 right-0 border-t border-white/10 bg-black/70 px-4 py-2.5 text-sm text-white text-center backdrop-blur-sm z-20">No active verification event.</div>
+                                            <div id="scanOverlay" class="scan-camera-status hidden absolute px-4 py-2.5 text-sm text-white">No active verification event.</div>
                                         </div>
                                     </div>
                                 </div>
@@ -2498,8 +2518,6 @@
 
         clientCamera.onFaceRecognized = function(data) {
             console.log('[Face Recognition]', data);
-            // Show recognition overlay with student name
-            showRecognitionSuccess(data.name, data.student_id);
         };
 
         clientCamera.onMultipleFaces = function(data) {
@@ -2516,7 +2534,6 @@
         };
 
         const video = document.getElementById('videoFeed');
-        const cameraOverlay = document.getElementById('cameraOverlay');
         const statusText = document.getElementById('status');
         const scanOverlay = document.getElementById('scanOverlay');
         const scanPlaceholder = document.getElementById('scanPlaceholder');
@@ -2580,7 +2597,9 @@
         let scanFrameRequestInFlight = false;
         const SCAN_ACTIVITY_LIMIT = 10;
         const SCAN_ACTIVITY_OUTRO_MS = 280;
+        const PROCESSED_SCAN_EVENT_HISTORY_LIMIT = 120;
         const VOICE_FEEDBACK_HISTORY_LIMIT = 40;
+        const processedScanEventIds = [];
         const voiceFeedbackQueue = [];
         const spokenVoiceKeys = [];
         let isSpeakingVerification = false;
@@ -2803,10 +2822,10 @@
             const normalized = String(status || 'idle').trim();
             if (!force && normalized === scanModelStatus) return;
             scanModelStatus = normalized;
+            scanOverlay.classList.add('hidden');
+            scanOverlay.textContent = '';
 
             if (normalized === 'loading') {
-                scanOverlay.textContent = 'Loading face database...';
-                scanOverlay.classList.remove('hidden');
                 setScanState('scanning', 'Status: Loading face database...');
                 showScanEventBadge('info', 'Loading face database...');
                 setStatusChip(faceStatusChip, 'Face: Loading', 'info');
@@ -2816,8 +2835,6 @@
             if (normalized === 'ready') {
                 const count = Number.parseInt(registeredFaces || 0, 10) || 0;
                 const countText = count > 0 ? ` (${count} profiles)` : '';
-                scanOverlay.textContent = `Face recognition ready. Scanning for faces...${countText}`;
-                scanOverlay.classList.remove('hidden');
                 setScanState('scanning', `Status: Scanning (${scanSessionModeLabel(scanSessionMode)})`);
                 showScanEventBadge('success', `Face recognition ready${countText}`);
                 setStatusChip(faceStatusChip, 'Face: Ready', 'success');
@@ -2825,8 +2842,6 @@
             }
 
             if (normalized === 'legacy_faces_only') {
-                scanOverlay.textContent = 'Face data found, but encodings are missing. Please update/re-register faces.';
-                scanOverlay.classList.remove('hidden');
                 setScanState('warning', 'Status: Face encodings missing');
                 showScanEventBadge('warning', 'Face encodings are missing.');
                 setStatusChip(faceStatusChip, 'Face: Update Needed', 'warning');
@@ -2834,8 +2849,6 @@
             }
 
             if (normalized === 'no_registered_students' || (Number.parseInt(registeredFaces || 0, 10) || 0) <= 0) {
-                scanOverlay.textContent = 'No registered face encodings found. Please register/update student faces.';
-                scanOverlay.classList.remove('hidden');
                 setScanState('warning', 'Status: No registered face encodings');
                 showScanEventBadge('warning', 'No registered face encodings found.');
                 setStatusChip(faceStatusChip, 'Face: None', 'warning');
@@ -2843,16 +2856,12 @@
             }
 
             if (normalized === 'model_not_ready') {
-                scanOverlay.textContent = 'Face model not ready. Recognition is temporarily unavailable.';
-                scanOverlay.classList.remove('hidden');
                 setScanState('error', 'Status: Face model not ready');
                 showScanEventBadge('error', 'Face model not ready.');
                 setStatusChip(faceStatusChip, 'Face: Offline', 'danger');
                 return;
             }
 
-            scanOverlay.textContent = 'Scanning for faces...';
-            scanOverlay.classList.remove('hidden');
             setStatusChip(faceStatusChip, 'Face: Scanning', 'info');
         }
 
@@ -3012,17 +3021,8 @@
             if (scanStatusResetTimer) clearTimeout(scanStatusResetTimer);
             scanStatusResetTimer = setTimeout(() => {
                 if (!isScanning) return;
-
-                // Reset UI overlays
-                const nameOverlay = document.getElementById('scanNameOverlay');
-                if (nameOverlay) {
-                    const inner = nameOverlay.querySelector('div');
-                    if (inner) {
-                        inner.classList.add('scale-90', 'opacity-0');
-                        inner.classList.remove('scale-100', 'opacity-100');
-                    }
-                    setTimeout(() => nameOverlay.classList.add('hidden'), 300);
-                }
+                scanOverlay.classList.add('hidden');
+                scanOverlay.textContent = '';
 
                 setScanState('scanning', `Status: Scanning (${scanSessionModeLabel(scanSessionMode)})`);
                 setStatusChip(cameraStatusChip, 'Camera: Active', 'info');
@@ -3130,11 +3130,6 @@
             if ('speechSynthesis' in window) {
                 window.speechSynthesis.cancel();
             }
-        }
-
-        function showRecognitionSuccess(studentName, studentId) {
-            void studentName;
-            void studentId;
         }
 
         function playNotificationTone() {
@@ -3691,34 +3686,26 @@
                 }
 
                 events.forEach(evt => {
+                    const eventId = Number(evt.id || 0);
+                    if (eventId > 0) {
+                        if (processedScanEventIds.includes(eventId)) {
+                            return;
+                        }
+                        processedScanEventIds.push(eventId);
+                        while (processedScanEventIds.length > PROCESSED_SCAN_EVENT_HISTORY_LIMIT) {
+                            processedScanEventIds.shift();
+                        }
+                    }
+
                     lastEventId = Math.max(lastEventId, evt.id || 0);
 
                     if (evt.type === 'verified') {
                         const gateAction = String(evt.gate_action || '').toUpperCase() === 'OUT' ? 'OUT' : 'IN';
                         const displayMessage = evt.display_message || evt.verification_label || 'Verified';
-                        const confidenceText = Number.isFinite(Number(evt.confidence_pct)) && Number(evt.confidence_pct) > 0
-                            ? ` (${Number(evt.confidence_pct).toFixed(1)}%)`
-                            : '';
-
-                        scanOverlay.textContent = `${evt.name} (${gateAction}) - ${displayMessage}${confidenceText}`;
-                        scanOverlay.classList.remove('hidden');
-
-                        const nameText = document.getElementById('scanNameText');
-                        const nameOverlay = document.getElementById('scanNameOverlay');
-                        const statusBadge = document.getElementById('scanStatusBadge');
-
-                        if (nameText) nameText.textContent = evt.name || 'Student';
-                        if (statusBadge) statusBadge.textContent = `${gateAction} - ${displayMessage}`;
-                        if (nameOverlay) {
-                            nameOverlay.classList.remove('hidden');
-                            setTimeout(() => {
-                                nameOverlay.querySelector('div')?.classList.remove('scale-90', 'opacity-0');
-                                nameOverlay.querySelector('div')?.classList.add('scale-100', 'opacity-100');
-                            }, 10);
-                        }
+                        scanOverlay.classList.add('hidden');
+                        scanOverlay.textContent = '';
 
                         setScanState('success', `Status: ${displayMessage} - ${evt.name}`);
-                        showScanEventBadge(evt.duplicate ? 'warning' : 'success', `${gateAction} - ${displayMessage}${confidenceText}`);
                         scheduleScanningStateRestore(evt.duplicate ? 800 : 1500);
 
                         if (evt.feed_update && evt.activity_entry) {
@@ -3941,13 +3928,14 @@
             if (response.ok) {
                 isScanning = true;
                 lastEventId = 0;
+                processedScanEventIds.length = 0;
                 resetVoiceFeedbackState();
                 setScanButtons();
                 applyGateStatusDefaults();
                 scanPlaceholder.classList.add('hidden');
                 video.classList.remove('hidden');
-                cameraOverlay.classList.remove('hidden');
-                scanOverlay.classList.remove('hidden');
+                scanOverlay.classList.add('hidden');
+                scanOverlay.textContent = '';
                 if (data.scan_session_mode) {
                     applyScanSessionMode(data.scan_session_mode, data.effective_session || null);
                 } else {
@@ -3988,13 +3976,13 @@
             clientCamera.stop();
             resetVoiceFeedbackState();
             lastEventId = 0;
+            processedScanEventIds.length = 0;
 
             // Stop event polling immediately BEFORE UI cleanup so no stale events fire voice
             stopPollingEvents();
 
             // Cleanup UI elements
             video.classList.add('hidden');
-            cameraOverlay.classList.add('hidden');
             scanPlaceholder.classList.remove('hidden');
             scanOverlay.classList.add('hidden');
             setScanState('idle', 'Status: Idle');

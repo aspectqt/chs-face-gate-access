@@ -178,6 +178,7 @@ SCAN_FORCE_RESIZE = env_bool("SCAN_FORCE_RESIZE", True)
 SCAN_FACE_INDEX_ALLOW_LEGACY_IMAGE_FALLBACK = env_bool("SCAN_FACE_INDEX_ALLOW_LEGACY_IMAGE_FALLBACK", False)
 SCAN_OUT_MINUTES = env_int("SCAN_OUT_MINUTES", 30, minimum=1, maximum=240)
 SCAN_REPEAT_SUPPRESSION_SECONDS = env_int("SCAN_REPEAT_SUPPRESSION_SECONDS", 20, minimum=5, maximum=120)
+SCAN_FACE_PRESENCE_RESET_SECONDS = env_int("SCAN_FACE_PRESENCE_RESET_SECONDS", 1, minimum=1, maximum=5)
 UNKNOWN_ALERT_COOLDOWN_SECONDS = 30
 UNREGISTERED_EVENT_COOLDOWN_SECONDS = 2
 RECOGNITION_TOLERANCE = 0.50
@@ -310,6 +311,7 @@ background_jobs_started = False
 background_jobs_lock = threading.Lock()
 SCAN_RECOGNITION_SCALE = SCAN_RECOGNITION_SCALE_PERCENT / 100.0
 last_scanned = {}
+scan_presence_locks = {}
 dev_reload_lock = threading.Lock()
 dev_reload_cache = {
     "checked_at": 0.0,
@@ -2705,6 +2707,36 @@ def build_scan_activity_entry(student_id, student_name, gate_action, status, ver
     }
 
 
+def should_suppress_persistent_face_scan(student_id, now_ts=None):
+    normalized_student_id = str(student_id or "").strip()
+    if not normalized_student_id:
+        return False
+
+    current_ts = float(now_ts if now_ts is not None else time.time())
+    with scan_lock:
+        lock_entry = scan_presence_locks.get(normalized_student_id)
+        if not lock_entry:
+            return False
+        last_seen_ts = float(lock_entry.get("last_seen_ts") or 0.0)
+        if current_ts - last_seen_ts > float(SCAN_FACE_PRESENCE_RESET_SECONDS):
+            scan_presence_locks.pop(normalized_student_id, None)
+            return False
+        lock_entry["last_seen_ts"] = current_ts
+        return True
+
+
+def mark_persistent_face_scan(student_id, now_ts=None):
+    normalized_student_id = str(student_id or "").strip()
+    if not normalized_student_id:
+        return
+
+    current_ts = float(now_ts if now_ts is not None else time.time())
+    with scan_lock:
+        scan_presence_locks[normalized_student_id] = {
+            "last_seen_ts": current_ts,
+        }
+
+
 def get_latest_gate_record(attendance_collection, student_id):
     if not student_id:
         return None
@@ -3506,25 +3538,6 @@ def load_face_index_from_db(allow_legacy_fallback=False):
             {"faces.0": {"$exists": True}},
         ])
 
-    # Strict academic year validation: only load students enrolled in current year
-    current_sy = get_current_school_year_label()
-    enrolled_ids = set()
-    if current_sy:
-        enrollment_coll = get_student_enrollment_collection(current_sy)
-        # Filter for active/enrolled status in that year
-        # We consider any record in the current year's enrollment collection that isn't 'Dropped' or similar
-        enrolled_cursor = enrollment_coll.find(
-            {"status": {"$nin": ["Dropped", "Withdrawn", "Transferred Out"]}},
-            {"student_id": 1}
-        )
-        enrolled_ids = {str(doc.get("student_id", "")).strip() for doc in enrolled_cursor if doc.get("student_id")}
-
-    query = {"$and": [_active_students_match_clause(), face_source_match]}
-    
-    # Apply the academic year filter
-    if current_sy:
-        query["$and"].append({"student_id": {"$in": list(enrolled_ids)}})
-
     projection = {
         "student_id": 1,
         "name": 1,
@@ -3537,22 +3550,84 @@ def load_face_index_from_db(allow_legacy_fallback=False):
         projection["face_data"] = 1
         projection["faces"] = 1
 
-    for row in students.find(query, projection):
-        sid = (row.get("student_id") or "").strip()
-        name = (row.get("name") or "").strip()
-        if not sid or not name:
-            continue
+    def collect_face_index_rows(extra_clauses=None):
+        encodings = []
+        matched_students = []
+        query = {"$and": [_active_students_match_clause(), face_source_match]}
+        if extra_clauses:
+            query["$and"].extend(extra_clauses)
 
-        encs = _extract_encodings_from_student(row, allow_legacy_fallback=allow_legacy_fallback)
-        for enc in encs:
-            known_db_encodings.append(enc)
-            known_db_students.append({
-                "student_id": sid,
-                "name": name,
-                "parent_contact": row.get("parent_contact", ""),
-            })
+        for row in students.find(query, projection):
+            sid = normalize_lrn_value(row.get("student_id"))
+            name = (row.get("name") or "").strip()
+            if not sid or not name:
+                continue
 
-    return known_db_encodings, known_db_students
+            encs = _extract_encodings_from_student(row, allow_legacy_fallback=allow_legacy_fallback)
+            for enc in encs:
+                encodings.append(enc)
+                matched_students.append({
+                    "student_id": sid,
+                    "name": name,
+                    "parent_contact": row.get("parent_contact", ""),
+                })
+        return encodings, matched_students
+
+    # Prefer current school year enrollments, but do not let a missing/misaligned
+    # enrollment mirror collapse the live face index to zero usable encodings.
+    current_sy = get_current_school_year_label()
+    roster_clause = None
+    roster_filter_applied = False
+    roster_has_rows = False
+    if current_sy:
+        try:
+            enrollment_coll = get_student_enrollment_collection(current_sy)
+            enrolled_ids = set()
+            enrolled_ref_ids = set()
+            enrolled_cursor = enrollment_coll.find(
+                {"status": {"$nin": ["Dropped", "Withdrawn", "Transferred Out"]}},
+                {"student_id": 1, "lrn": 1, "student_ref_id": 1},
+            )
+            for doc in enrolled_cursor:
+                roster_has_rows = True
+                normalized_student_id = normalize_lrn_value(doc.get("student_id") or doc.get("lrn"))
+                if normalized_student_id:
+                    enrolled_ids.add(normalized_student_id)
+                student_ref_oid = parse_student_oid(doc.get("student_ref_id"))
+                if student_ref_oid:
+                    enrolled_ref_ids.add(student_ref_oid)
+
+            roster_conditions = []
+            if enrolled_ids:
+                roster_conditions.extend([
+                    {"student_id": {"$in": list(enrolled_ids)}},
+                    {"lrn": {"$in": list(enrolled_ids)}},
+                ])
+            if enrolled_ref_ids:
+                roster_conditions.append({"_id": {"$in": list(enrolled_ref_ids)}})
+            if roster_conditions:
+                roster_clause = {"$or": roster_conditions}
+                roster_filter_applied = True
+        except Exception as exc:
+            print(f"[WARNING] Failed to resolve current-year enrollment roster for face index: {exc}")
+
+    if current_sy and not roster_filter_applied:
+        print(
+            f"[WARNING] Face index roster filter unavailable for {current_sy}; "
+            "falling back to active registered students."
+        )
+
+    if roster_clause:
+        known_db_encodings, known_db_students = collect_face_index_rows([roster_clause])
+        if known_db_encodings:
+            return known_db_encodings, known_db_students
+        if roster_has_rows:
+            print(
+                f"[WARNING] Face index roster for {current_sy} produced zero encodings; "
+                "falling back to active registered students."
+            )
+
+    return collect_face_index_rows()
 
 
 def record_login(username, role):
@@ -5052,11 +5127,15 @@ def handle_verified_student(student, confidence=0.0):
     if not student_id or not student_name:
         return None
 
+    current_mode = get_scan_session_mode()
+    if current_mode == "auto" and should_suppress_persistent_face_scan(student_id, now_ts):
+        return None
+
     with scan_lock:
         cooldown_until = float(last_scanned.get(student_id, 0) or 0)
         if now_ts < cooldown_until:
             return None
-    result = log_attendance_and_sms(student)
+    result = log_attendance_and_sms(student, mode=current_mode)
     if not result:
         return None
 
@@ -5074,6 +5153,9 @@ def handle_verified_student(student, confidence=0.0):
 
     if result["duplicate"]:
         return None
+
+    if current_mode == "auto":
+        mark_persistent_face_scan(student_id, now_ts)
 
     push_scan_event("verified", {
         "student_id": student_id,
@@ -5235,6 +5317,7 @@ def start_scan_capture():
         # In client-side frame mode, we don't need a server-side capture device
         # Just mark the system as active
         last_scanned.clear()
+        scan_presence_locks.clear()
         scan_state["capture"] = None  # No server-side camera needed
         scan_state["active"] = True
         scan_state["events"] = []
@@ -5253,6 +5336,7 @@ def start_scan_capture():
 def stop_scan_capture():
     with scan_lock:
         scan_state["active"] = False
+        scan_presence_locks.clear()
         capture = scan_state.get("capture")
         scan_state["capture"] = None
         scan_state["known_encodings"] = np.empty((0, 128), dtype=np.float64)

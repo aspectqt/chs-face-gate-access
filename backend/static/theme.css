@@ -253,8 +253,175 @@ body[data-authenticated="1"] > div:first-of-type > div {
   backdrop-filter: blur(3px);
 }
 
+.app-logout-modal {
+  padding: clamp(1rem, 3vw, 1.5rem);
+  background: rgba(15, 23, 42, 0.46);
+}
+
+.app-logout-panel {
+  width: min(100%, 30rem);
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 1.5rem;
+  overflow: hidden;
+  color: #0f172a;
+  background: #ffffff;
+  box-shadow: 0 28px 70px rgba(15, 23, 42, 0.18);
+}
+
+.app-logout-header {
+  padding: 1.3rem 1.4rem 1rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.app-logout-title {
+  margin: 0;
+  color: #0f172a;
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.app-logout-copy {
+  margin: 0.45rem 0 0;
+  color: #64748b;
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.app-logout-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding: 1rem 1.4rem 1.3rem;
+}
+
+.app-logout-btn {
+  display: inline-flex;
+  min-width: 8.5rem;
+  min-height: 2.85rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem 1.15rem;
+  border-radius: 0.95rem;
+  border: 1px solid transparent;
+  font-size: 0.94rem;
+  font-weight: 700;
+  line-height: 1;
+  transition:
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
+}
+
+.app-logout-btn:hover {
+  transform: translateY(-1px);
+}
+
+.app-logout-btn:focus-visible {
+  outline: none;
+}
+
+.app-logout-btn--cancel {
+  border-color: rgba(148, 163, 184, 0.28);
+  background: rgba(255, 255, 255, 0.92);
+  color: #334155;
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
+}
+
+.app-logout-btn--cancel:hover {
+  border-color: rgba(var(--app-card-accent), 0.24);
+  background: rgba(248, 250, 252, 0.96);
+  color: #0f172a;
+}
+
+.app-logout-btn--cancel:focus-visible {
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.14);
+}
+
+.app-logout-btn--confirm {
+  border-color: rgba(225, 29, 72, 0.34);
+  background: #e11d48;
+  color: #ffffff;
+  box-shadow: 0 16px 26px rgba(225, 29, 72, 0.22);
+}
+
+.app-logout-btn--confirm:hover {
+  border-color: rgba(190, 24, 93, 0.42);
+  background: #be123c;
+}
+
+.app-logout-btn--confirm:focus-visible {
+  box-shadow:
+    0 0 0 3px rgba(253, 164, 175, 0.26),
+    0 16px 26px rgba(225, 29, 72, 0.22);
+}
+
 html[data-theme="dark"] body.bg-gradient-to-br {
   background-image: linear-gradient(135deg, #0b1220, #111c2f, #1a2c42) !important;
+}
+
+html[data-theme="dark"] .app-logout-modal {
+  background: rgba(2, 6, 23, 0.72);
+}
+
+html[data-theme="dark"] .app-logout-panel {
+  border-color: rgba(71, 85, 105, 0.72);
+  color: #0f172a;
+  background: #ffffff;
+  box-shadow: 0 30px 74px rgba(2, 6, 23, 0.55);
+}
+
+html[data-theme="dark"] .app-logout-header {
+  border-bottom-color: rgba(71, 85, 105, 0.72);
+}
+
+html[data-theme="dark"] .app-logout-title {
+  color: #0f172a;
+}
+
+html[data-theme="dark"] .app-logout-copy {
+  color: #64748b;
+}
+
+html[data-theme="dark"] .app-logout-btn--cancel {
+  border-color: rgba(148, 163, 184, 0.2);
+  background: rgba(15, 23, 42, 0.84);
+  color: #e2e8f0;
+  box-shadow: 0 14px 28px rgba(2, 6, 23, 0.26);
+}
+
+html[data-theme="dark"] .app-logout-btn--cancel:hover {
+  border-color: rgba(var(--app-card-accent), 0.32);
+  background: rgba(26, 43, 67, 0.94);
+  color: #f8fafc;
+}
+
+html[data-theme="dark"] .app-logout-btn--cancel:focus-visible {
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18);
+}
+
+html[data-theme="dark"] .app-logout-btn--confirm {
+  border-color: rgba(251, 113, 133, 0.24);
+  background: #e11d48;
+  box-shadow: 0 18px 30px rgba(159, 18, 57, 0.34);
+}
+
+html[data-theme="dark"] .app-logout-btn--confirm:hover {
+  border-color: rgba(251, 113, 133, 0.34);
+  background: #be123c;
+}
+
+@media (max-width: 480px) {
+  .app-logout-actions {
+    flex-direction: column-reverse;
+  }
+
+  .app-logout-btn {
+    width: 100%;
+  }
 }
 
 html.theme-ready *,
