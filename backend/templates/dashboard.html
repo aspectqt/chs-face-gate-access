@@ -15,7 +15,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap"
         rel="stylesheet">
     {% include 'partials/theme_assets.html' %}
-    <script src="{{ url_for('static', filename='enhanced_client_camera.js') }}"></script>
+    <script src="{{ url_for('static', filename='enhanced_client_camera.js', v='20260326c') }}"></script>
     <style>
         :root {
             --dash-card-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
@@ -411,6 +411,50 @@
             box-shadow: 0 20px 48px rgba(15, 23, 42, 0.08);
         }
 
+        .gate-console-header-actions {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+
+        .staff-dashboard-logout {
+            position: fixed;
+            top: 1rem;
+            right: 1.1rem;
+            z-index: 90;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.25rem;
+            flex-shrink: 0;
+            border: none;
+            background: transparent;
+            color: rgb(225 29 72);
+            box-shadow: none;
+            transition: transform 160ms ease, color 160ms ease;
+            line-height: 0;
+        }
+
+        .staff-dashboard-logout:hover {
+            color: rgb(190 24 93);
+            transform: translateY(-1px);
+        }
+
+        .staff-dashboard-logout svg {
+            width: 1.6rem;
+            height: 1.6rem;
+        }
+
+        html[data-theme="dark"] .staff-dashboard-logout {
+            color: rgb(251 113 133);
+        }
+
+        html[data-theme="dark"] .staff-dashboard-logout:hover {
+            color: rgb(253 164 175);
+        }
+
         body.staff-dashboard #gateConsoleCard .gate-console-divider {
             padding-bottom: 1rem;
         }
@@ -491,12 +535,27 @@
                 height: auto;
                 min-height: 18rem;
             }
+
+            .staff-dashboard-logout {
+                top: 0.75rem;
+                right: 0.85rem;
+            }
         }
     </style>
 </head>
 
 <body class="bg-slate-100 min-h-screen min-h-[100svh] w-full overflow-hidden text-slate-800 dashboard-page {% if is_staff_dashboard %}staff-dashboard{% endif %}" data-authenticated="1"
     data-user-theme="{{ current_theme|default('') }}" data-can-manage-alerts="{% if can_manage_alerts %}1{% else %}0{% endif %}" x-data="{ mobileMenuOpen: false }">
+    {% if is_staff_dashboard %}
+    <a id="staffLogoutButton" href="/logout" data-logout-link="1" class="staff-dashboard-logout" aria-label="Log out" title="Log out">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4.5 w-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M10 17l5-5-5-5" />
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 12H3" />
+            <path stroke-linecap="round" stroke-linejoin="round" d="M20 4h-6a2 2 0 00-2 2v2M20 20h-6a2 2 0 01-2-2v-2" />
+        </svg>
+        <span class="sr-only">Logout</span>
+    </a>
+    {% endif %}
     <div class="flex h-full w-full min-w-0">
 
         <div class="{% if is_staff_dashboard %}hidden {% endif %}shrink-0">
@@ -787,9 +846,11 @@
                                         </div>
                                     </div>
                                 </div>
-                                <span id="currentSessionBadge"
-                                    class="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[11px] font-semibold text-emerald-700">Tracking
-                                    Mode: Smart IN/OUT Tracking</span>
+                                <div class="gate-console-header-actions">
+                                    <span id="currentSessionBadge"
+                                        class="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[11px] font-semibold text-emerald-700">Tracking
+                                        Mode: Smart IN/OUT Tracking</span>
+                                </div>
                             </div>
 
                             <div id="gateConsoleLayout" class="mt-6 grid gap-4">
@@ -822,6 +883,7 @@
                                             <div>
                                                 <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Camera / Scanning Area</p>
                                                 <p class="mt-1 text-sm text-slate-500">The activity feed floats inside the camera on the left without blocking the main view.</p>
+                                                <p id="status" class="mt-2 text-sm font-medium text-slate-600">Idle</p>
                                             </div>
                                             <div class="flex items-center gap-2">
                                                 <span id="scanStateBadge"
@@ -2060,7 +2122,7 @@
                 else if (level === 'scanning') statusText.classList.add('text-blue-700');
                 else statusText.classList.add('text-slate-600');
                 if (statusMessage) {
-                    statusText.textContent = statusMessage;
+                    statusText.textContent = String(statusMessage).replace(/^Status:\s*/i, '').trim();
                 }
             }
         }

@@ -8,6 +8,7 @@ import cv2
 import numpy as np
 import face_recognition
 import json
+import os
 import time
 import threading
 from datetime import datetime, timedelta
@@ -19,8 +20,14 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Demo mode for testing without face photos
-DEMO_MODE = True
+# Demo mode can be explicitly enabled for local experiments, but real detection is
+# the default so live scanning uses actual face boxes.
+DEMO_MODE = str(os.getenv("ENHANCED_FACE_PROCESSOR_DEMO_MODE", "0")).strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 DEMO_STUDENTS = [
     {"student_id": "120526180006", "name": "ARADAN, LOUIS MIGUEL SITOY"},
     {"student_id": "120507180005", "name": "AUJERO, IYAN ARDIENTE"}, 
@@ -95,15 +102,12 @@ class EnhancedFaceProcessor:
             client = MongoClient(MONGO_URI)
             db = client[DB_NAME]
             
-            # Get current school year students
-            current_school_year = "2025-2026"
             students_collection = db.get_collection("students")
             
             # Load students with face data
             students = list(students_collection.find({
                 "face_data": {"$exists": True, "$ne": []},
                 "face_registered": True,
-                "school_year": current_school_year
             }))
             
             self.known_encodings = []
@@ -408,6 +412,8 @@ class EnhancedFaceProcessor:
                     'last_height': face['height'],
                     'stability': self.face_tracks[best_track_id].get('stability', 0) + 1
                 }
+                face['track_id'] = best_track_id
+                face['stability'] = updated_tracks[best_track_id]['stability']
             else:
                 # Create new track
                 new_track_id = self.next_track_id
@@ -424,9 +430,13 @@ class EnhancedFaceProcessor:
                     'recognized': False,
                     'student_id': None
                 }
+                face['track_id'] = new_track_id
+                face['stability'] = 1
         
         # Remove old tracks
         for track_id, track_data in self.face_tracks.items():
+            if track_id in updated_tracks:
+                continue
             if current_time - track_data['last_seen'] <= self.track_timeout:
                 updated_tracks[track_id] = track_data
         
@@ -438,9 +448,13 @@ class EnhancedFaceProcessor:
         
         self.face_tracks = updated_tracks
         
-        # Add track IDs to faces
+        # Ensure each face carries its current track metadata.
         for face in faces:
-            face['track_id'] = self.find_track_for_face(face, current_time)
+            if face.get('track_id') is None:
+                face['track_id'] = self.find_track_for_face(face, current_time)
+            track_data = self.face_tracks.get(face.get('track_id'))
+            if track_data:
+                face['stability'] = track_data.get('stability', 1)
     
     def find_track_for_face(self, face, current_time):
         """Find track ID for a face"""

@@ -11,6 +11,7 @@ class EnhancedClientCamera {
         this.canvasContext = null;
         this.overlayCanvas = null;
         this.overlayContext = null;
+        this.ownsOverlayCanvas = false;
         this.isStreaming = false;
         this.onError = null;
         this.onSuccess = null;
@@ -30,6 +31,9 @@ class EnhancedClientCamera {
         this.faceTracker = null;
         this.lastDetectionTime = 0;
         this.detectionInterval = 100; // Detect faces every 100ms
+        this.trackFadeDuration = 450;
+        this.trackSmoothingFactor = 0.42;
+        this.boundUpdateOverlayCanvasSize = this.updateOverlayCanvasSize.bind(this);
         
         // Voice feedback
         this.voiceQueue = [];
@@ -87,19 +91,13 @@ class EnhancedClientCamera {
             await this.optimizeCameraSettings();
 
             // Setup video element
-            this.setupVideoElement();
-
-            // Create overlay canvas for face detection visualization
-            this.createOverlayCanvas();
+            await this.setupVideoElement();
 
             // Initialize face tracking
             this.initializeFaceTracking();
 
             this.isStreaming = true;
             this.triggerSuccess('Enhanced camera initialized successfully');
-            
-            // Start face detection loop
-            this.startFaceDetectionLoop();
             
             return true;
 
@@ -171,31 +169,105 @@ class EnhancedClientCamera {
 
         // Wait for video to be ready
         return new Promise((resolve, reject) => {
-            const onLoadedMetadata = () => {
+            let timeoutId = null;
+            let readinessInterval = null;
+            let metadataHandled = false;
+
+            const cleanup = () => {
                 this.videoElement.removeEventListener('loadedmetadata', onLoadedMetadata);
-                this.videoElement.play().then(resolve).catch(reject);
+                this.videoElement.removeEventListener('loadeddata', onLoadedData);
+                if (timeoutId) {
+                    clearTimeout(timeoutId);
+                    timeoutId = null;
+                }
+                if (readinessInterval) {
+                    clearInterval(readinessInterval);
+                    readinessInterval = null;
+                }
             };
-            
+
+            const finishIfReady = () => {
+                if (this.videoElement.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+                    this.videoElement.videoWidth > 0 &&
+                    this.videoElement.videoHeight > 0) {
+                    cleanup();
+                    resolve();
+                    return true;
+                }
+                return false;
+            };
+
+            const onLoadedData = () => {
+                finishIfReady();
+            };
+
+            const onLoadedMetadata = () => {
+                if (metadataHandled) {
+                    return;
+                }
+                metadataHandled = true;
+                this.videoElement.play()
+                    .then(() => {
+                        if (finishIfReady()) {
+                            return;
+                        }
+                        this.videoElement.addEventListener('loadeddata', onLoadedData);
+                        readinessInterval = setInterval(() => {
+                            finishIfReady();
+                        }, 50);
+                    })
+                    .catch((error) => {
+                        cleanup();
+                        reject(error);
+                    });
+            };
+
             this.videoElement.addEventListener('loadedmetadata', onLoadedMetadata);
-            
+
+            if (this.videoElement.readyState >= HTMLMediaElement.HAVE_METADATA) {
+                onLoadedMetadata();
+            }
+
             // Timeout after 3 seconds (reduced from 5 for faster startup)
-            setTimeout(() => {
-                this.videoElement.removeEventListener('loadedmetadata', onLoadedMetadata);
+            timeoutId = setTimeout(() => {
+                cleanup();
                 reject(new Error('Video initialization timeout'));
             }, 3000);
         });
+    }
+
+    createTimeoutSignal(timeoutMs) {
+        if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+            return {
+                signal: AbortSignal.timeout(timeoutMs),
+                cleanup() {}
+            };
+        }
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+        return {
+            signal: controller.signal,
+            cleanup() {
+                clearTimeout(timeoutId);
+            }
+        };
     }
 
     /**
      * Create overlay canvas for face detection visualization
      */
     createOverlayCanvas() {
-        // Create overlay canvas
-        this.overlayCanvas = document.createElement('canvas');
+        const videoContainer = this.videoElement?.parentElement;
+        const existingOverlay = videoContainer?.querySelector('#cameraOverlay');
+        this.ownsOverlayCanvas = !existingOverlay;
+        this.overlayCanvas = existingOverlay || document.createElement('canvas');
         this.overlayContext = this.overlayCanvas.getContext('2d');
-        
+        if (!this.overlayContext) {
+            throw new Error('Unable to create camera overlay context');
+        }
+
         // Position overlay over video
-        const videoRect = this.videoElement.getBoundingClientRect();
         this.overlayCanvas.style.position = 'absolute';
         this.overlayCanvas.style.top = '0';
         this.overlayCanvas.style.left = '0';
@@ -203,16 +275,20 @@ class EnhancedClientCamera {
         this.overlayCanvas.style.height = '100%';
         this.overlayCanvas.style.pointerEvents = 'none';
         this.overlayCanvas.style.zIndex = '10';
+        this.overlayCanvas.style.transform = this.videoElement.style.transform || 'scaleX(-1)';
+        this.overlayCanvas.style.transformOrigin = 'center center';
         
         // Add overlay to video container
-        const videoContainer = this.videoElement.parentElement;
         if (videoContainer) {
             videoContainer.style.position = 'relative';
-            videoContainer.appendChild(this.overlayCanvas);
+            if (this.ownsOverlayCanvas) {
+                videoContainer.appendChild(this.overlayCanvas);
+            }
         }
         
         // Set canvas size
         this.updateOverlayCanvasSize();
+        window.addEventListener('resize', this.boundUpdateOverlayCanvasSize);
     }
 
     /**
@@ -222,8 +298,15 @@ class EnhancedClientCamera {
         if (!this.overlayCanvas || !this.videoElement) return;
         
         const videoRect = this.videoElement.getBoundingClientRect();
-        this.overlayCanvas.width = videoRect.width;
-        this.overlayCanvas.height = videoRect.height;
+        const width = Math.max(1, Math.round(videoRect.width));
+        const height = Math.max(1, Math.round(videoRect.height));
+
+        if (this.overlayCanvas.width !== width) {
+            this.overlayCanvas.width = width;
+        }
+        if (this.overlayCanvas.height !== height) {
+            this.overlayCanvas.height = height;
+        }
     }
 
     /**
@@ -292,23 +375,33 @@ class EnhancedClientCamera {
         try {
             // Send frame to server for face detection
             const faces = await this.detectFacesInFrame(frame);
+            const detectedFaces = Array.isArray(faces) ? faces : [];
             
-            if (faces && faces.length > 0) {
-                // Update tracked faces
-                this.updateTrackedFaces(faces);
-                
-                // Draw face detection overlay
-                this.drawFaceOverlay(faces);
+            // Update tracked faces and render current overlay state even across short gaps.
+            this.updateTrackedFaces(detectedFaces);
+            this.drawFaceOverlay();
+
+            if (this.onFaceDetected && typeof this.onFaceDetected === 'function') {
+                const visibleFaces = this.getVisibleTrackedFaces();
+                this.onFaceDetected({
+                    count: visibleFaces.length,
+                    faces: visibleFaces.map((trackedFace) => ({
+                        id: trackedFace.id,
+                        trackId: trackedFace.serverTrackId || trackedFace.id,
+                        ...trackedFace.detection
+                    })),
+                    timestamp: Date.now()
+                });
+            }
+
+            if (detectedFaces.length > 0) {
                 
                 // Handle multiple faces
-                if (faces.length > 1) {
-                    this.handleMultipleFaces(faces);
+                if (detectedFaces.length > 1) {
+                    this.handleMultipleFaces(detectedFaces);
                 }
                 
-                this.metrics.facesDetected += faces.length;
-            } else {
-                // Clear overlay if no faces detected
-                this.clearOverlay();
+                this.metrics.facesDetected += detectedFaces.length;
             }
             
         } catch (error) {
@@ -333,11 +426,17 @@ class EnhancedClientCamera {
             const formData = new FormData();
             formData.append('frame', blob, 'frame.jpg');
             
-            const response = await fetch('/detect_faces', {
-                method: 'POST',
-                body: formData,
-                signal: AbortSignal.timeout(1000) // 1 second timeout
-            });
+            const timeout = this.createTimeoutSignal(1000);
+            let response;
+            try {
+                response = await fetch('/detect_faces', {
+                    method: 'POST',
+                    body: formData,
+                    signal: timeout.signal
+                });
+            } finally {
+                timeout.cleanup();
+            }
             
             if (!response.ok) return [];
             
@@ -362,15 +461,27 @@ class EnhancedClientCamera {
         
         // Match detected faces with tracked faces
         for (const detectedFace of detectedFaces) {
+            const serverTrackId = detectedFace.track_id || null;
             let matchedTrack = null;
             let minDistance = Infinity;
+
+            if (serverTrackId) {
+                for (const [trackId, trackedFace] of this.trackedFaces) {
+                    if (trackedFace.serverTrackId === serverTrackId) {
+                        matchedTrack = trackId;
+                        break;
+                    }
+                }
+            }
             
             // Find closest tracked face
-            for (const [trackId, trackedFace] of this.trackedFaces) {
-                const distance = this.calculateFaceDistance(detectedFace, trackedFace);
-                if (distance < minDistance && distance < this.faceTracker.trackingDistance) {
-                    minDistance = distance;
-                    matchedTrack = trackId;
+            if (!matchedTrack) {
+                for (const [trackId, trackedFace] of this.trackedFaces) {
+                    const distance = this.calculateFaceDistance(detectedFace, trackedFace);
+                    if (distance < minDistance && distance < this.faceTracker.trackingDistance) {
+                        minDistance = distance;
+                        matchedTrack = trackId;
+                    }
                 }
             }
             
@@ -380,6 +491,12 @@ class EnhancedClientCamera {
                 trackedFace.lastSeen = now;
                 trackedFace.detection = detectedFace;
                 trackedFace.stabilityCount = (trackedFace.stabilityCount || 0) + 1;
+                trackedFace.serverTrackId = serverTrackId || trackedFace.serverTrackId || null;
+                trackedFace.renderBox = this.interpolateBox(
+                    trackedFace.renderBox || detectedFace,
+                    detectedFace,
+                    this.trackSmoothingFactor
+                );
                 updatedFaces.add(matchedTrack);
             } else {
                 // Create new track
@@ -387,11 +504,13 @@ class EnhancedClientCamera {
                 this.trackedFaces.set(trackId, {
                     id: trackId,
                     detection: detectedFace,
+                    renderBox: { ...detectedFace },
                     firstSeen: now,
                     lastSeen: now,
                     stabilityCount: 1,
                     recognized: false,
-                    studentId: null
+                    studentId: null,
+                    serverTrackId
                 });
                 updatedFaces.add(trackId);
             }
@@ -416,6 +535,39 @@ class EnhancedClientCamera {
         }
     }
 
+    interpolateBox(previousBox, nextBox, factor = 0.4) {
+        const alpha = Math.min(Math.max(factor, 0), 1);
+        return {
+            ...nextBox,
+            x: previousBox.x + (nextBox.x - previousBox.x) * alpha,
+            y: previousBox.y + (nextBox.y - previousBox.y) * alpha,
+            width: previousBox.width + (nextBox.width - previousBox.width) * alpha,
+            height: previousBox.height + (nextBox.height - previousBox.height) * alpha
+        };
+    }
+
+    getVisibleTrackedFaces() {
+        const now = Date.now();
+        return Array.from(this.trackedFaces.values()).filter((trackedFace) => (
+            now - trackedFace.lastSeen <= this.trackFadeDuration
+        ));
+    }
+
+    drawRoundedRect(ctx, x, y, width, height, radius) {
+        const rectRadius = Math.max(0, Math.min(radius, width / 2, height / 2));
+        ctx.beginPath();
+        ctx.moveTo(x + rectRadius, y);
+        ctx.lineTo(x + width - rectRadius, y);
+        ctx.quadraticCurveTo(x + width, y, x + width, y + rectRadius);
+        ctx.lineTo(x + width, y + height - rectRadius);
+        ctx.quadraticCurveTo(x + width, y + height, x + width - rectRadius, y + height);
+        ctx.lineTo(x + rectRadius, y + height);
+        ctx.quadraticCurveTo(x, y + height, x, y + height - rectRadius);
+        ctx.lineTo(x, y + rectRadius);
+        ctx.quadraticCurveTo(x, y, x + rectRadius, y);
+        ctx.closePath();
+    }
+
     /**
      * Calculate distance between two face detections
      */
@@ -438,8 +590,9 @@ class EnhancedClientCamera {
     /**
      * Draw face detection overlay with bounding boxes and names
      */
-    drawFaceOverlay(detectedFaces) {
+    drawFaceOverlay() {
         if (!this.overlayContext) return;
+        this.updateOverlayCanvasSize();
         
         const canvas = this.overlayCanvas;
         const ctx = this.overlayContext;
@@ -452,54 +605,38 @@ class EnhancedClientCamera {
         const scaleY = canvas.height / this.videoElement.videoHeight;
         
         // Draw each tracked face
-        for (const [trackId, trackedFace] of this.trackedFaces) {
-            const face = trackedFace.detection;
+        for (const trackedFace of this.getVisibleTrackedFaces()) {
+            const face = trackedFace.renderBox || trackedFace.detection;
+            if (!face) {
+                continue;
+            }
             
             // Scale face coordinates to overlay size
             const x = face.x * scaleX;
             const y = face.y * scaleY;
             const width = face.width * scaleX;
             const height = face.height * scaleY;
-            
-            // Determine color based on recognition status
-            let color = '#10b981'; // Green for recognized
-            let lineWidth = 3;
-            
-            if (!trackedFace.recognized) {
-                color = '#3b82f6'; // Blue for detected but not recognized
-                lineWidth = 2;
-            }
-            
-            if (trackedFace.stabilityCount < 3) {
-                color = '#f59e0b'; // Amber for unstable tracking
-                lineWidth = 2;
-            }
-            
-            // Draw bounding box
-            ctx.strokeStyle = color;
+            const age = Date.now() - trackedFace.lastSeen;
+            const freshness = age <= 0 ? 1 : Math.max(0.28, 1 - (age / this.trackFadeDuration));
+            const isStable = trackedFace.stabilityCount >= 2;
+            const lineWidth = isStable ? 3 : 2;
+
+            ctx.save();
+            ctx.globalAlpha = freshness;
+
+            // Green minimal tracker ring with subtle fill.
+            this.drawRoundedRect(ctx, x, y, width, height, 16);
+            ctx.fillStyle = 'rgba(16, 185, 129, 0.12)';
+            ctx.fill();
             ctx.lineWidth = lineWidth;
-            ctx.strokeRect(x, y, width, height);
-            
-            // Draw corner accents for better visibility
-            const cornerLength = 15;
-            ctx.beginPath();
-            // Top-left corner
-            ctx.moveTo(x, y + cornerLength);
-            ctx.lineTo(x, y);
-            ctx.lineTo(x + cornerLength, y);
-            // Top-right corner
-            ctx.moveTo(x + width - cornerLength, y);
-            ctx.lineTo(x + width, y);
-            ctx.lineTo(x + width, y + cornerLength);
-            // Bottom-left corner
-            ctx.moveTo(x, y + height - cornerLength);
-            ctx.lineTo(x, y + height);
-            ctx.lineTo(x + cornerLength, y + height);
-            // Bottom-right corner
-            ctx.moveTo(x + width - cornerLength, y + height);
-            ctx.lineTo(x + width, y + height);
-            ctx.lineTo(x + width, y + height - cornerLength);
+            ctx.strokeStyle = isStable ? '#22c55e' : '#34d399';
             ctx.stroke();
+
+            this.drawRoundedRect(ctx, x + 4, y + 4, Math.max(width - 8, 1), Math.max(height - 8, 1), 12);
+            ctx.lineWidth = 1;
+            ctx.strokeStyle = 'rgba(134, 239, 172, 0.6)';
+            ctx.stroke();
+            ctx.restore();
             
             // Draw student name if recognized
             if (trackedFace.recognized && trackedFace.studentName) {
@@ -620,11 +757,17 @@ class EnhancedClientCamera {
             formData.append('face', faceBlob, 'face.jpg');
             formData.append('face_id', face.id || 'unknown');
             
-            const response = await fetch('/recognize_face', {
-                method: 'POST',
-                body: formData,
-                signal: AbortSignal.timeout(2000) // 2 second timeout
-            });
+            const timeout = this.createTimeoutSignal(2000);
+            let response;
+            try {
+                response = await fetch('/recognize_face', {
+                    method: 'POST',
+                    body: formData,
+                    signal: timeout.signal
+                });
+            } finally {
+                timeout.cleanup();
+            }
             
             if (!response.ok) return null;
             
@@ -845,10 +988,17 @@ class EnhancedClientCamera {
                 this.videoElement.pause();
             }
 
-            // Remove overlay canvas
-            if (this.overlayCanvas && this.overlayCanvas.parentElement) {
+            window.removeEventListener('resize', this.boundUpdateOverlayCanvasSize);
+            this.clearOverlay();
+
+            // Remove overlay canvas only if this instance created it
+            if (this.ownsOverlayCanvas && this.overlayCanvas && this.overlayCanvas.parentElement) {
                 this.overlayCanvas.parentElement.removeChild(this.overlayCanvas);
             }
+
+            this.overlayCanvas = null;
+            this.overlayContext = null;
+            this.ownsOverlayCanvas = false;
 
             console.log('[EnhancedCamera] Camera stopped and cleaned up');
 
