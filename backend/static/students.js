@@ -1,6 +1,6 @@
 (() => {
   const STANDARD_FACE_CAPTURE_STEPS = [
-    { key: "front", label: "Center", instruction: "Look straight at the camera.", targetYaw: 0, yawTolerance: 0.09, targetPitch: 0, pitchTolerance: 0.12, minScore: 0.72 },
+    { key: "front", label: "Front", instruction: "Look straight at the camera.", targetYaw: 0, yawTolerance: 0.09, targetPitch: 0, pitchTolerance: 0.12, minScore: 0.72 },
     { key: "left_soft", label: "Soft Left", instruction: "Turn slightly to your left.", targetYaw: 0.12, yawTolerance: 0.08, targetPitch: 0, pitchTolerance: 0.16, minScore: 0.7 },
     { key: "left", label: "Left", instruction: "Turn farther to your left.", targetYaw: 0.24, yawTolerance: 0.09, targetPitch: 0, pitchTolerance: 0.17, minScore: 0.72 },
     { key: "right_soft", label: "Soft Right", instruction: "Turn slightly to your right.", targetYaw: -0.12, yawTolerance: 0.08, targetPitch: 0, pitchTolerance: 0.16, minScore: 0.7 },
@@ -45,18 +45,31 @@
     aligned: "h-[72%] w-[48%] rounded-[999px] border-2 border-emerald-400 shadow-[0_0_0_999px_rgba(2,6,23,0.54),0_0_24px_rgba(52,211,153,0.3)] transition-all duration-300",
     warning: "h-[72%] w-[48%] rounded-[999px] border-2 border-amber-300 shadow-[0_0_0_999px_rgba(2,6,23,0.6)] transition-all duration-300",
   };
-  const FACE_CAPTURE_BRIGHTNESS_MIN = 24;
-  const FACE_CAPTURE_BRIGHTNESS_MAX = 238;
-  const FACE_CAPTURE_CONTRAST_MIN = 12;
-  const FACE_CAPTURE_SHARPNESS_MIN = 6;
+  const FACE_CAPTURE_BRIGHTNESS_MIN = 20;
+  const FACE_CAPTURE_BRIGHTNESS_MAX = 244;
+  const FACE_CAPTURE_CONTRAST_MIN = 8.5;
+  const FACE_CAPTURE_SHARPNESS_MIN = 5.5;
   const FACE_CAPTURE_MIN_HAMMING_DISTANCE = 4;
-  const FACE_CAPTURE_STABLE_FRAME_TARGET = 2;
-  const FACE_CAPTURE_SOFT_FRAME_TARGET = 4;
+  const FACE_CAPTURE_DETECTION_MAX_WIDTH = 640;
+  const FACE_CAPTURE_TRANSITION_POSE_DELTA = 0.022;
+  const FACE_CAPTURE_GUIDE_PADDING = 1.08;
+  const FACE_CAPTURE_GUIDE_CORE_PADDING = 1.01;
+  const FACE_CAPTURE_GUIDE_MIN_POINTS = 4;
+  const FACE_CAPTURE_GUIDE_MIN_BOUNDARY_POINTS = 2;
+  const FACE_CAPTURE_GUIDE_MIN_FACE_HEIGHT_RATIO = 0.22;
+  const FACE_CAPTURE_GUIDE_MAX_FACE_HEIGHT_RATIO = 1.24;
+  const FACE_CAPTURE_GUIDE_MIN_FACE_WIDTH_RATIO = 0.19;
+  const FACE_CAPTURE_GUIDE_MAX_FACE_WIDTH_RATIO = 1.08;
+  const FACE_CAPTURE_STABLE_FRAME_TARGET = 1;
+  const FACE_CAPTURE_SOFT_FRAME_TARGET = 2;
   const FACE_CAPTURE_DUPLICATE_POSE_DELTA = 0.055;
-  const FACE_CAPTURE_RETRY_COOLDOWN_MS = 240;
-  const FACE_CAPTURE_SUCCESS_COOLDOWN_MS = 420;
-  const FACE_CAPTURE_LOCKED_HOLD_MS = 120;
-  const FACE_CAPTURE_SOFT_HOLD_MS = 220;
+  const FACE_CAPTURE_SOFT_SCORE_DELTA = 0.28;
+  const FACE_CAPTURE_RETRY_COOLDOWN_MS = 70;
+  const FACE_CAPTURE_SUCCESS_COOLDOWN_MS = 120;
+  const FACE_CAPTURE_LOCKED_HOLD_MS = 35;
+  const FACE_CAPTURE_SOFT_HOLD_MS = 75;
+  const FACE_CAPTURE_MISSED_FRAME_TOLERANCE = 2;
+  const FACE_CAPTURE_STATUS_HOLD_MS = 280;
   const SECTION_STATS_EMPTY_NOTE = "Select a year level and section to view detailed gender statistics.";
   const REENROLL_ASSIGNMENT_NEW_SECTION_VALUE = "__new_section__";
 
@@ -79,22 +92,41 @@
     modalStack: [],
     lastFocus: null,
     deleteTarget: { id: "", label: "" },
+    exportPdf: {
+      scope: "grade",
+      grade: "",
+      sectionGrade: "",
+      section: "",
+      studentQuery: "",
+      selectedStudent: null,
+      studentResults: [],
+      studentLoading: false,
+      studentSearchToken: 0,
+    },
     face: {
       studentId: "",
       mode: "register",
       captureProfile: "standard",
       captures: [],
       captureMeta: [],
+      invalidIndices: [],
+      invalidCaptureDetails: {},
+      submitting: false,
       stream: null,
       mesh: null,
       lastResults: null,
       rafId: null,
+      rafMode: "",
       processing: false,
+      captureInFlight: false,
       alignFrames: 0,
       cooldownUntil: 0,
       started: false,
       stableSince: 0,
       stableMode: "",
+      missedFrames: 0,
+      statusLockUntil: 0,
+      statusLockMessage: "",
     },
     requests: {
       students: null,
@@ -154,6 +186,23 @@
     toastDetails: document.getElementById("toastDetails"),
     toastCloseBtn: document.getElementById("toastCloseBtn"),
     studentsExportBtn: document.getElementById("studentsExportBtn"),
+    studentsExportModal: document.getElementById("studentsExportModal"),
+    studentsExportScopeGrade: document.getElementById("studentsExportScopeGrade"),
+    studentsExportScopeSection: document.getElementById("studentsExportScopeSection"),
+    studentsExportScopeStudent: document.getElementById("studentsExportScopeStudent"),
+    studentsExportGradeFields: document.getElementById("studentsExportGradeFields"),
+    studentsExportGradeLevel: document.getElementById("studentsExportGradeLevel"),
+    studentsExportSectionFields: document.getElementById("studentsExportSectionFields"),
+    studentsExportSectionGrade: document.getElementById("studentsExportSectionGrade"),
+    studentsExportSection: document.getElementById("studentsExportSection"),
+    studentsExportStudentFields: document.getElementById("studentsExportStudentFields"),
+    studentsExportStudentSearch: document.getElementById("studentsExportStudentSearch"),
+    studentsExportStudentHint: document.getElementById("studentsExportStudentHint"),
+    studentsExportStudentSelected: document.getElementById("studentsExportStudentSelected"),
+    studentsExportStudentResults: document.getElementById("studentsExportStudentResults"),
+    studentsExportSummary: document.getElementById("studentsExportSummary"),
+    studentsExportDownloadBtn: document.getElementById("studentsExportDownloadBtn"),
+    studentsExportPrintBtn: document.getElementById("studentsExportPrintBtn"),
     schoolYearSelect: document.getElementById("schoolYearSelect"),
     schoolYearHint: document.getElementById("schoolYearHint"),
     schoolYearModeBadge: document.getElementById("schoolYearModeBadge"),
@@ -1304,7 +1353,11 @@
     const response = await fetch(url, config);
     const data = await response.json().catch(() => ({}));
     if (!response.ok || data.status !== "ok") {
-      throw new Error(data.message || "Request failed.");
+      const error = new Error(data.message || "Request failed.");
+      error.data = data;
+      error.status = response.status;
+      error.field = data.field || "";
+      throw error;
     }
     return data;
   };
@@ -1319,34 +1372,258 @@
     }
   };
 
-  const updateStudentsExportLink = () => {
-    if (!refs.studentsExportBtn) return;
-    const params = new URLSearchParams();
-    appendSelectedSchoolYearParam(params);
-    if (state.filters.q) params.set("q", state.filters.q);
-    if (state.filters.grade) params.set("grade", state.filters.grade);
-    if (state.filters.section) params.set("section", state.filters.section);
-    if (state.filters.faceStatus) params.set("face_status", state.filters.faceStatus);
-    const query = params.toString();
-    const url = query ? `/students/export_pdf?${query}` : "/students/export_pdf";
-    const printUrl = buildInlinePdfUrl(url);
+  const getStudentsExportSectionsForGrade = (gradeValue) => {
+    const key = gradeKey(gradeValue);
+    return key && Array.isArray(state.sectionsByGrade[key]) ? state.sectionsByGrade[key] : [];
+  };
 
-    if (refs.studentsExportBtn.dataset) {
-      refs.studentsExportBtn.dataset.downloadUrl = url;
-      refs.studentsExportBtn.dataset.printUrl = printUrl;
+  const clearStudentsExportStudentSelection = () => {
+    state.exportPdf.selectedStudent = null;
+  };
+
+  const setStudentsExportStudentSelection = (student) => {
+    if (!student || !student._id) {
+      clearStudentsExportStudentSelection();
+      return;
+    }
+    state.exportPdf.selectedStudent = {
+      _id: String(student._id || "").trim(),
+      student_id: String(student.student_id || student.lrn || "").trim(),
+      lrn: String(student.lrn || student.student_id || "").trim(),
+      name: String(student.name || "").trim(),
+      grade_level: String(student.grade_level || student.grade || "").trim(),
+      section: String(student.section || "").trim(),
+    };
+    state.exportPdf.studentQuery = state.exportPdf.selectedStudent.name
+      ? `${state.exportPdf.selectedStudent.name} (${state.exportPdf.selectedStudent.student_id || state.exportPdf.selectedStudent.lrn || "No ID"})`
+      : (state.exportPdf.selectedStudent.student_id || state.exportPdf.selectedStudent.lrn || "");
+    if (refs.studentsExportStudentSearch) refs.studentsExportStudentSearch.value = state.exportPdf.studentQuery;
+  };
+
+  const renderStudentsExportSectionOptions = () => {
+    if (!refs.studentsExportSection) return;
+    const sections = getStudentsExportSectionsForGrade(state.exportPdf.sectionGrade);
+    const currentValue = String(state.exportPdf.section || "").trim();
+    if (currentValue && !sections.includes(currentValue)) {
+      state.exportPdf.section = "";
     }
 
-    const downloadLink = refs.studentsExportBtn.querySelector("[data-pdf-download-link]");
-    if (downloadLink) {
-      downloadLink.href = url;
-      if (downloadLink.dataset) {
-        downloadLink.dataset.downloadUrl = url;
+    const options = ['<option value="">Select Section</option>'];
+    sections.forEach((section) => {
+      const selected = state.exportPdf.section === section ? " selected" : "";
+      options.push(`<option value="${esc(section)}"${selected}>${esc(section)}</option>`);
+    });
+    refs.studentsExportSection.innerHTML = options.join("");
+    refs.studentsExportSection.disabled = sections.length === 0;
+  };
+
+  const renderStudentsExportStudentSelection = () => {
+    if (!refs.studentsExportStudentSelected) return;
+    const student = state.exportPdf.selectedStudent;
+    if (!student || !student._id) {
+      refs.studentsExportStudentSelected.classList.add("hidden");
+      refs.studentsExportStudentSelected.innerHTML = "";
+      return;
+    }
+    refs.studentsExportStudentSelected.classList.remove("hidden");
+    refs.studentsExportStudentSelected.innerHTML = `
+      <div class="flex items-start justify-between gap-3">
+        <div class="min-w-0">
+          <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Selected Student</p>
+          <p class="mt-1 text-sm font-semibold text-slate-900">${esc(student.name || student.student_id || "Selected student")}</p>
+          <p class="mt-1 text-xs text-slate-500">${esc(student.student_id || student.lrn || "No ID")} | ${esc(student.grade_level || "No Grade")} | ${esc(student.section || "No Section")}</p>
+        </div>
+        <button type="button" id="studentsExportClearStudentBtn" class="inline-flex h-8 shrink-0 items-center justify-center rounded-lg border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:bg-slate-100">
+          Change
+        </button>
+      </div>`;
+  };
+
+  const renderStudentsExportStudentResults = () => {
+    if (!refs.studentsExportStudentResults) return;
+    const query = String(state.exportPdf.studentQuery || "").trim();
+    if (state.exportPdf.selectedStudent?._id) {
+      refs.studentsExportStudentResults.innerHTML = "";
+      return;
+    }
+    if (state.exportPdf.studentLoading) {
+      refs.studentsExportStudentResults.innerHTML = '<div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-500">Searching students...</div>';
+      return;
+    }
+    if (query.length < 2) {
+      refs.studentsExportStudentResults.innerHTML = "";
+      return;
+    }
+    if (!state.exportPdf.studentResults.length) {
+      refs.studentsExportStudentResults.innerHTML = '<div class="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-sm text-slate-500">No matching students found.</div>';
+      return;
+    }
+
+    refs.studentsExportStudentResults.innerHTML = state.exportPdf.studentResults.map((student) => `
+      <button type="button" class="students-export-student-result flex w-full items-start justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-slate-400 hover:bg-slate-50" data-student-id="${esc(student._id)}">
+        <div class="min-w-0">
+          <p class="text-sm font-semibold text-slate-900">${esc(student.name || student.student_id || "Unnamed student")}</p>
+          <p class="mt-1 text-xs text-slate-500">${esc(student.student_id || student.lrn || "No ID")} | ${esc(student.grade_level || "No Grade")} | ${esc(student.section || "No Section")}</p>
+        </div>
+        <span class="shrink-0 rounded-full border border-slate-200 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-600">Select</span>
+      </button>`).join("");
+  };
+
+  const getStudentsExportValidationMessage = () => {
+    const scope = String(state.exportPdf.scope || "grade").trim();
+    if (scope === "grade") {
+      return state.exportPdf.grade ? "" : "Select a grade level to continue.";
+    }
+    if (scope === "section") {
+      if (!state.exportPdf.sectionGrade) return "Select a grade level for the section export.";
+      return state.exportPdf.section ? "" : "Select a section to continue.";
+    }
+    if (scope === "student") {
+      return state.exportPdf.selectedStudent?._id ? "" : "Search and select one student to continue.";
+    }
+    return "Choose a valid export type.";
+  };
+
+  const buildStudentsExportRequestUrl = ({ inline = false } = {}) => {
+    const validationMessage = getStudentsExportValidationMessage();
+    if (validationMessage) return "";
+
+    const params = new URLSearchParams();
+    const exportBaseUrl = String(refs.studentsExportBtn?.dataset.exportUrlBase || "/students/export_pdf").trim() || "/students/export_pdf";
+    appendSelectedSchoolYearParam(params);
+    params.set("scope", String(state.exportPdf.scope || "grade").trim());
+
+    if (state.exportPdf.scope === "grade") {
+      params.set("grade", state.exportPdf.grade);
+    } else if (state.exportPdf.scope === "section") {
+      params.set("grade", state.exportPdf.sectionGrade);
+      params.set("section", state.exportPdf.section);
+    } else if (state.exportPdf.scope === "student") {
+      params.set("student_record_id", state.exportPdf.selectedStudent._id);
+      if (state.exportPdf.selectedStudent.student_id) params.set("student_id", state.exportPdf.selectedStudent.student_id);
+    }
+
+    const url = `${exportBaseUrl}?${params.toString()}`;
+    return inline ? buildInlinePdfUrl(url) : url;
+  };
+
+  const getStudentsExportSummaryText = () => {
+    const scope = String(state.exportPdf.scope || "grade").trim();
+    const validationMessage = getStudentsExportValidationMessage();
+    if (validationMessage) return validationMessage;
+    if (scope === "grade") {
+      return `Export all student records for ${state.exportPdf.grade}.`;
+    }
+    if (scope === "section") {
+      return `Export all student records for ${state.exportPdf.sectionGrade} - ${state.exportPdf.section}.`;
+    }
+    const student = state.exportPdf.selectedStudent;
+    return `Export the individual student record for ${student?.name || student?.student_id || "the selected student"}.`;
+  };
+
+  const updateStudentsExportLink = () => {
+    renderStudentsExportSectionOptions();
+    renderStudentsExportStudentSelection();
+    renderStudentsExportStudentResults();
+
+    const scope = String(state.exportPdf.scope || "grade").trim();
+    if (refs.studentsExportScopeGrade) refs.studentsExportScopeGrade.checked = scope === "grade";
+    if (refs.studentsExportScopeSection) refs.studentsExportScopeSection.checked = scope === "section";
+    if (refs.studentsExportScopeStudent) refs.studentsExportScopeStudent.checked = scope === "student";
+    if (refs.studentsExportGradeFields) refs.studentsExportGradeFields.classList.toggle("hidden", scope !== "grade");
+    if (refs.studentsExportSectionFields) refs.studentsExportSectionFields.classList.toggle("hidden", scope !== "section");
+    if (refs.studentsExportStudentFields) refs.studentsExportStudentFields.classList.toggle("hidden", scope !== "student");
+
+    if (refs.studentsExportGradeLevel) refs.studentsExportGradeLevel.value = state.exportPdf.grade || "";
+    if (refs.studentsExportSectionGrade) refs.studentsExportSectionGrade.value = state.exportPdf.sectionGrade || "";
+    if (refs.studentsExportStudentSearch && document.activeElement !== refs.studentsExportStudentSearch) {
+      refs.studentsExportStudentSearch.value = state.exportPdf.studentQuery || "";
+    }
+
+    const validationMessage = getStudentsExportValidationMessage();
+    const downloadUrl = buildStudentsExportRequestUrl();
+    const printUrl = buildStudentsExportRequestUrl({ inline: true });
+
+    if (refs.studentsExportSummary) refs.studentsExportSummary.textContent = getStudentsExportSummaryText();
+    if (refs.studentsExportDownloadBtn) {
+      refs.studentsExportDownloadBtn.disabled = Boolean(validationMessage);
+      refs.studentsExportDownloadBtn.dataset.downloadUrl = downloadUrl;
+    }
+    if (refs.studentsExportPrintBtn) {
+      refs.studentsExportPrintBtn.disabled = Boolean(validationMessage);
+      refs.studentsExportPrintBtn.dataset.printUrl = printUrl;
+    }
+    if (refs.studentsExportStudentHint) {
+      refs.studentsExportStudentHint.textContent = scope === "student"
+        ? (state.exportPdf.selectedStudent?._id
+          ? "Selected student is ready for export."
+          : "Type at least 2 characters to search for a student in the selected school year.")
+        : "Choose a valid export scope to enable the PDF actions.";
+    }
+  };
+
+  const syncStudentsExportDefaults = () => {
+    const activeSection = getActiveSectionSelection();
+    const activeGradeLabel = String(state.filters.grade || (activeSection.gradeKey ? gradeLabel(activeSection.gradeKey) : "")).trim();
+    const activeSectionValue = String(state.filters.section || activeSection.section || "").trim();
+
+    if (!["grade", "section", "student"].includes(String(state.exportPdf.scope || "").trim())) {
+      state.exportPdf.scope = "grade";
+    }
+    if (!state.exportPdf.grade) state.exportPdf.grade = activeGradeLabel;
+    if (!state.exportPdf.sectionGrade) state.exportPdf.sectionGrade = activeGradeLabel;
+    if (!state.exportPdf.section) state.exportPdf.section = activeSectionValue;
+  };
+
+  const loadStudentsExportSearchResults = async (queryText) => {
+    const query = String(queryText || "").trim();
+    const requestToken = state.exportPdf.studentSearchToken + 1;
+    state.exportPdf.studentSearchToken = requestToken;
+
+    if (query.length < 2) {
+      state.exportPdf.studentLoading = false;
+      state.exportPdf.studentResults = [];
+      renderStudentsExportStudentResults();
+      updateStudentsExportLink();
+      return;
+    }
+
+    state.exportPdf.studentLoading = true;
+    renderStudentsExportStudentResults();
+
+    try {
+      const params = new URLSearchParams();
+      params.set("q", query);
+      params.set("page", "1");
+      params.set("limit", "20");
+      appendSelectedSchoolYearParam(params);
+      const data = await api(`/api/students?${params.toString()}`);
+      if (requestToken !== state.exportPdf.studentSearchToken) return;
+      state.exportPdf.studentResults = Array.isArray(data.students) ? data.students : [];
+    } catch (error) {
+      if (requestToken !== state.exportPdf.studentSearchToken) return;
+      state.exportPdf.studentResults = [];
+      showToast(error.message, true);
+    } finally {
+      if (requestToken === state.exportPdf.studentSearchToken) {
+        state.exportPdf.studentLoading = false;
+        renderStudentsExportStudentResults();
+        updateStudentsExportLink();
       }
     }
+  };
 
-    const printButton = refs.studentsExportBtn.querySelector("[data-pdf-print-button]");
-    if (printButton && printButton.dataset) {
-      printButton.dataset.printUrl = printUrl;
+  const openStudentsExportModal = async () => {
+    syncStudentsExportDefaults();
+    renderStudentsExportSectionOptions();
+    updateStudentsExportLink();
+    showModal("studentsExportModal");
+    if (state.exportPdf.scope === "grade" && refs.studentsExportGradeLevel) {
+      refs.studentsExportGradeLevel.focus();
+    } else if (state.exportPdf.scope === "section" && refs.studentsExportSectionGrade) {
+      refs.studentsExportSectionGrade.focus();
+    } else if (refs.studentsExportStudentSearch) {
+      refs.studentsExportStudentSearch.focus();
     }
   };
 
@@ -1617,6 +1894,7 @@
         state.sectionsByGrade = data.sections_by_grade || {};
         syncSectionSelectionState();
         renderSections();
+        updateStudentsExportLink();
         renderAddSectionAssignments();
         renderReenrollCandidates();
       } catch (error) {
@@ -1905,7 +2183,45 @@
 
   const getFaceCaptureProfileConfig = () => FACE_CAPTURE_PROFILES[normalizeFaceCaptureProfile(state.face.captureProfile)] || FACE_CAPTURE_PROFILES.standard;
   const getFaceCaptureSteps = () => getFaceCaptureProfileConfig().steps;
-  const getCurrentFaceStep = () => getFaceCaptureSteps()[state.face.captures.length] || null;
+  const getCompletedFaceCaptureCount = () => state.face.captures.reduce((count, capture) => (capture ? count + 1 : count), 0);
+  const getCurrentFaceStepIndex = () => {
+    const steps = getFaceCaptureSteps();
+    for (let index = 0; index < steps.length; index += 1) {
+      if (!state.face.captures[index]) return index;
+    }
+    return -1;
+  };
+  const getCurrentFaceStep = () => {
+    const steps = getFaceCaptureSteps();
+    const index = getCurrentFaceStepIndex();
+    return index >= 0 ? steps[index] : null;
+  };
+  const getPreviousFaceCaptureMeta = (fromIndex) => {
+    const startIndex = Math.min(Number(fromIndex || 0) - 1, state.face.captureMeta.length - 1);
+    for (let index = startIndex; index >= 0; index -= 1) {
+      if (state.face.captures[index] && state.face.captureMeta[index]) {
+        return state.face.captureMeta[index];
+      }
+    }
+    return null;
+  };
+  const normalizeFaceCaptureIndices = (indices, maxCount) => {
+    if (!Array.isArray(indices)) return [];
+    const seen = new Set();
+    const normalized = [];
+    indices.forEach((value) => {
+      const index = Number.parseInt(value, 10);
+      if (!Number.isInteger(index) || index < 0 || index >= maxCount || seen.has(index)) return;
+      seen.add(index);
+      normalized.push(index);
+    });
+    normalized.sort((left, right) => left - right);
+    return normalized;
+  };
+  const describeInvalidFaceCapture = (reason) => {
+    if (reason === "duplicate") return "Too similar to another accepted angle.";
+    return "This angle failed server validation. Retake it with a clearer face view.";
+  };
 
   const setGuideRingState = (stateKey = "idle") => {
     const ring = document.getElementById("faceGuideRing");
@@ -1952,21 +2268,60 @@
     return (dx * dx) + (dy * dy) <= 1;
   };
 
-  const isFaceInsideGuide = (landmarks, width, height) => {
+  const analyzeFaceGuideFit = (landmarks, width, height) => {
     const guide = getGuideMetrics(width, height);
     const bounds = getFaceBounds(landmarks, width, height);
     const keyPoints = [1, 10, 152, 234, 454, 33, 263].map((index) => ({
       x: landmarks[index].x * width,
       y: landmarks[index].y * height,
     }));
-
-    if (!keyPoints.every((point) => pointInsideGuide(point, guide))) {
-      return false;
-    }
+    const boundaryPoints = [keyPoints[1], keyPoints[2], keyPoints[3], keyPoints[4]];
+    const corePoints = [keyPoints[0], keyPoints[5], keyPoints[6]];
+    const centerInside = pointInsideGuide({ x: bounds.centerX, y: bounds.centerY }, guide, FACE_CAPTURE_GUIDE_PADDING);
+    const insideCount = keyPoints.filter((point) => pointInsideGuide(point, guide, FACE_CAPTURE_GUIDE_PADDING)).length;
+    const boundaryInsideCount = boundaryPoints.filter((point) => pointInsideGuide(point, guide, FACE_CAPTURE_GUIDE_PADDING)).length;
+    const coreInsideCount = corePoints.filter((point) => pointInsideGuide(point, guide, FACE_CAPTURE_GUIDE_CORE_PADDING)).length;
 
     const faceHeightRatio = bounds.height / (guide.ry * 2);
     const faceWidthRatio = bounds.width / (guide.rx * 2);
-    return faceHeightRatio >= 0.42 && faceHeightRatio <= 1.02 && faceWidthRatio >= 0.34 && faceWidthRatio <= 0.94;
+    const visibleRatio = insideCount / Math.max(1, keyPoints.length);
+    const boundaryRatio = boundaryInsideCount / Math.max(1, boundaryPoints.length);
+    const sizeOk = faceHeightRatio >= FACE_CAPTURE_GUIDE_MIN_FACE_HEIGHT_RATIO
+      && faceHeightRatio <= FACE_CAPTURE_GUIDE_MAX_FACE_HEIGHT_RATIO
+      && faceWidthRatio >= FACE_CAPTURE_GUIDE_MIN_FACE_WIDTH_RATIO
+      && faceWidthRatio <= FACE_CAPTURE_GUIDE_MAX_FACE_WIDTH_RATIO;
+    const inside = sizeOk
+      && centerInside
+      && insideCount >= FACE_CAPTURE_GUIDE_MIN_POINTS
+      && boundaryInsideCount >= FACE_CAPTURE_GUIDE_MIN_BOUNDARY_POINTS
+      && visibleRatio >= 0.57
+      && boundaryRatio >= 0.5
+      && coreInsideCount >= 1;
+
+    let reason = "Keep the face inside the oval guide.";
+    if (faceHeightRatio < FACE_CAPTURE_GUIDE_MIN_FACE_HEIGHT_RATIO || faceWidthRatio < FACE_CAPTURE_GUIDE_MIN_FACE_WIDTH_RATIO) {
+      reason = "Move a little closer so the face fills the oval guide.";
+    } else if (faceHeightRatio > FACE_CAPTURE_GUIDE_MAX_FACE_HEIGHT_RATIO || faceWidthRatio > FACE_CAPTURE_GUIDE_MAX_FACE_WIDTH_RATIO) {
+      reason = "Move slightly back so the full face stays inside the oval guide.";
+    } else if (!centerInside) {
+      reason = "Keep your face roughly centered inside the oval guide.";
+    } else if (insideCount < FACE_CAPTURE_GUIDE_MIN_POINTS || boundaryInsideCount < FACE_CAPTURE_GUIDE_MIN_BOUNDARY_POINTS) {
+      reason = "Keep more of the face visible inside the oval guide.";
+    }
+
+    return {
+      inside,
+      reason,
+      bounds,
+      centerInside,
+      insideCount,
+      boundaryInsideCount,
+      coreInsideCount,
+      visibleRatio,
+      boundaryRatio,
+      faceHeightRatio,
+      faceWidthRatio,
+    };
   };
 
   const calculateFacePose = (landmarks) => {
@@ -2018,6 +2373,38 @@
     setGuideRingState(stateKey);
   };
 
+  const clearFaceStatusLock = () => {
+    state.face.statusLockUntil = 0;
+    state.face.statusLockMessage = "";
+  };
+
+  const setFaceStatus = (message, { holdMs = 0 } = {}) => {
+    if (refs.faceStatus) refs.faceStatus.textContent = message;
+    if (holdMs > 0) {
+      state.face.statusLockUntil = Date.now() + holdMs;
+      state.face.statusLockMessage = message;
+    } else {
+      clearFaceStatusLock();
+    }
+  };
+
+  const getLockedFaceStatus = () => {
+    if (state.face.statusLockUntil && Date.now() < state.face.statusLockUntil) {
+      return state.face.statusLockMessage;
+    }
+    if (state.face.statusLockUntil) {
+      clearFaceStatusLock();
+    }
+    return "";
+  };
+
+  const resetFaceAlignmentState = ({ clearMisses = true } = {}) => {
+    state.face.alignFrames = 0;
+    state.face.stableSince = 0;
+    state.face.stableMode = "";
+    if (clearMisses) state.face.missedFrames = 0;
+  };
+
   const buildCaptureFingerprint = (canvas) => {
     const fingerprintCanvas = document.createElement("canvas");
     fingerprintCanvas.width = 8;
@@ -2059,6 +2446,26 @@
     return canvas;
   };
 
+  const buildFaceDetectionFrame = (video) => {
+    const width = Number(video?.videoWidth || 0);
+    const height = Number(video?.videoHeight || 0);
+    if (!width || !height || !refs.faceCaptureCanvas) {
+      return video;
+    }
+
+    const targetWidth = Math.min(width, FACE_CAPTURE_DETECTION_MAX_WIDTH);
+    const targetHeight = Math.max(1, Math.round((height / width) * targetWidth));
+    if (refs.faceCaptureCanvas.width !== targetWidth) refs.faceCaptureCanvas.width = targetWidth;
+    if (refs.faceCaptureCanvas.height !== targetHeight) refs.faceCaptureCanvas.height = targetHeight;
+
+    const context = refs.faceCaptureCanvas.getContext("2d", { alpha: false, willReadFrequently: false });
+    if (!context) {
+      return video;
+    }
+    context.drawImage(video, 0, 0, targetWidth, targetHeight);
+    return refs.faceCaptureCanvas;
+  };
+
   const analyzeCaptureQuality = (canvas) => {
     const context = canvas.getContext("2d");
     const width = canvas.width;
@@ -2091,58 +2498,71 @@
     }
     const sharpness = sharpnessCount ? sharpnessTotal / sharpnessCount : 0;
 
+    let reason = "";
     if (brightness < FACE_CAPTURE_BRIGHTNESS_MIN && contrast < FACE_CAPTURE_CONTRAST_MIN * 1.6) {
-      return { ok: false, reason: "Increase lighting before capturing the next angle.", brightness, contrast, sharpness };
+      reason = "Increase lighting before capturing the next angle.";
+    } else if (brightness > FACE_CAPTURE_BRIGHTNESS_MAX && contrast < FACE_CAPTURE_CONTRAST_MIN * 1.4) {
+      reason = "Reduce glare or strong backlight before capturing.";
+    } else if (contrast < FACE_CAPTURE_CONTRAST_MIN) {
+      reason = "Add more contrast so the face is easier to separate from the background.";
+    } else if (sharpness < FACE_CAPTURE_SHARPNESS_MIN) {
+      reason = "Hold still for a sharper capture.";
     }
-    if (brightness > FACE_CAPTURE_BRIGHTNESS_MAX && contrast < FACE_CAPTURE_CONTRAST_MIN * 1.4) {
-      return { ok: false, reason: "Reduce glare or strong backlight before capturing.", brightness, contrast, sharpness };
+
+    if (!reason) {
+      return { ok: true, blocking: false, brightness, contrast, sharpness };
     }
-    if (contrast < FACE_CAPTURE_CONTRAST_MIN) {
-      return { ok: false, reason: "Add more contrast so the face is easier to separate from the background.", brightness, contrast, sharpness };
-    }
-    if (sharpness < FACE_CAPTURE_SHARPNESS_MIN) {
-      return { ok: false, reason: "Hold still for a sharper capture.", brightness, contrast, sharpness };
-    }
-    return { ok: true, brightness, contrast, sharpness };
+
+    const blocking = brightness < FACE_CAPTURE_BRIGHTNESS_MIN * 0.5
+      || brightness > FACE_CAPTURE_BRIGHTNESS_MAX * 1.03
+      || contrast < FACE_CAPTURE_CONTRAST_MIN * 0.46
+      || sharpness < FACE_CAPTURE_SHARPNESS_MIN * 0.24;
+    return { ok: false, blocking, reason, brightness, contrast, sharpness };
   };
 
   const renderFaceState = () => {
     const profile = getFaceCaptureProfileConfig();
     const steps = profile.steps;
-    const completedCount = state.face.captures.length;
+    const completedCount = getCompletedFaceCaptureCount();
+    const currentStepIndex = getCurrentFaceStepIndex();
     const registrationComplete = completedCount >= steps.length;
 
     if (refs.captureProgressText) refs.captureProgressText.textContent = `${completedCount} / ${steps.length} captures`;
-    if (refs.submitFaceBtn) refs.submitFaceBtn.disabled = completedCount < steps.length;
+    if (refs.submitFaceBtn) {
+      refs.submitFaceBtn.disabled = completedCount < steps.length || state.face.submitting;
+      refs.submitFaceBtn.textContent = state.face.submitting ? "Saving..." : "Save Face Registration";
+    }
     if (refs.faceCaptureTarget) refs.faceCaptureTarget.textContent = profile.badgeText;
 
     if (refs.startCaptureBtn) {
-      refs.startCaptureBtn.disabled = state.face.started || registrationComplete;
+      refs.startCaptureBtn.disabled = state.face.started || registrationComplete || state.face.submitting;
       refs.startCaptureBtn.textContent = registrationComplete ? "Registration Complete" : "Start Registration";
     }
 
     if (refs.resetCaptureBtn) {
-      refs.resetCaptureBtn.disabled = !state.face.started && completedCount === 0;
+      refs.resetCaptureBtn.disabled = state.face.submitting || (!state.face.started && completedCount === 0);
     }
 
     if (refs.faceCaptureProfileStandard) {
       refs.faceCaptureProfileStandard.checked = profile.key === "standard";
-      refs.faceCaptureProfileStandard.disabled = state.face.started || completedCount > 0;
+      refs.faceCaptureProfileStandard.disabled = state.face.started || completedCount > 0 || state.face.submitting;
     }
     if (refs.faceCaptureProfileSimilar) {
       refs.faceCaptureProfileSimilar.checked = profile.key === "similar_faces";
-      refs.faceCaptureProfileSimilar.disabled = state.face.started || completedCount > 0;
+      refs.faceCaptureProfileSimilar.disabled = state.face.started || completedCount > 0 || state.face.submitting;
     }
 
     if (refs.stepTags) {
       refs.stepTags.innerHTML = steps.map((step, index) => {
         let toneClass = "border-slate-200 bg-slate-50 text-slate-500";
-        if (index < completedCount) toneClass = "border-emerald-200 bg-emerald-50 text-emerald-700";
-        if (index === completedCount && !registrationComplete) toneClass = "border-sky-200 bg-sky-50 text-sky-700";
+        const invalid = state.face.invalidIndices.includes(index);
+        if (invalid) toneClass = "border-rose-200 bg-rose-50 text-rose-700";
+        else if (state.face.captures[index]) toneClass = "border-emerald-200 bg-emerald-50 text-emerald-700";
+        else if (index === currentStepIndex && !registrationComplete) toneClass = "border-sky-200 bg-sky-50 text-sky-700";
         return `<div class="rounded-2xl border ${toneClass} px-3 py-2">
             <p class="text-[10px] font-semibold uppercase tracking-[0.24em]">${index + 1}</p>
             <p class="mt-1 text-sm font-semibold text-slate-900">${esc(step.label)}</p>
-            <p class="mt-1 text-[11px] text-slate-500">${esc(step.instruction)}</p>
+            <p class="mt-1 text-[11px] ${invalid ? "text-rose-600" : "text-slate-500"}">${esc(invalid ? describeInvalidFaceCapture(state.face.invalidCaptureDetails[index]?.reason) : step.instruction)}</p>
           </div>`;
       }).join("");
     }
@@ -2151,6 +2571,8 @@
       refs.captureGrid.innerHTML = steps.map((step, index) => {
         const image = state.face.captures[index];
         const meta = state.face.captureMeta[index];
+        const invalid = state.face.invalidIndices.includes(index);
+        const invalidReason = describeInvalidFaceCapture(state.face.invalidCaptureDetails[index]?.reason);
         return image
           ? `<div class="overflow-hidden rounded-2xl border border-slate-200 bg-white">
               <img src="${image}" alt="${esc(step.label)}" class="h-24 w-full object-cover">
@@ -2159,9 +2581,65 @@
                 <p class="mt-1 text-xs font-semibold text-slate-900">${esc(meta?.label || step.label)}</p>
               </div>
             </div>`
-          : `<div class="flex h-24 items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-2 text-center text-[11px] font-medium text-slate-400">${esc(step.label)}</div>`;
+          : `<div class="flex h-24 flex-col items-center justify-center rounded-2xl border ${invalid ? "border-dashed border-rose-200 bg-rose-50 text-rose-600" : "border-dashed border-slate-200 bg-slate-50 text-slate-400"} px-2 text-center">
+              <p class="text-[11px] font-semibold">${esc(step.label)}</p>
+              <p class="mt-1 text-[10px] font-medium">${esc(invalid ? invalidReason : "Waiting for capture")}</p>
+            </div>`;
       }).join("");
     }
+  };
+
+  const applyFaceValidationFailure = async (errorData) => {
+    const steps = getFaceCaptureSteps();
+    const invalidIndices = normalizeFaceCaptureIndices(errorData?.invalid_capture_indices, steps.length);
+    if (!invalidIndices.length) {
+      return false;
+    }
+
+    const invalidCaptureDetails = {};
+    if (Array.isArray(errorData?.invalid_captures)) {
+      errorData.invalid_captures.forEach((row) => {
+        const index = Number.parseInt(row?.index, 10);
+        if (!Number.isInteger(index) || index < 0 || index >= steps.length) return;
+        invalidCaptureDetails[index] = {
+          reason: String(row?.reason || "validation_failed").trim(),
+          label: String(row?.label || steps[index]?.label || "").trim(),
+        };
+      });
+    }
+
+    invalidIndices.forEach((index) => {
+      delete state.face.captures[index];
+      delete state.face.captureMeta[index];
+    });
+    state.face.invalidIndices = invalidIndices;
+    state.face.invalidCaptureDetails = invalidCaptureDetails;
+    state.face.started = false;
+    state.face.captureInFlight = false;
+    state.face.cooldownUntil = 0;
+    clearFaceStatusLock();
+    resetFaceAlignmentState();
+    renderFaceState();
+
+    const currentStep = getCurrentFaceStep();
+    const invalidLabels = invalidIndices.map((index) => steps[index]?.label || `Angle ${index + 1}`);
+    refs.guideText.textContent = currentStep?.instruction || "Retake the highlighted angles.";
+    setFaceStatus(
+      `Retake ${invalidIndices.length} rejected angle${invalidIndices.length > 1 ? "s" : ""}. Next: ${currentStep?.label || invalidLabels[0] || "Continue"}.`,
+      { holdMs: 1800 },
+    );
+    showToast(
+      `Only the rejected angle${invalidIndices.length > 1 ? "s need" : " needs"} to be captured again.`,
+      true,
+      { title: "Retake Required", details: invalidLabels, duration: 7000 },
+    );
+
+    try {
+      await startFaceCapture();
+    } catch (_error) {
+      return true;
+    }
+    return true;
   };
 
   const stopCameraTracks = () => {
@@ -2172,17 +2650,47 @@
     if (refs.faceVideo) refs.faceVideo.srcObject = null;
   };
 
+  const scheduleFaceFrameProcessing = () => {
+    if (!state.face.started || !state.face.mesh || !state.face.stream) {
+      state.face.rafId = null;
+      state.face.rafMode = "";
+      return;
+    }
+    const video = refs.faceVideo;
+    if (video && typeof video.requestVideoFrameCallback === "function") {
+      state.face.rafMode = "video";
+      state.face.rafId = video.requestVideoFrameCallback(() => {
+        state.face.rafId = null;
+        state.face.rafMode = "";
+        processFaceFrame();
+      });
+      return;
+    }
+    state.face.rafMode = "raf";
+    state.face.rafId = requestAnimationFrame(() => {
+      state.face.rafId = null;
+      state.face.rafMode = "";
+      processFaceFrame();
+    });
+  };
+
   const stopFaceCapture = () => {
     if (state.face.rafId) {
-      cancelAnimationFrame(state.face.rafId);
+      if (state.face.rafMode === "video" && refs.faceVideo && typeof refs.faceVideo.cancelVideoFrameCallback === "function") {
+        refs.faceVideo.cancelVideoFrameCallback(state.face.rafId);
+      } else {
+        cancelAnimationFrame(state.face.rafId);
+      }
       state.face.rafId = null;
     }
+    state.face.rafMode = "";
     stopCameraTracks();
     state.face.mesh = null;
     state.face.lastResults = null;
     state.face.processing = false;
-    state.face.stableSince = 0;
-    state.face.stableMode = "";
+    state.face.captureInFlight = false;
+    clearFaceStatusLock();
+    resetFaceAlignmentState();
     if (refs.faceOverlay) {
       const overlayContext = refs.faceOverlay.getContext("2d");
       overlayContext?.clearRect(0, 0, refs.faceOverlay.width || 0, refs.faceOverlay.height || 0);
@@ -2194,68 +2702,65 @@
     stopFaceCapture();
     state.face.captures = [];
     state.face.captureMeta = [];
-    state.face.alignFrames = 0;
+    state.face.invalidIndices = [];
+    state.face.invalidCaptureDetails = {};
     state.face.cooldownUntil = 0;
     state.face.started = false;
-    state.face.stableSince = 0;
-    state.face.stableMode = "";
+    state.face.submitting = false;
+    state.face.captureInFlight = false;
+    clearFaceStatusLock();
+    resetFaceAlignmentState();
     if (clearStudent) {
       state.face.studentId = "";
       state.face.mode = "register";
       state.face.captureProfile = "standard";
     }
     if (refs.guideText) refs.guideText.textContent = "Press Start Registration to begin.";
-    if (refs.faceStatus) refs.faceStatus.textContent = "Choose a capture profile, then start the registration camera.";
+    setFaceStatus("Choose a capture profile, then start. Capture happens automatically once a clear face is inside the oval.");
     renderFaceState();
   };
 
   const captureCurrentFrame = (step, landmarks, width, height, pose) => {
+    const stepIndex = getCurrentFaceStepIndex();
+    if (stepIndex < 0) {
+      setFaceStatus("Capture sequence complete. Save face registration.");
+      return false;
+    }
     const cropCanvas = buildFaceCropCanvas(refs.faceVideo, landmarks, width, height);
     if (!cropCanvas) {
-      state.face.alignFrames = 0;
+      resetFaceAlignmentState();
       state.face.cooldownUntil = Date.now() + FACE_CAPTURE_RETRY_COOLDOWN_MS;
-      refs.faceStatus.textContent = "Move closer so the face fills the oval guide.";
-      return;
+      setFaceStatus("Move closer so the face fills the oval guide.", { holdMs: FACE_CAPTURE_STATUS_HOLD_MS });
+      return false;
     }
 
     const quality = analyzeCaptureQuality(cropCanvas);
-    const severeQualityFailure = !quality.ok
-      && (
-        Number(quality.brightness || 0) < 10
-        || Number(quality.brightness || 0) > 248
-        || Number(quality.contrast || 0) < 5
-        || Number(quality.sharpness || 0) < 2
-      );
-    if (severeQualityFailure) {
-      state.face.alignFrames = 0;
-      state.face.stableSince = 0;
-      state.face.stableMode = "";
+    if (quality.blocking) {
+      resetFaceAlignmentState();
       state.face.cooldownUntil = Date.now() + FACE_CAPTURE_RETRY_COOLDOWN_MS;
-      refs.faceStatus.textContent = quality.reason;
-      return;
+      setFaceStatus(quality.reason, { holdMs: FACE_CAPTURE_STATUS_HOLD_MS });
+      return false;
     }
 
     const fingerprint = buildCaptureFingerprint(cropCanvas);
-    const lastMeta = state.face.captureMeta[state.face.captureMeta.length - 1];
-    const duplicate = Boolean(lastMeta) && (() => {
-      const fingerprintDistance = getHammingDistance(lastMeta.fingerprint, fingerprint);
-      const yawDelta = Math.abs(Number(lastMeta.yaw || 0) - Number(pose.yaw || 0));
-      const pitchDelta = Math.abs(Number(lastMeta.pitch || 0) - Number(pose.pitch || 0));
-      return fingerprintDistance < 2
-        && yawDelta < FACE_CAPTURE_DUPLICATE_POSE_DELTA * 0.45
-        && pitchDelta < FACE_CAPTURE_DUPLICATE_POSE_DELTA * 0.45;
-    })();
+    const duplicate = state.face.captureMeta.some((meta, index) => {
+      if (!meta || index === stepIndex || !state.face.captures[index]) return false;
+      const fingerprintDistance = getHammingDistance(meta.fingerprint, fingerprint);
+      const yawDelta = Math.abs(Number(meta.yaw || 0) - Number(pose.yaw || 0));
+      const pitchDelta = Math.abs(Number(meta.pitch || 0) - Number(pose.pitch || 0));
+      return fingerprintDistance < FACE_CAPTURE_MIN_HAMMING_DISTANCE
+        && yawDelta < FACE_CAPTURE_DUPLICATE_POSE_DELTA
+        && pitchDelta < FACE_CAPTURE_DUPLICATE_POSE_DELTA;
+    });
     if (duplicate) {
-      state.face.alignFrames = 0;
-      state.face.stableSince = 0;
-      state.face.stableMode = "";
+      resetFaceAlignmentState();
       state.face.cooldownUntil = Date.now() + FACE_CAPTURE_RETRY_COOLDOWN_MS;
-      refs.faceStatus.textContent = "That angle is too similar. Shift to the next guided position.";
-      return;
+      setFaceStatus("That angle is too similar. Shift to the next guided position.", { holdMs: FACE_CAPTURE_STATUS_HOLD_MS });
+      return false;
     }
 
-    state.face.captures.push(cropCanvas.toDataURL("image/jpeg", 0.97));
-    state.face.captureMeta.push({
+    state.face.captures[stepIndex] = cropCanvas.toDataURL("image/jpeg", 0.96);
+    state.face.captureMeta[stepIndex] = {
       step_key: step.key,
       label: step.label,
       instruction: step.instruction,
@@ -2266,45 +2771,51 @@
       sharpness: Number(quality.sharpness.toFixed(2)),
       quality_ok: Boolean(quality.ok),
       fingerprint,
-    });
+    };
+    state.face.invalidIndices = state.face.invalidIndices.filter((index) => index !== stepIndex);
+    if (Object.prototype.hasOwnProperty.call(state.face.invalidCaptureDetails, stepIndex)) {
+      delete state.face.invalidCaptureDetails[stepIndex];
+    }
 
-    state.face.alignFrames = 0;
-    state.face.stableSince = 0;
-    state.face.stableMode = "";
+    resetFaceAlignmentState();
     state.face.cooldownUntil = Date.now() + FACE_CAPTURE_SUCCESS_COOLDOWN_MS;
     const steps = getFaceCaptureSteps();
-    if (state.face.captures.length >= steps.length) {
+    const completedCount = getCompletedFaceCaptureCount();
+    if (completedCount >= steps.length) {
       state.face.started = false;
       refs.guideText.textContent = "All required captures are complete.";
-      refs.faceStatus.textContent = "Capture sequence complete. Save face registration.";
+      setFaceStatus("Capture sequence complete. Save face registration.", { holdMs: FACE_CAPTURE_STATUS_HOLD_MS });
       stopFaceCapture();
     } else {
       const nextStep = getCurrentFaceStep();
       refs.guideText.textContent = nextStep?.instruction || "Continue with the guided sequence.";
-      refs.faceStatus.textContent = `Captured ${state.face.captures.length}/${steps.length}. Next: ${nextStep?.label || "Save registration"}.`;
+      setFaceStatus(`Captured ${completedCount}/${steps.length}. Next: ${nextStep?.label || "Save registration"}.`, { holdMs: FACE_CAPTURE_STATUS_HOLD_MS });
     }
     renderFaceState();
+    return true;
   };
 
   const processFaceFrame = async () => {
     if (!state.face.started || !state.face.mesh || !state.face.stream) {
       state.face.rafId = null;
+      state.face.rafMode = "";
       return;
     }
     if (state.face.processing) {
-      state.face.rafId = requestAnimationFrame(processFaceFrame);
+      scheduleFaceFrameProcessing();
       return;
     }
 
     const video = refs.faceVideo;
     if (!video || video.readyState < 2) {
-      state.face.rafId = requestAnimationFrame(processFaceFrame);
+      scheduleFaceFrameProcessing();
       return;
     }
 
     try {
       state.face.processing = true;
-      await state.face.mesh.send({ image: video });
+      const detectionFrame = buildFaceDetectionFrame(video);
+      await state.face.mesh.send({ image: detectionFrame });
       const results = state.face.lastResults || {};
 
       const width = video.videoWidth || video.clientWidth;
@@ -2320,49 +2831,60 @@
       const step = getCurrentFaceStep();
       if (!step) {
         state.face.started = false;
-        refs.faceStatus.textContent = "Capture sequence complete. Save face registration.";
+        setFaceStatus("Capture sequence complete. Save face registration.");
         stopFaceCapture();
         renderFaceState();
         return;
       }
 
       refs.guideText.textContent = step.instruction;
+      const currentStepIndex = getCurrentFaceStepIndex();
 
       const faces = results.multiFaceLandmarks || [];
       if (faces.length !== 1) {
-        state.face.alignFrames = 0;
+        state.face.missedFrames += 1;
+        if (faces.length > 1 || state.face.missedFrames > FACE_CAPTURE_MISSED_FRAME_TOLERANCE) {
+          resetFaceAlignmentState({ clearMisses: false });
+        }
         drawOverlay(context, width, height, faces.length > 1 ? "warning" : "idle");
         refs.faceStatus.textContent = faces.length > 1 ? "Keep only one face inside the oval guide." : "Waiting for one face inside the oval guide.";
         return;
       }
 
+      state.face.missedFrames = 0;
       const landmarks = faces[0];
-      if (!isFaceInsideGuide(landmarks, width, height)) {
-        state.face.alignFrames = 0;
-        state.face.stableSince = 0;
-        state.face.stableMode = "";
+      const guideFit = analyzeFaceGuideFit(landmarks, width, height);
+      if (!guideFit.inside) {
+        resetFaceAlignmentState({ clearMisses: false });
         drawOverlay(context, width, height, "warning");
-        refs.faceStatus.textContent = "Center the face inside the oval guide before capture.";
+        refs.faceStatus.textContent = guideFit.reason;
         return;
       }
 
       const pose = calculateFacePose(landmarks);
       const alignment = evaluateStep(step, pose);
+      const lastMeta = getPreviousFaceCaptureMeta(currentStepIndex);
+      const yawDeltaFromLastCapture = Math.abs(Number(lastMeta?.yaw || 0) - Number(pose.yaw || 0));
+      const pitchDeltaFromLastCapture = Math.abs(Number(lastMeta?.pitch || 0) - Number(pose.pitch || 0));
+      const movedEnoughFromLastCapture = !lastMeta
+        || alignment.aligned
+        || yawDeltaFromLastCapture >= FACE_CAPTURE_TRANSITION_POSE_DELTA
+        || pitchDeltaFromLastCapture >= FACE_CAPTURE_TRANSITION_POSE_DELTA;
 
       drawOverlay(context, width, height, alignment.aligned ? "aligned" : "detected");
 
-      const softThreshold = Math.max((step.minScore || 0.7) - 0.14, 0.5);
-      const stableEnough = alignment.score >= softThreshold
-        && alignment.yawScore >= 0.35
-        && alignment.pitchScore >= 0.28
-        && alignment.rollScore >= 0.18;
+      const softThreshold = Math.max((step.minScore || 0.7) - FACE_CAPTURE_SOFT_SCORE_DELTA, 0.36);
+      const stableEnough = movedEnoughFromLastCapture
+        && alignment.score >= softThreshold
+        && alignment.yawScore >= 0.12
+        && alignment.pitchScore >= 0.12
+        && alignment.rollScore >= 0.04;
       const nowMs = Date.now();
+      const cooldownActive = nowMs < state.face.cooldownUntil;
 
-      if (nowMs >= state.face.cooldownUntil) {
+      if (!cooldownActive) {
         if (!stableEnough) {
-          state.face.alignFrames = 0;
-          state.face.stableSince = 0;
-          state.face.stableMode = "";
+          resetFaceAlignmentState({ clearMisses: false });
         } else {
           state.face.alignFrames += 1;
           if (!state.face.stableSince) {
@@ -2372,28 +2894,52 @@
         }
       }
 
-      refs.faceStatus.textContent = alignment.aligned
-        ? `Alignment locked for ${step.label}. Hold still...`
-        : stableEnough
-          ? `Almost there for ${step.label}. Hold the angle a little more.`
-          : `Adjust for ${step.label}.`;
-
       const lockedStable = state.face.stableMode === "locked" || alignment.aligned;
       const requiredStableFrames = lockedStable ? FACE_CAPTURE_STABLE_FRAME_TARGET : FACE_CAPTURE_SOFT_FRAME_TARGET;
       const requiredStableMs = lockedStable ? FACE_CAPTURE_LOCKED_HOLD_MS : FACE_CAPTURE_SOFT_HOLD_MS;
       const stableLongEnough = state.face.stableSince && (nowMs - state.face.stableSince) >= requiredStableMs;
-      if (stableEnough && stableLongEnough && state.face.alignFrames >= requiredStableFrames && nowMs >= state.face.cooldownUntil) {
-        captureCurrentFrame(step, landmarks, width, height, pose);
+      const captureReady = stableEnough
+        && !cooldownActive
+        && !state.face.captureInFlight
+        && (
+          alignment.aligned
+          || (stableLongEnough && state.face.alignFrames >= requiredStableFrames)
+        );
+      if (captureReady) {
+        state.face.captureInFlight = true;
+        setFaceStatus(`Capturing ${step.label}...`, { holdMs: FACE_CAPTURE_STATUS_HOLD_MS });
+        try {
+          captureCurrentFrame(step, landmarks, width, height, pose);
+        } finally {
+          state.face.captureInFlight = false;
+        }
+        return;
+      }
+
+      const lockedStatus = getLockedFaceStatus();
+      if (lockedStatus) {
+        if (refs.faceStatus) refs.faceStatus.textContent = lockedStatus;
+      } else if (!movedEnoughFromLastCapture) {
+        if (refs.faceStatus) refs.faceStatus.textContent = `Shift a little more for ${step.label}.`;
+      } else if (cooldownActive && stableEnough) {
+        if (refs.faceStatus) refs.faceStatus.textContent = `${step.label} angle locked. Preparing auto-capture.`;
+      } else if (stableEnough) {
+        if (refs.faceStatus) refs.faceStatus.textContent = `${step.label} angle is clear. Hold briefly for auto-capture.`;
+      } else {
+        if (refs.faceStatus) refs.faceStatus.textContent = `Adjust for ${step.label}.`;
       }
     } catch (_error) {
-      refs.faceStatus.textContent = "Face detection processing error.";
+      clearFaceStatusLock();
+      if (refs.faceStatus) refs.faceStatus.textContent = "Face detection processing error.";
       setGuideRingState("warning");
     } finally {
       state.face.processing = false;
+      state.face.captureInFlight = false;
       if (state.face.started && state.face.mesh && state.face.stream) {
-        state.face.rafId = requestAnimationFrame(processFaceFrame);
+        scheduleFaceFrameProcessing();
       } else {
         state.face.rafId = null;
+        state.face.rafMode = "";
       }
     }
   };
@@ -2402,21 +2948,23 @@
     if (state.face.started) return;
     const step = getCurrentFaceStep();
     if (!step) {
-      refs.faceStatus.textContent = "Capture sequence is already complete.";
+      setFaceStatus("Capture sequence is already complete.");
       return;
     }
     stopFaceCapture();
     state.face.lastResults = null;
-    state.face.alignFrames = 0;
     state.face.cooldownUntil = 0;
     state.face.started = true;
+    state.face.captureInFlight = false;
+    clearFaceStatusLock();
+    resetFaceAlignmentState();
     renderFaceState();
     refs.guideText.textContent = step.instruction;
-    refs.faceStatus.textContent = "Starting camera...";
+    setFaceStatus("Starting camera...");
 
     if (typeof FaceMesh === "undefined") {
       state.face.started = false;
-      refs.faceStatus.textContent = "FaceMesh library failed to load.";
+      setFaceStatus("FaceMesh library failed to load.");
       renderFaceState();
       showToast("FaceMesh library failed to load.", true);
       return;
@@ -2427,6 +2975,7 @@
         video: {
           width: { ideal: 960 },
           height: { ideal: 720 },
+          frameRate: { ideal: 30, max: 30 },
           facingMode: "user",
         },
         audio: false,
@@ -2445,21 +2994,21 @@
       state.face.mesh = new FaceMesh({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}` });
       state.face.mesh.setOptions({
         maxNumFaces: 1,
-        refineLandmarks: true,
-        minDetectionConfidence: 0.7,
-        minTrackingConfidence: 0.7,
+        refineLandmarks: false,
+        minDetectionConfidence: 0.4,
+        minTrackingConfidence: 0.4,
       });
       state.face.mesh.onResults((results) => {
         state.face.lastResults = results || null;
       });
 
-      refs.faceStatus.textContent = "Camera ready. Hold one face inside the oval guide.";
+      setFaceStatus("Camera ready. Keep one clear face inside the oval guide for auto-capture.");
       setGuideRingState("idle");
-      state.face.rafId = requestAnimationFrame(processFaceFrame);
+      scheduleFaceFrameProcessing();
     } catch (_error) {
       state.face.started = false;
       stopFaceCapture();
-      refs.faceStatus.textContent = "Unable to access camera. Check browser permissions.";
+      setFaceStatus("Unable to access camera. Check browser permissions.");
       renderFaceState();
       showToast("Unable to access camera.", true);
     }
@@ -2484,7 +3033,7 @@
       refs.faceTitle.textContent = state.face.mode === "update" ? "Update Face Registration" : "Register Face";
       refs.faceSubtitle.textContent = `${student.name || ""} (${student.lrn || student.student_id || ""})`;
       refs.guideText.textContent = "Press Start Registration to begin.";
-      refs.faceStatus.textContent = "Choose a capture profile, then start the registration camera.";
+      setFaceStatus("Choose a capture profile, then start. Capture happens automatically once a clear face is inside the oval.");
 
       showModal("faceModal");
       renderFaceState();
@@ -2495,7 +3044,8 @@
 
   const submitFaceRegistration = async () => {
     const steps = getFaceCaptureSteps();
-    if (!state.face.studentId || state.face.captures.length < steps.length) {
+    if (state.face.submitting) return;
+    if (!state.face.studentId || getCompletedFaceCaptureCount() < steps.length) {
       showToast("Complete all required face captures first.", true);
       return;
     }
@@ -2506,6 +3056,9 @@
       : `/api/students/${state.face.studentId}/face/register`;
 
     try {
+      state.face.submitting = true;
+      setFaceStatus("Saving face registration. Please wait...");
+      renderFaceState();
       await api(url, {
         method: updateMode ? "PUT" : "POST",
         body: {
@@ -2518,9 +3071,15 @@
       closeModal("faceModal");
       if (updateMode) showFaceUpdateSuccessAnimation();
       showToast(updateMode ? "Face updated successfully." : "Face registered successfully.");
-      await loadStudents();
+      void loadStudents();
     } catch (error) {
-      showToast(error.message, true);
+      const handled = await applyFaceValidationFailure(error.data);
+      if (!handled) {
+        showToast(error.message, true);
+      }
+    } finally {
+      state.face.submitting = false;
+      renderFaceState();
     }
   };
   const onKeyDown = (event) => {
@@ -2535,6 +3094,9 @@
     const triggerStudentSearch = debounce(() => {
       loadStudents();
     }, 320);
+    const triggerStudentsExportSearch = debounce(() => {
+      loadStudentsExportSearchResults(state.exportPdf.studentQuery);
+    }, 260);
 
     refs.schoolYearSelect?.addEventListener("change", () => {
       const selectedSchoolYear = String(refs.schoolYearSelect.value || "").trim();
@@ -2794,6 +3356,82 @@
       renderSections();
       loadStudents();
       loadSectionStats({ grade: gradeLabel(grade), section });
+    });
+
+    refs.studentsExportBtn?.addEventListener("click", () => {
+      openStudentsExportModal();
+    });
+
+    [refs.studentsExportScopeGrade, refs.studentsExportScopeSection, refs.studentsExportScopeStudent].forEach((input) => {
+      input?.addEventListener("change", () => {
+        if (!input.checked) return;
+        state.exportPdf.scope = String(input.value || "grade").trim();
+        updateStudentsExportLink();
+      });
+    });
+
+    refs.studentsExportGradeLevel?.addEventListener("change", () => {
+      state.exportPdf.grade = String(refs.studentsExportGradeLevel.value || "").trim();
+      updateStudentsExportLink();
+    });
+
+    refs.studentsExportSectionGrade?.addEventListener("change", () => {
+      state.exportPdf.sectionGrade = String(refs.studentsExportSectionGrade.value || "").trim();
+      state.exportPdf.section = "";
+      renderStudentsExportSectionOptions();
+      updateStudentsExportLink();
+    });
+
+    refs.studentsExportSection?.addEventListener("change", () => {
+      state.exportPdf.section = String(refs.studentsExportSection.value || "").trim();
+      updateStudentsExportLink();
+    });
+
+    refs.studentsExportStudentSearch?.addEventListener("input", () => {
+      const nextQuery = String(refs.studentsExportStudentSearch.value || "").trim();
+      state.exportPdf.studentQuery = nextQuery;
+      const selectedStudent = state.exportPdf.selectedStudent;
+      const selectedDisplay = selectedStudent
+        ? `${selectedStudent.name} (${selectedStudent.student_id || selectedStudent.lrn || "No ID"})`
+        : "";
+      if (!selectedStudent || (nextQuery !== selectedStudent.name && nextQuery !== selectedDisplay)) {
+        clearStudentsExportStudentSelection();
+      }
+      updateStudentsExportLink();
+      triggerStudentsExportSearch();
+    });
+
+    refs.studentsExportStudentResults?.addEventListener("click", (event) => {
+      const button = event.target.closest(".students-export-student-result");
+      if (!button) return;
+      const studentId = String(button.dataset.studentId || "").trim();
+      if (!studentId) return;
+      const selectedStudent = state.exportPdf.studentResults.find((student) => String(student._id || "").trim() === studentId);
+      if (!selectedStudent) return;
+      setStudentsExportStudentSelection(selectedStudent);
+      state.exportPdf.studentResults = [];
+      updateStudentsExportLink();
+    });
+
+    refs.studentsExportStudentSelected?.addEventListener("click", (event) => {
+      const clearButton = event.target.closest("#studentsExportClearStudentBtn");
+      if (!clearButton) return;
+      clearStudentsExportStudentSelection();
+      state.exportPdf.studentQuery = "";
+      state.exportPdf.studentResults = [];
+      if (refs.studentsExportStudentSearch) {
+        refs.studentsExportStudentSearch.value = "";
+        refs.studentsExportStudentSearch.focus();
+      }
+      updateStudentsExportLink();
+    });
+
+    refs.studentsExportDownloadBtn?.addEventListener("click", () => {
+      if (!refs.studentsExportDownloadBtn.disabled) closeModal("studentsExportModal");
+    });
+
+    refs.studentsExportPrintBtn?.addEventListener("click", () => {
+      if (!refs.studentsExportPrintBtn.disabled) closeModal("studentsExportModal");
     });
 
     refs.openAddBtn.addEventListener("click", () => {

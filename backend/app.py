@@ -173,7 +173,7 @@ SCAN_JPEG_QUALITY = env_int("SCAN_JPEG_QUALITY", 80, minimum=40, maximum=95)
 SCAN_CAPTURE_FLUSH_GRABS = env_int("SCAN_CAPTURE_FLUSH_GRABS", 2, minimum=0, maximum=10)
 SCAN_FORCE_RESIZE = env_bool("SCAN_FORCE_RESIZE", True)
 SCAN_FACE_INDEX_ALLOW_LEGACY_IMAGE_FALLBACK = env_bool("SCAN_FACE_INDEX_ALLOW_LEGACY_IMAGE_FALLBACK", False)
-SCAN_OUT_MINUTES = env_int("SCAN_OUT_MINUTES", 30, minimum=5, maximum=240)
+SCAN_OUT_MINUTES = env_int("SCAN_OUT_MINUTES", 30, minimum=1, maximum=240)
 SCAN_REPEAT_SUPPRESSION_SECONDS = env_int("SCAN_REPEAT_SUPPRESSION_SECONDS", 20, minimum=5, maximum=120)
 UNKNOWN_ALERT_COOLDOWN_SECONDS = 30
 UNREGISTERED_EVENT_COOLDOWN_SECONDS = 2
@@ -1100,7 +1100,7 @@ def inject_dev_runtime_flags():
     return {
         "dev_auto_reload": DEV_AUTO_RELOAD,
         "dev_reload_poll_interval_ms": DEV_RELOAD_POLL_INTERVAL_MS,
-        "dev_reload_token": compute_dev_reload_token() if DEV_AUTO_RELOAD else "",
+        "dev_reload_token": compute_dev_reload_token() if DEV_AUTO_RELOAD else str(int(time.time() * 1000)),
     }
 
 
@@ -1223,6 +1223,10 @@ def apply_security_headers(response):
         response.headers.setdefault("Cache-Control", "no-store")
         response.headers.setdefault("Pragma", "no-cache")
         response.headers.setdefault("Expires", "0")
+    elif request.endpoint == "static" and (request.path or "").endswith("/students.js"):
+        response.headers["Cache-Control"] = "no-store, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
 
     return response
 
@@ -2305,7 +2309,7 @@ def normalize_attendance_schedule(raw_schedule=None):
     scan_cooldown_minutes = clamp_int_value(
         schedule.get("scan_cooldown_minutes"),
         30,
-        minimum=5,
+        minimum=1,
         maximum=240,
     )
     return {
@@ -2713,7 +2717,7 @@ def build_gate_scan_result(attendance_collection, school_year_label, student, no
     scan_cooldown_minutes = clamp_int_value(
         runtime_schedule.get("scan_cooldown_minutes"),
         SCAN_OUT_MINUTES,
-        minimum=5,
+        minimum=1,
         maximum=240,
     )
     scan_cooldown_seconds = scan_cooldown_minutes * 60
@@ -2772,7 +2776,13 @@ def build_gate_scan_result(attendance_collection, school_year_label, student, no
             "next_allowed_scan_ts": next_allowed_scan_ts,
         }
 
-    if elapsed_since_last is not None and elapsed_since_last < SCAN_REPEAT_SUPPRESSION_SECONDS:
+    allow_immediate_reentry = last_action == "OUT" and normalized_mode in {"auto", "manual_in"}
+
+    if (
+        elapsed_since_last is not None
+        and elapsed_since_last < SCAN_REPEAT_SUPPRESSION_SECONDS
+        and not allow_immediate_reentry
+    ):
         return duplicate_result(
             "Already recorded moments ago.",
             "Already recorded",
@@ -2799,15 +2809,6 @@ def build_gate_scan_result(attendance_collection, school_year_label, student, no
                 action=last_action or "IN",
                 status=last_status,
                 reason="out_requires_in",
-            )
-        elapsed_since_in = max((now - last_record_dt).total_seconds(), 0.0)
-        if elapsed_since_in < scan_cooldown_seconds:
-            return duplicate_result(
-                f"Already IN - wait {format_wait_time_short(scan_cooldown_seconds - elapsed_since_in)} before OUT.",
-                "Please wait before exit",
-                action="IN",
-                status=last_status,
-                reason="out_wait_period",
             )
         next_action = "OUT"
     else:
@@ -2876,7 +2877,7 @@ def build_gate_scan_result(attendance_collection, school_year_label, student, no
         "activity_entry": activity_entry,
         "tracking_mode": normalized_mode,
         "scan_cooldown_minutes": scan_cooldown_minutes,
-        "next_allowed_scan_ts": now_ts + scan_cooldown_seconds,
+        "next_allowed_scan_ts": now_ts if next_action == "OUT" else now_ts + scan_cooldown_seconds,
     }
 
 
@@ -4905,7 +4906,7 @@ def _active_student_query(student_id):
     }
 
 
-def log_attendance_and_sms(student, source="gate_scan", send_notifications=True):
+def log_attendance_and_sms(student, source="gate_scan", send_notifications=True, mode=None):
     now = now_local()
     # Always use the current active school year from database for gate scanning
     school_year_label = get_current_school_year_label()
@@ -4916,6 +4917,7 @@ def log_attendance_and_sms(student, source="gate_scan", send_notifications=True)
         student,
         now,
         source=source,
+        mode=mode,
     )
     if not result:
         return None
@@ -5054,9 +5056,18 @@ def handle_verified_student(student, confidence=0.0):
     result = log_attendance_and_sms(student)
     if not result:
         return None
-    next_allowed_scan_ts = float(result.get("next_allowed_scan_ts") or (now_ts + SCAN_COOLDOWN_SECONDS))
+
+    gate_action = normalize_gate_action_value(result.get("gate_action"))
+    duplicate_reason = str(result.get("duplicate_reason") or "").strip().lower()
+    if gate_action == "OUT":
+        repeat_hold_seconds = 1.0
+    elif duplicate_reason in {"already_out", "out_requires_in"}:
+        repeat_hold_seconds = 2.0
+    else:
+        repeat_hold_seconds = float(SCAN_COOLDOWN_SECONDS)
+
     with scan_lock:
-        last_scanned[student_id] = max(next_allowed_scan_ts, now_ts + SCAN_COOLDOWN_SECONDS)
+        last_scanned[student_id] = now_ts + max(repeat_hold_seconds, 0.0)
 
     if result["duplicate"]:
         return None
@@ -7300,10 +7311,12 @@ def api_success(payload=None, status_code=200):
     return jsonify(body), status_code
 
 
-def api_error(message, status_code=400, field=None):
+def api_error(message, status_code=400, field=None, extra=None):
     body = {"status": "error", "message": message}
     if field:
         body["field"] = field
+    if isinstance(extra, dict):
+        body.update(extra)
     return jsonify(body), status_code
 
 
@@ -8011,27 +8024,43 @@ def validate_face_capture_image(raw_face):
         return None
 
     try:
-        face_locations = face_recognition.face_locations(img_np, model="hog")
+        height, width = img_np.shape[:2]
+        max_dimension = max(height, width)
+        if max_dimension > 448:
+            scale = 448 / float(max_dimension)
+            resized_width = max(1, int(round(width * scale)))
+            resized_height = max(1, int(round(height * scale)))
+            img_np = cv2.resize(img_np, (resized_width, resized_height), interpolation=cv2.INTER_AREA)
+
+        face_locations = []
+        for upsample in (1, 2):
+            face_locations = face_recognition.face_locations(
+                img_np,
+                number_of_times_to_upsample=upsample,
+                model="hog",
+            )
+            if len(face_locations) == 1:
+                break
         if len(face_locations) != 1:
             return None
 
         top, right, bottom, left = face_locations[0]
         face_height = max(0, bottom - top)
         face_width = max(0, right - left)
-        if face_height < img_np.shape[0] * 0.22 or face_width < img_np.shape[1] * 0.18:
+        if face_height < img_np.shape[0] * 0.16 or face_width < img_np.shape[1] * 0.13:
             return None
 
         gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
         brightness = float(np.mean(gray))
         contrast = float(np.std(gray))
         sharpness = float(cv2.Laplacian(gray, cv2.CV_64F).var())
-        if brightness < 22 or brightness > 242 or contrast < 10 or sharpness < 12:
+        if brightness < 16 or brightness > 248 or contrast < 6 or sharpness < 5:
             return None
 
         enc_rows = face_recognition.face_encodings(
             img_np,
             known_face_locations=face_locations,
-            num_jitters=2,
+            num_jitters=1,
         )
         if not enc_rows:
             return None
@@ -8055,7 +8084,7 @@ def parse_faces_payload(data):
             raw_faces = []
 
     if not isinstance(raw_faces, list):
-        return None, None, None, "Face data must be an array.", "faces"
+        return None, None, None, "Face data must be an array.", "faces", {}
 
     capture_profile = normalize_face_capture_profile(data.get("capture_profile"))
     required_count = 20 if capture_profile == "similar_faces" else 10
@@ -8072,37 +8101,60 @@ def parse_faces_payload(data):
             break
 
     if not faces_array:
-        return None, None, None, "Capture at least one face image.", "faces"
+        return None, None, None, "Capture at least one face image.", "faces", {}
     if len(faces_array) < required_count:
-        return None, None, None, f"Capture all required guided angles ({required_count} images).", "faces"
+        return None, None, None, f"Capture all required guided angles ({required_count} images).", "faces", {
+            "required_count": required_count,
+            "valid_capture_count": 0,
+            "invalid_capture_indices": [],
+            "invalid_captures": [],
+            "missing_capture_indices": list(range(len(faces_array), required_count)),
+        }
 
     validated_faces = []
     face_encodings = []
     capture_meta = []
     seen_encodings = []
+    accepted_capture_indices = []
+    invalid_captures = []
 
     for index, raw_face in enumerate(faces_array):
+        meta_row = raw_meta[index] if index < len(raw_meta) else {}
+        row_detail = {
+            "index": index,
+            "step_key": meta_row.get("step_key") or f"capture_{index + 1}",
+            "label": meta_row.get("label") or f"Capture {index + 1}",
+            "instruction": meta_row.get("instruction") or "",
+        }
         validated = validate_face_capture_image(raw_face)
         if not validated:
+            invalid_captures.append({
+                **row_detail,
+                "reason": "validation_failed",
+            })
             continue
 
         encoding = validated["encoding"]
         if seen_encodings:
             try:
                 distances = face_recognition.face_distance(seen_encodings, encoding)
-                if len(distances) and float(np.min(distances)) < 0.015:
+                if len(distances) and float(np.min(distances)) < 0.01:
+                    invalid_captures.append({
+                        **row_detail,
+                        "reason": "duplicate",
+                    })
                     continue
             except Exception:
                 pass
 
         seen_encodings.append(encoding)
+        accepted_capture_indices.append(index)
         validated_faces.append(raw_face)
         face_encodings.append(encoding.tolist())
-        meta_row = raw_meta[index] if index < len(raw_meta) else {}
         capture_meta.append({
-            "step_key": meta_row.get("step_key") or f"capture_{len(validated_faces)}",
-            "label": meta_row.get("label") or f"Capture {len(validated_faces)}",
-            "instruction": meta_row.get("instruction") or "",
+            "step_key": row_detail["step_key"],
+            "label": row_detail["label"],
+            "instruction": row_detail["instruction"],
             "yaw": meta_row.get("yaw"),
             "pitch": meta_row.get("pitch"),
             "quality": {
@@ -8116,13 +8168,19 @@ def parse_faces_payload(data):
         return None, None, None, (
             f"Need {required_count} clear and unique captures inside the oval guide. "
             f"Only {len(validated_faces)} passed validation."
-        ), "faces"
+        ), "faces", {
+            "required_count": required_count,
+            "valid_capture_count": len(validated_faces),
+            "accepted_capture_indices": accepted_capture_indices,
+            "invalid_capture_indices": [row["index"] for row in invalid_captures],
+            "invalid_captures": invalid_captures,
+        }
 
     return validated_faces, face_encodings, {
         "capture_profile": capture_profile,
         "capture_count": len(validated_faces),
         "capture_meta": capture_meta,
-    }, "", ""
+    }, "", "", {}
 
 
 def refresh_scan_face_index_if_active():
@@ -8795,6 +8853,467 @@ def build_school_export_footer_block(styles):
     ])
 
 
+def sanitize_students_export_filename_part(value, fallback="records"):
+    raw = normalize_text_value(value)
+    if not raw:
+        return fallback
+    cleaned = re.sub(r"[^A-Za-z0-9]+", "_", raw).strip("_").lower()
+    return cleaned or fallback
+
+
+def sort_students_export_rows(rows):
+    return sorted(
+        rows,
+        key=lambda row: (
+            grade_sort_key(extract_grade_number(row.get("grade_level")) or row.get("grade_level") or ""),
+            normalize_section_value(row.get("section")).lower(),
+            normalize_student_name_value(row.get("name")).lower(),
+            normalize_lrn_value(row.get("student_id") or row.get("lrn")).lower(),
+        ),
+    )
+
+
+def build_students_plain_export_styles():
+    styles = getSampleStyleSheet()
+    return {
+        "title": ParagraphStyle(
+            "StudentsPlainExportTitle",
+            parent=styles["Normal"],
+            fontName="Helvetica-Bold",
+            fontSize=16,
+            leading=20,
+            alignment=TA_CENTER,
+            textColor=colors.black,
+        ),
+        "subtitle": ParagraphStyle(
+            "StudentsPlainExportSubtitle",
+            parent=styles["Normal"],
+            fontName="Helvetica",
+            fontSize=9.5,
+            leading=12,
+            alignment=TA_CENTER,
+            textColor=colors.black,
+        ),
+        "section_title": ParagraphStyle(
+            "StudentsPlainExportSectionTitle",
+            parent=styles["Normal"],
+            fontName="Helvetica-Bold",
+            fontSize=11,
+            leading=14,
+            alignment=TA_LEFT,
+            textColor=colors.black,
+            spaceAfter=4,
+        ),
+        "metadata_label": ParagraphStyle(
+            "StudentsPlainExportMetadataLabel",
+            parent=styles["Normal"],
+            fontName="Helvetica-Bold",
+            fontSize=8.5,
+            leading=10.5,
+            alignment=TA_LEFT,
+            textColor=colors.black,
+        ),
+        "metadata_value": ParagraphStyle(
+            "StudentsPlainExportMetadataValue",
+            parent=styles["Normal"],
+            fontName="Helvetica",
+            fontSize=8.5,
+            leading=10.5,
+            alignment=TA_LEFT,
+            textColor=colors.black,
+        ),
+        "table_header": ParagraphStyle(
+            "StudentsPlainExportTableHeader",
+            parent=styles["Normal"],
+            fontName="Helvetica-Bold",
+            fontSize=8,
+            leading=10,
+            alignment=TA_CENTER,
+            textColor=colors.black,
+        ),
+        "table_cell": ParagraphStyle(
+            "StudentsPlainExportTableCell",
+            parent=styles["Normal"],
+            fontName="Helvetica",
+            fontSize=8,
+            leading=10,
+            alignment=TA_LEFT,
+            textColor=colors.black,
+        ),
+        "table_cell_center": ParagraphStyle(
+            "StudentsPlainExportTableCellCenter",
+            parent=styles["Normal"],
+            fontName="Helvetica",
+            fontSize=8,
+            leading=10,
+            alignment=TA_CENTER,
+            textColor=colors.black,
+        ),
+        "note": ParagraphStyle(
+            "StudentsPlainExportNote",
+            parent=styles["Normal"],
+            fontName="Helvetica",
+            fontSize=8.5,
+            leading=11,
+            alignment=TA_LEFT,
+            textColor=colors.black,
+        ),
+    }
+
+
+def build_students_plain_export_footer(canvas_obj, doc):
+    canvas_obj.saveState()
+    if canvas_obj.getPageNumber() == 1:
+        canvas_obj.setTitle(getattr(doc, "export_title", "Official Student Records Report"))
+        canvas_obj.setAuthor(getattr(doc, "export_author", "Cawitan High School"))
+        canvas_obj.setSubject(getattr(doc, "export_subject", "Student records export"))
+    canvas_obj.setFont("Helvetica", 8)
+    canvas_obj.setFillColor(colors.black)
+    canvas_obj.drawString(doc.leftMargin, 28, "Cawitan High School")
+    canvas_obj.drawRightString(doc.pagesize[0] - doc.rightMargin, 28, f"Page {canvas_obj.getPageNumber()}")
+    canvas_obj.restoreState()
+
+
+def build_students_plain_metadata_table(metadata_items, styles):
+    rows = []
+    items = list(metadata_items or [])
+    if len(items) % 2 != 0:
+        items.append(("", ""))
+    for index in range(0, len(items), 2):
+        left_label, left_value = items[index]
+        right_label, right_value = items[index + 1]
+        rows.append([
+            Paragraph(f"<b>{xml_escape(str(left_label or ''))}</b>", styles["metadata_label"]),
+            Paragraph(xml_escape(str(left_value or "")), styles["metadata_value"]),
+            Paragraph(f"<b>{xml_escape(str(right_label or ''))}</b>", styles["metadata_label"]),
+            Paragraph(xml_escape(str(right_value or "")), styles["metadata_value"]),
+        ])
+
+    table = Table(rows, colWidths=[1.2 * inch, 3.1 * inch, 1.2 * inch, 3.1 * inch])
+    table.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), 0.75, colors.black),
+        ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.black),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 5),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ]))
+    return table
+
+
+def build_students_plain_key_value_table(details, styles):
+    rows = []
+    for label, value in details:
+        rows.append([
+            Paragraph(f"<b>{xml_escape(str(label or ''))}</b>", styles["metadata_label"]),
+            Paragraph(xml_escape(str(value or "")), styles["metadata_value"]),
+        ])
+    table = Table(rows, colWidths=[1.9 * inch, 6.9 * inch])
+    table.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), 0.75, colors.black),
+        ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.black),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 5),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ]))
+    return table
+
+
+def build_students_plain_records_table(rows, styles):
+    data = [[
+        Paragraph("LRN", styles["table_header"]),
+        Paragraph("Name", styles["table_header"]),
+        Paragraph("Grade", styles["table_header"]),
+        Paragraph("Section", styles["table_header"]),
+        Paragraph("Gender", styles["table_header"]),
+        Paragraph("Status", styles["table_header"]),
+        Paragraph("Face Registered", styles["table_header"]),
+        Paragraph("Parent Contact", styles["table_header"]),
+    ]]
+
+    if rows:
+        for row in rows:
+            data.append([
+                Paragraph(xml_escape(row.get("lrn") or row.get("student_id") or "N/A"), styles["table_cell"]),
+                Paragraph(xml_escape(row.get("name") or "N/A"), styles["table_cell"]),
+                Paragraph(xml_escape(row.get("grade_level") or "N/A"), styles["table_cell_center"]),
+                Paragraph(xml_escape(row.get("section") or "N/A"), styles["table_cell"]),
+                Paragraph(xml_escape(row.get("gender") or "N/A"), styles["table_cell_center"]),
+                Paragraph(xml_escape(row.get("status") or "Active"), styles["table_cell_center"]),
+                Paragraph("Yes" if row.get("face_registered") else "No", styles["table_cell_center"]),
+                Paragraph(xml_escape(row.get("parent_contact") or "N/A"), styles["table_cell"]),
+            ])
+    else:
+        data.append([
+            Paragraph("No student records matched the selected export filter.", styles["table_cell_center"]),
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+        ])
+
+    table = LongTable(
+        data,
+        repeatRows=1,
+        colWidths=[1.15 * inch, 2.3 * inch, 0.8 * inch, 1.1 * inch, 0.9 * inch, 0.95 * inch, 1.1 * inch, 1.5 * inch],
+    )
+    table_style = [
+        ("BOX", (0, 0), (-1, -1), 0.75, colors.black),
+        ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.black),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ]
+    if len(data) == 2 and not rows:
+        table_style.append(("SPAN", (0, 1), (-1, 1)))
+        table_style.append(("ALIGN", (0, 1), (-1, 1), "CENTER"))
+    table.setStyle(TableStyle(table_style))
+    return table
+
+
+def resolve_students_export_scope(scope_value="", grade_level="", section_value="", student_record_id="", student_id="", q_value=""):
+    scope = str(scope_value or "").strip().lower()
+    if scope == "student" and (str(student_record_id or "").strip() or str(student_id or "").strip() or str(q_value or "").strip()):
+        return "student"
+    if scope == "section" and str(section_value or "").strip():
+        return "section"
+    if scope == "grade" and str(grade_level or "").strip():
+        return "grade"
+    if scope in {"all", "filtered"}:
+        return "filtered"
+    if str(student_record_id or "").strip() or str(student_id or "").strip():
+        return "student"
+    if str(grade_level or "").strip():
+        return "section" if str(section_value or "").strip() else "grade"
+    if str(section_value or "").strip() or str(q_value or "").strip():
+        return "filtered"
+    return "all"
+
+
+def resolve_students_export_student_row(collection, school_year_label, student_record_id="", student_id="", q_value=""):
+    record_id_text = str(student_record_id or "").strip()
+    if record_id_text:
+        try:
+            raw_row = collection.find_one({"school_year": school_year_label, "_id": ObjectId(record_id_text)})
+            if raw_row:
+                return normalize_enrollment_doc(raw_row)
+        except Exception:
+            pass
+
+    normalized_student_id = normalize_lrn_value(student_id)
+    if normalized_student_id:
+        raw_row = collection.find_one({
+            "school_year": school_year_label,
+            "$or": [{"student_id": normalized_student_id}, {"lrn": normalized_student_id}],
+        })
+        if raw_row:
+            return normalize_enrollment_doc(raw_row)
+
+    q_text = str(q_value or "").strip()
+    if q_text:
+        exact_student_id = normalize_lrn_value(q_text)
+        if exact_student_id:
+            raw_row = collection.find_one({
+                "school_year": school_year_label,
+                "$or": [{"student_id": exact_student_id}, {"lrn": exact_student_id}],
+            })
+            if raw_row:
+                return normalize_enrollment_doc(raw_row)
+
+        query, _q, _grade, _section, _face_status, _school_year = build_students_query(q_text, "", "", "", school_year_label)
+        raw_row = collection.find_one(query, sort=[("name", 1), ("created_at", -1)])
+        if raw_row:
+            return normalize_enrollment_doc(raw_row)
+
+    return None
+
+
+def build_students_export_payload(args, school_year_label):
+    collection = get_school_year_enrollment_collection(school_year_label)
+    raw_scope = str(args.get("scope", "")).strip().lower()
+    q_value = str(args.get("q", "")).strip()
+    grade_value = str(args.get("grade", "") or args.get("grade_level", "")).strip()
+    section_value = str(args.get("section", "")).strip()
+    face_status_value = str(args.get("face_status", "")).strip()
+    student_record_id = str(args.get("student_record_id", "")).strip()
+    student_id = str(args.get("student_id", "")).strip()
+
+    effective_scope = resolve_students_export_scope(
+        raw_scope,
+        grade_level=grade_value,
+        section_value=section_value,
+        student_record_id=student_record_id,
+        student_id=student_id,
+        q_value=q_value,
+    )
+
+    rows = []
+    selected_student = None
+    scope_label = "All Students"
+    scope_detail = "All student records"
+    filename_prefix = "students_export"
+    grade_level = ""
+    normalized_section = normalize_section_value(section_value)
+    normalized_face_status = normalize_face_status_filter(face_status_value)
+
+    if effective_scope == "student":
+        selected_student = resolve_students_export_student_row(
+            collection,
+            school_year_label,
+            student_record_id=student_record_id,
+            student_id=student_id,
+            q_value=q_value,
+        )
+        rows = [selected_student] if selected_student else []
+        scope_label = "Individual Student"
+        if selected_student:
+            scope_detail = selected_student.get("name") or selected_student.get("student_id") or "Selected student"
+            filename_prefix = f"student_{sanitize_students_export_filename_part(selected_student.get('student_id') or selected_student.get('name'), 'record')}"
+        else:
+            scope_detail = "Selected student record"
+            filename_prefix = "student_record"
+    elif effective_scope == "grade":
+        query, _q, grade_level, _section, _face_status, _school_year = build_students_query("", grade_value, "", "", school_year_label)
+        rows = [normalize_enrollment_doc(row) for row in collection.find(query)]
+        rows = sort_students_export_rows(rows)
+        scope_label = "Grade Level"
+        scope_detail = grade_level or grade_value or "Selected grade level"
+        filename_prefix = f"students_grade_{sanitize_students_export_filename_part(scope_detail, 'grade')}"
+    else:
+        if effective_scope == "section":
+            query, _q, grade_level, normalized_section, _face_status, _school_year = build_students_query("", grade_value, section_value, "", school_year_label)
+            scope_label = "Section"
+            scope_detail = f"{grade_level} - {normalized_section}" if grade_level and normalized_section else (normalized_section or section_value or "Selected section")
+            filename_prefix = f"students_section_{sanitize_students_export_filename_part(scope_detail, 'section')}"
+        elif effective_scope == "filtered":
+            query, q_value, grade_level, normalized_section, normalized_face_status, _school_year = build_students_query(
+                q_value,
+                grade_value,
+                section_value,
+                face_status_value,
+                school_year_label,
+            )
+            scope_label = "Filtered Records"
+            detail_parts = []
+            if q_value:
+                detail_parts.append(f"Search: {q_value}")
+            if grade_level:
+                detail_parts.append(grade_level)
+            if normalized_section:
+                detail_parts.append(normalized_section)
+            if normalized_face_status:
+                detail_parts.append(format_students_export_face_status(normalized_face_status))
+            scope_detail = ", ".join(detail_parts) if detail_parts else "Filtered student records"
+            filename_prefix = "students_filtered"
+        else:
+            query, _q, grade_level, normalized_section, normalized_face_status, _school_year = build_students_query("", "", "", "", school_year_label)
+
+        rows = [normalize_enrollment_doc(row) for row in collection.find(query)]
+        rows = sort_students_export_rows(rows)
+
+    return {
+        "scope": effective_scope,
+        "scope_label": scope_label,
+        "scope_detail": scope_detail,
+        "rows": rows,
+        "selected_student": selected_student,
+        "school_year": school_year_label,
+        "query": q_value,
+        "grade_level": grade_level,
+        "section": normalized_section,
+        "face_status": normalized_face_status,
+        "filename_prefix": filename_prefix,
+    }
+
+
+def build_students_plain_export_pdf(export_payload, admin_name):
+    generated_at_label = now_local().strftime("%B %d, %Y %I:%M:%S %p")
+    rows = export_payload["rows"]
+    scope = export_payload["scope"]
+    school_year_label = export_payload["school_year"] or get_current_school_year_label()
+    styles = build_students_plain_export_styles()
+
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=landscape(letter),
+        rightMargin=42,
+        leftMargin=42,
+        topMargin=42,
+        bottomMargin=42,
+        pageCompression=0,
+    )
+    doc.export_author = admin_name
+    doc.export_title = "Official Student Records Report"
+    doc.export_subject = f"Student records export - {export_payload['scope_label']}"
+
+    story = [
+        Paragraph("Official Student Records Report", styles["title"]),
+        Spacer(1, 0.06 * inch),
+        Paragraph("Cawitan High School", styles["subtitle"]),
+        Paragraph(f"School Year: {xml_escape(school_year_label)}", styles["subtitle"]),
+        Spacer(1, 0.14 * inch),
+    ]
+
+    metadata_items = [
+        ("Generated At", generated_at_label),
+        ("School Year", school_year_label),
+        ("Export Scope", export_payload["scope_label"]),
+        ("Total Records", str(len(rows))),
+        ("Selection", export_payload["scope_detail"]),
+        ("Face Status", format_students_export_face_status(export_payload["face_status"])),
+    ]
+
+    if scope == "grade":
+        metadata_items.extend([("Grade Level", export_payload["grade_level"] or "N/A"), ("Section", "All sections")])
+    elif scope == "section":
+        metadata_items.extend([("Grade Level", export_payload["grade_level"] or "All grades"), ("Section", export_payload["section"] or "N/A")])
+    elif scope == "student":
+        student = export_payload["selected_student"] or {}
+        metadata_items.extend([("Student Name", student.get("name") or "N/A"), ("Student ID", student.get("student_id") or student.get("lrn") or "N/A")])
+    else:
+        metadata_items.extend([("Search Query", export_payload["query"] or "All records"), ("Section", export_payload["section"] or "All sections")])
+
+    story.append(build_students_plain_metadata_table(metadata_items, styles))
+    story.append(Spacer(1, 0.18 * inch))
+
+    if scope == "student":
+        story.append(Paragraph("Student Details", styles["section_title"]))
+        if export_payload["selected_student"]:
+            student = export_payload["selected_student"]
+            story.append(build_students_plain_key_value_table([
+                ("LRN", student.get("lrn") or student.get("student_id") or "N/A"),
+                ("Student ID", student.get("student_id") or student.get("lrn") or "N/A"),
+                ("Name", student.get("name") or "N/A"),
+                ("Grade Level", student.get("grade_level") or "N/A"),
+                ("Section", student.get("section") or "N/A"),
+                ("Gender", student.get("gender") or "N/A"),
+                ("Status", student.get("status") or "Active"),
+                ("Face Registered", "Yes" if student.get("face_registered") else "No"),
+                ("Parent Contact", student.get("parent_contact") or "N/A"),
+                ("Created At", format_students_export_timestamp(student.get("created_at"))),
+                ("Updated At", format_students_export_timestamp(student.get("updated_at"))),
+            ], styles))
+        else:
+            story.append(Paragraph("No student record matched the selected export filter.", styles["note"]))
+    else:
+        story.append(Paragraph("Student Records", styles["section_title"]))
+        story.append(build_students_plain_records_table(rows, styles))
+
+    story.extend([Spacer(1, 0.18 * inch), Paragraph("This document is system-generated.", styles["note"])])
+    doc.build(story, onFirstPage=build_students_plain_export_footer, onLaterPages=build_students_plain_export_footer)
+    buffer.seek(0)
+    return buffer
+
+
 def format_export_date_range_label(start_date, end_date):
     start_text = str(start_date or "").strip()
     end_text = str(end_date or "").strip()
@@ -8834,6 +9353,22 @@ def send_generated_pdf(buffer, filename):
 @require_permission("students_write")
 def students_export_pdf():
     selected_school_year = resolve_selected_school_year(request.args.get("school_year", ""))
+    school_year_label = selected_school_year or get_current_school_year_label()
+    admin_username = session.get("admin", "Admin")
+    admin_name = admin_username
+    try:
+        user_doc, profile = current_user_profile()
+        if profile and profile.get("fullName"):
+            admin_name = profile.get("fullName")
+    except Exception:
+        pass
+
+    export_payload = build_students_export_payload(request.args, school_year_label)
+    buffer = build_students_plain_export_pdf(export_payload, admin_name)
+    timestamp_suffix = now_local().strftime("%Y%m%d_%H%M%S")
+    filename = f"{export_payload['filename_prefix']}_{timestamp_suffix}.pdf"
+    return send_generated_pdf(buffer, filename)
+
     query, q_value, grade_level, section_value, face_status, school_year_label = build_students_query(
         request.args.get("q", ""),
         request.args.get("grade", "") or request.args.get("grade_level", ""),
@@ -9777,9 +10312,9 @@ def save_face_registration(student_id, is_update=False):
         return api_error("Student not found.", 404)
 
     payload = request_payload()
-    faces_array, face_encodings, capture_details, err_message, err_field = parse_faces_payload(payload)
+    faces_array, face_encodings, capture_details, err_message, err_field, err_extra = parse_faces_payload(payload)
     if err_message:
-        return api_error(err_message, 400, err_field)
+        return api_error(err_message, 400, err_field, err_extra)
 
     update_doc = {
         "face_data": faces_array,
@@ -10445,7 +10980,7 @@ def simulate_gate(student_id):
     if not student:
         return jsonify({"status": "FAILED", "error": "Student not found"}), 404
 
-    result = log_attendance_and_sms(student, source="manual_simulation", send_notifications=False)
+    result = log_attendance_and_sms(student, source="manual_simulation", send_notifications=False, mode="auto")
     if not result:
         return jsonify({"status": "FAILED", "error": "Unable to process gate simulation."}), 400
 

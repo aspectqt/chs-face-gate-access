@@ -56,8 +56,8 @@ class AppSmokeTests(unittest.TestCase):
         self.assertIn("Smart IN/OUT Tracking", html)
         self.assertIn("Smart IN/OUT Active", html)
         self.assertNotIn("Scanner Status", html)
-        self.assertNotIn("Manual IN", html)
-        self.assertNotIn("Manual OUT", html)
+        self.assertIn("Manual IN", html)
+        self.assertIn("Manual OUT", html)
         self.assertIn("Status: ${data.count} faces detected", html)
         self.assertNotIn("showScanEventBadge('warning', `${data.count} faces detected`)", html)
 
@@ -127,7 +127,7 @@ class AppSmokeTests(unittest.TestCase):
             "afternoon_start": "13:00",
             "afternoon_end": "17:00",
             "late_threshold_minutes": 20,
-            "scan_cooldown_minutes": 45,
+            "scan_cooldown_minutes": 1,
         }
         csrf_headers = {self.app_module.CSRF_HEADER_NAME: "test-csrf-token"}
 
@@ -137,14 +137,14 @@ class AppSmokeTests(unittest.TestCase):
             body = response.get_json()
             self.assertEqual(body["status"], "ok")
             self.assertEqual(body["schedule"]["late_threshold_minutes"], 20)
-            self.assertEqual(body["schedule"]["scan_cooldown_minutes"], 45)
+            self.assertEqual(body["schedule"]["scan_cooldown_minutes"], 1)
             self.assertEqual(body["schedule"]["morning_late"], "05:20")
             self.assertEqual(body["schedule"]["afternoon_late"], "13:20")
 
             fetched = client.get("/api/schedule/default")
             self.assertEqual(fetched.status_code, 200)
             fetched_body = fetched.get_json()
-            self.assertEqual(fetched_body["schedule"]["scan_cooldown_minutes"], 45)
+            self.assertEqual(fetched_body["schedule"]["scan_cooldown_minutes"], 1)
             self.assertEqual(fetched_body["schedule"]["late_threshold_minutes"], 20)
         finally:
             self.restore_default_schedule_doc(original_doc)
@@ -205,8 +205,9 @@ class AppSmokeTests(unittest.TestCase):
         self.assertIn("inline", inline_response.headers.get("Content-Disposition", "").lower())
 
     def test_students_pdf_export_supports_grade_section_and_individual_scopes(self):
-        collection = self.app_module.get_school_year_enrollment_collection(self.app_module.get_current_school_year_label())
-        sample_student = collection.find_one({}, {"student_id": 1, "grade_level": 1, "section": 1})
+        school_year_label = self.app_module.get_current_school_year_label()
+        collection = self.app_module.get_school_year_enrollment_collection(school_year_label)
+        sample_student = collection.find_one({}, {"_id": 1, "student_id": 1, "grade_level": 1, "section": 1})
         if not sample_student:
             self.skipTest("No student data available for scoped PDF export checks.")
 
@@ -214,11 +215,15 @@ class AppSmokeTests(unittest.TestCase):
         grade_value = str(sample_student.get("grade_level") or "")
         section_value = str(sample_student.get("section") or "")
         student_id = str(sample_student.get("student_id") or "")
+        student_record_id = str(sample_student.get("_id") or "")
 
         checks = [
-            (f"/students/export_pdf?grade={grade_value}", "grade"),
-            (f"/students/export_pdf?section={section_value}", "section"),
-            (f"/students/export_pdf?q={student_id}", "individual"),
+            (f"/students/export_pdf?scope=grade&grade={grade_value}&school_year={school_year_label}", "grade"),
+            (f"/students/export_pdf?scope=section&grade={grade_value}&section={section_value}&school_year={school_year_label}", "section"),
+            (f"/students/export_pdf?scope=student&student_record_id={student_record_id}&student_id={student_id}&school_year={school_year_label}", "individual"),
+            (f"/students/export_pdf?grade={grade_value}", "legacy-grade"),
+            (f"/students/export_pdf?section={section_value}", "legacy-section"),
+            (f"/students/export_pdf?q={student_id}", "legacy-individual"),
         ]
 
         for url, label in checks:
@@ -290,6 +295,53 @@ class AppSmokeTests(unittest.TestCase):
         finally:
             attendance_collection.delete_many({"student_id": student_id})
             self.app_module.students.delete_many({"student_id": student_id})
+
+    def test_manual_out_bypasses_wait_period_and_out_resets_to_immediate_in(self):
+        student_id = f"MANUAL-{uuid.uuid4().hex[:10]}"
+        student_doc = {
+            "student_id": student_id,
+            "name": "Manual Session Student",
+            "parent_contact": "",
+            "status": "Active",
+        }
+
+        school_year_label = self.app_module.get_current_school_year_label()
+        attendance_collection, _, _ = self.app_module.get_attendance_logs_storage(school_year_label)
+        attendance_collection.delete_many({"student_id": student_id})
+        original_mode = self.app_module.get_scan_session_mode()
+
+        try:
+            first_scan_time = datetime(2026, 3, 25, 7, 30, 0)
+            forced_out_time = first_scan_time + timedelta(minutes=10)
+            reentry_time = forced_out_time + timedelta(seconds=1)
+
+            self.app_module.set_scan_session_mode("auto")
+            with patch.object(self.app_module, "now_local", return_value=first_scan_time):
+                first_result = self.app_module.log_attendance_and_sms(student_doc, send_notifications=False)
+            self.assertIsNotNone(first_result)
+            self.assertFalse(first_result["duplicate"])
+            self.assertEqual(first_result["gate_action"], "IN")
+
+            self.app_module.set_scan_session_mode("manual_out")
+            with patch.object(self.app_module, "now_local", return_value=forced_out_time):
+                forced_out_result = self.app_module.log_attendance_and_sms(student_doc, send_notifications=False)
+            self.assertIsNotNone(forced_out_result)
+            self.assertFalse(forced_out_result["duplicate"])
+            self.assertEqual(forced_out_result["gate_action"], "OUT")
+            self.assertEqual(forced_out_result["tracking_mode"], "manual_out")
+
+            self.app_module.set_scan_session_mode("auto")
+            with patch.object(self.app_module, "now_local", return_value=reentry_time):
+                reentry_result = self.app_module.log_attendance_and_sms(student_doc, send_notifications=False)
+            self.assertIsNotNone(reentry_result)
+            self.assertFalse(reentry_result["duplicate"])
+            self.assertEqual(reentry_result["gate_action"], "IN")
+
+            stored_rows = list(attendance_collection.find({"student_id": student_id}).sort("timestamp", 1))
+            self.assertEqual([row.get("gate_action") for row in stored_rows], ["IN", "OUT", "IN"])
+        finally:
+            self.app_module.set_scan_session_mode(original_mode)
+            attendance_collection.delete_many({"student_id": student_id})
 
     def test_live_face_handler_silently_ignores_duplicates_until_window_expires(self):
         student_id = f"HANDLER-{uuid.uuid4().hex[:10]}"
@@ -557,6 +609,54 @@ class AppSmokeTests(unittest.TestCase):
             self.assertEqual(response.status_code, 400)
             body = response.get_json()
             self.assertIn("10", body["message"])
+        finally:
+            self.app_module.students.delete_many({"_id": inserted_id})
+
+    def test_face_registration_reports_invalid_capture_indexes_for_partial_retake(self):
+        client = self.make_client()
+        csrf_headers = {self.app_module.CSRF_HEADER_NAME: "test-csrf-token"}
+        student_doc = {
+            "student_id": f"FACE-{uuid.uuid4().hex[:8]}",
+            "name": "Face Retake Student",
+            "parent_contact": "",
+            "status": "Active",
+        }
+        inserted_id = self.app_module.students.insert_one(student_doc).inserted_id
+        validated_rows = [
+            {
+                "encoding": self.app_module.np.array([index * 0.01] * 128, dtype=self.app_module.np.float64),
+                "brightness": 120.0,
+                "contrast": 40.0,
+                "sharpness": 80.0,
+            }
+            for index in range(10)
+        ]
+        validated_rows[3] = None
+        payload = {
+            "capture_profile": "standard",
+            "faces": [f"data:image/jpeg;base64,shot-{index}" for index in range(10)],
+            "capture_meta": [
+                {"step_key": f"step_{index}", "label": f"Capture {index + 1}", "instruction": "Hold still."}
+                for index in range(10)
+            ],
+        }
+
+        try:
+            with patch.object(self.app_module, "validate_face_capture_image", side_effect=validated_rows):
+                response = client.post(
+                    f"/api/students/{inserted_id}/face/register",
+                    json=payload,
+                    headers=csrf_headers,
+                )
+
+            self.assertEqual(response.status_code, 400)
+            body = response.get_json()
+            self.assertEqual(body["field"], "faces")
+            self.assertEqual(body["required_count"], 10)
+            self.assertEqual(body["valid_capture_count"], 9)
+            self.assertEqual(body["invalid_capture_indices"], [3])
+            self.assertEqual(body["invalid_captures"][0]["reason"], "validation_failed")
+            self.assertEqual(body["invalid_captures"][0]["label"], "Capture 4")
         finally:
             self.app_module.students.delete_many({"_id": inserted_id})
 
