@@ -844,7 +844,7 @@
       <section class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
         <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Export Summary</p>
         <p id="studentsExportSummary" class="mt-2 text-sm font-semibold text-slate-900">Choose an export type to continue.</p>
-        <p class="mt-1 text-xs text-slate-500">The generated PDF uses a simple black text layout for both print and download.</p>
+        <p class="mt-1 text-xs text-slate-500">Download starts directly from the browser, and Print opens a preview-ready PDF.</p>
       </section>
 
       <div class="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -856,7 +856,7 @@
             </svg>
             Print PDF
           </button>
-          <button id="studentsExportDownloadBtn" type="button" data-file-download class="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-50" disabled>
+          <button id="studentsExportDownloadBtn" type="button" data-file-download data-download-mode="native" data-pdf-download-link data-error-message="Unable to start the student records PDF download right now." class="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-50" disabled>
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v10m0 0-4-4m4 4 4-4M4 20h16" />
             </svg>
@@ -982,7 +982,7 @@
   </div>
 </div>
 
-<script src="{{ url_for('static', filename='download_utils.js', v='20260326a') }}"></script>
+<script src="{{ url_for('static', filename='download_utils.js', v='20260328b') }}"></script>
 <script src="{{ url_for('static', filename='students.js', v=dev_reload_token or '20260326e') }}"></script>
 </body>
 </html>

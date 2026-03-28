@@ -28,87 +28,22 @@
       <div class="app-header-actions">
         {% set theme_toggle_classes = 'app-header-icon-btn' %}
         {% include 'partials/theme_toggle_button.html' %}
-        <div
-          id="smsLogsPdfActions"
-          class="relative"
-          x-data="{ open: false }"
-          @keydown.escape.window="open = false">
-          {% set sms_logs_pdf_download_url = '/sms-logs/export?' ~ export_query if export_query else '/sms-logs/export' %}
-          {% set sms_logs_pdf_print_url = sms_logs_pdf_download_url ~ ('&' if '?' in sms_logs_pdf_download_url else '?') ~ 'disposition=inline' %}
-          <button
-            type="button"
-            @click="open = !open"
-            :aria-expanded="open.toString()"
-            aria-haspopup="menu"
-            aria-label="SMS logs PDF actions"
-            title="SMS logs PDF actions"
-            class="inline-flex h-10 items-center gap-2 rounded-xl border border-rose-200 bg-gradient-to-br from-rose-50 via-white to-red-100 px-2.5 text-rose-700 shadow-sm transition hover:-translate-y-px hover:border-rose-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-rose-400">
-            <span class="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-rose-600 text-white shadow-sm">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M7 3.75h6.75L19.5 9.5V19.25a1.5 1.5 0 0 1-1.5 1.5h-11a1.5 1.5 0 0 1-1.5-1.5v-14A1.5 1.5 0 0 1 7 3.75Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
-                <path d="M13.5 3.75V9.5H19.25" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                <path d="M8.4 15.2h7.2M8.4 18h5.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-              </svg>
-            </span>
-            <span class="hidden text-[11px] font-bold uppercase tracking-[0.18em] sm:inline">PDF</span>
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-rose-500 transition" :class="{ 'rotate-180': open }" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6" />
+        <button
+          id="smsLogsExportBtn"
+          type="button"
+          @click="pdfExportOpenModal()"
+          aria-haspopup="dialog"
+          aria-controls="smsLogsExportModal"
+          class="inline-flex h-10 items-center gap-2 rounded-xl border border-rose-200 bg-gradient-to-br from-rose-50 via-white to-red-100 px-3 text-rose-700 shadow-sm transition hover:-translate-y-px hover:border-rose-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-rose-400">
+          <span class="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-rose-600 text-white shadow-sm">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M7 3.75h6.75L19.5 9.5V19.25a1.5 1.5 0 0 1-1.5 1.5h-11a1.5 1.5 0 0 1-1.5-1.5v-14A1.5 1.5 0 0 1 7 3.75Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+              <path d="M13.5 3.75V9.5H19.25" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M8.4 15.2h7.2M8.4 18h5.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
             </svg>
-          </button>
-
-          <div
-            x-show="open"
-            x-transition.origin.top.right
-            @click.outside="open = false"
-            style="display: none;"
-            class="absolute right-0 z-50 mt-2 w-56 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl"
-            role="menu">
-            <div class="border-b border-slate-100 bg-gradient-to-r from-rose-50 to-white px-3 py-2.5">
-              <p class="text-xs font-semibold uppercase tracking-[0.16em] text-rose-700">PDF Actions</p>
-              <p class="mt-1 text-[11px] leading-5 text-slate-500">Download or print the current filtered SMS delivery report.</p>
-            </div>
-            <div class="p-2">
-              <a
-                href="{{ sms_logs_pdf_download_url }}"
-                data-file-download
-                data-no-transition
-                data-download-url="{{ sms_logs_pdf_download_url }}"
-                data-pdf-download-link
-                @click="open = false"
-                class="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-                role="menuitem">
-                <span class="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-rose-50 text-rose-600">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v10m0 0-4-4m4 4 4-4M4 20h16" />
-                  </svg>
-                </span>
-                <span>
-                  <span class="block font-semibold text-slate-800">Download PDF</span>
-                  <span class="block text-[11px] text-slate-500">Save the current report to your device.</span>
-                </span>
-              </a>
-              <button
-                type="button"
-                data-pdf-print
-                data-print-url="{{ sms_logs_pdf_print_url }}"
-                data-pdf-print-button
-                data-print-title="SMS logs PDF actions"
-                @click="open = false"
-                class="mt-1 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-                role="menuitem">
-                <span class="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M7 9V4h10v5M7 17h10M7 13h10m3 0a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v4h16v-4Z" />
-                  </svg>
-                </span>
-                <span>
-                  <span class="block font-semibold text-slate-800">Print PDF</span>
-                  <span class="block text-[11px] text-slate-500">Open a print-ready PDF and launch the print dialog.</span>
-                </span>
-              </button>
-            </div>
-          </div>
-        </div>
+          </span>
+          <span class="hidden text-[11px] font-bold uppercase tracking-[0.18em] sm:inline">Export PDF</span>
+        </button>
       </div>
     </header>
 
@@ -335,13 +270,177 @@
         </div>
       </section>
     </main>
+
+    <div
+      id="smsLogsExportModal"
+      x-cloak
+      x-show="pdfExportModalOpen"
+      x-transition
+      class="modal-backdrop-blur fixed inset-0 z-[940] bg-black/55 p-3 sm:p-4 flex items-center justify-center"
+      @click.self="pdfExportCloseModal()"
+      @keydown.escape.window="if (pdfExportModalOpen) pdfExportCloseModal()">
+      <div class="w-full max-w-3xl rounded-3xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/20 max-h-[90vh] overflow-y-auto">
+        <div class="sticky top-0 z-10 border-b border-slate-200 bg-white px-5 py-4 sm:px-6">
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">PDF Export</p>
+              <h3 class="mt-1 text-xl font-semibold leading-tight text-slate-900">Export SMS Logs</h3>
+              <p class="mt-1 text-xs text-slate-500">Choose the scope first, then download the generated PDF directly or send it to print.</p>
+            </div>
+            <button type="button" @click="pdfExportCloseModal()" class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-100 hover:text-slate-700" aria-label="Close export modal">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="p-4 sm:p-6 space-y-5">
+          <section class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Export Type</p>
+            <div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+              <label class="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 transition hover:border-slate-300">
+                <input type="radio" name="smsLogsExportScope" value="grade" class="mt-1 h-4 w-4 border-slate-300 text-slate-900" :checked="pdfExportScope === 'grade'" @change="pdfExportSetScope('grade')">
+                <span>
+                  <span class="block text-sm font-semibold text-slate-900">By Grade Level</span>
+                  <span class="mt-1 block text-xs text-slate-500">Generate a PDF for SMS logs tied to one grade level.</span>
+                </span>
+              </label>
+              <label class="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 transition hover:border-slate-300">
+                <input type="radio" name="smsLogsExportScope" value="section" class="mt-1 h-4 w-4 border-slate-300 text-slate-900" :checked="pdfExportScope === 'section'" @change="pdfExportSetScope('section')">
+                <span>
+                  <span class="block text-sm font-semibold text-slate-900">By Section</span>
+                  <span class="mt-1 block text-xs text-slate-500">Choose a grade and section before generating the PDF.</span>
+                </span>
+              </label>
+              <label class="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 transition hover:border-slate-300">
+                <input type="radio" name="smsLogsExportScope" value="student" class="mt-1 h-4 w-4 border-slate-300 text-slate-900" :checked="pdfExportScope === 'student'" @change="pdfExportSetScope('student')">
+                <span>
+                  <span class="block text-sm font-semibold text-slate-900">Individual Student</span>
+                  <span class="mt-1 block text-xs text-slate-500">Search for a single student and export only their SMS logs.</span>
+                </span>
+              </label>
+            </div>
+          </section>
+
+          <section x-show="pdfExportScope === 'grade'" class="rounded-2xl border border-slate-200 bg-white p-4">
+            <label for="smsLogsExportGradeLevel" class="text-sm font-semibold text-slate-900">Grade Level</label>
+            <select id="smsLogsExportGradeLevel" x-model="pdfExportGrade" class="mt-2 h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-700 transition focus:border-slate-900 focus:ring-2 focus:ring-slate-200">
+              <option value="">Select Grade Level</option>
+              {% for grade in grade_options %}
+              <option value="{{ grade }}">{{ grade }}</option>
+              {% endfor %}
+            </select>
+            <p class="mt-2 text-[11px] text-slate-500">This includes only the SMS logs for students enrolled in the selected grade level.</p>
+          </section>
+
+          <section x-show="pdfExportScope === 'section'" class="rounded-2xl border border-slate-200 bg-white p-4">
+            <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div>
+                <label for="smsLogsExportSectionGrade" class="text-sm font-semibold text-slate-900">Grade Level</label>
+                <select id="smsLogsExportSectionGrade" x-model="pdfExportSectionGrade" @change="pdfExportRefreshSectionOptions()" class="mt-2 h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-700 transition focus:border-slate-900 focus:ring-2 focus:ring-slate-200">
+                  <option value="">Select Grade Level</option>
+                  {% for grade in grade_options %}
+                  <option value="{{ grade }}">{{ grade }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div>
+                <label for="smsLogsExportSection" class="text-sm font-semibold text-slate-900">Section</label>
+                <select id="smsLogsExportSection" x-model="pdfExportSection" class="mt-2 h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-700 transition focus:border-slate-900 focus:ring-2 focus:ring-slate-200" :disabled="pdfExportSectionsForGrade(pdfExportSectionGrade).length === 0">
+                  <option value="">Select Section</option>
+                  <template x-for="section in pdfExportSectionsForGrade(pdfExportSectionGrade)" :key="section">
+                    <option :value="section" x-text="section"></option>
+                  </template>
+                </select>
+              </div>
+            </div>
+            <p class="mt-2 text-[11px] text-slate-500">The PDF will include only the SMS logs for students in the selected section.</p>
+          </section>
+
+          <section x-show="pdfExportScope === 'student'" class="rounded-2xl border border-slate-200 bg-white p-4">
+            <label for="smsLogsExportStudentSearch" class="text-sm font-semibold text-slate-900">Student Search</label>
+            <input id="smsLogsExportStudentSearch" x-model="pdfExportStudentQuery" @input.debounce.250ms="pdfExportHandleStudentSearch()" type="search" placeholder="Search by student name, LRN, or student ID" autocomplete="off" class="mt-2 h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-700 transition focus:border-slate-900 focus:ring-2 focus:ring-slate-200">
+            <p class="mt-2 text-[11px] text-slate-500" x-text="pdfExportStudentHint()"></p>
+            <div x-show="pdfExportSelectedStudent" class="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Selected Student</p>
+                  <p class="mt-1 text-sm font-semibold text-slate-900" x-text="pdfExportSelectedStudent?.name || pdfExportSelectedStudent?.student_id || 'Selected student'"></p>
+                  <p class="mt-1 text-xs text-slate-500">
+                    <span x-text="pdfExportSelectedStudent?.student_id || pdfExportSelectedStudent?.lrn || 'No ID'"></span>
+                    <span> | </span>
+                    <span x-text="pdfExportSelectedStudent?.grade_level || 'No Grade'"></span>
+                    <span> | </span>
+                    <span x-text="pdfExportSelectedStudent?.section || 'No Section'"></span>
+                  </p>
+                </div>
+                <button type="button" @click="pdfExportClearStudentSelection()" class="inline-flex h-8 shrink-0 items-center justify-center rounded-lg border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:bg-slate-100">Change</button>
+              </div>
+            </div>
+            <div class="mt-3 max-h-64 space-y-2 overflow-y-auto">
+              <div x-show="pdfExportStudentLoading" class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-500">Searching students...</div>
+              <div x-show="!pdfExportStudentLoading && !pdfExportSelectedStudent && pdfExportStudentQuery.trim().length >= 2 && pdfExportStudentResults.length === 0" class="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-sm text-slate-500" x-text="pdfExportEmptyResultsLabel"></div>
+              <template x-for="student in pdfExportStudentResults" :key="student._id">
+                <button type="button" @click="pdfExportSelectStudent(student)" class="flex w-full items-start justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-slate-400 hover:bg-slate-50">
+                  <div class="min-w-0">
+                    <p class="text-sm font-semibold text-slate-900" x-text="student.name || student.student_id || 'Unnamed student'"></p>
+                    <p class="mt-1 text-xs text-slate-500">
+                      <span x-text="student.student_id || student.lrn || 'No ID'"></span>
+                      <span> | </span>
+                      <span x-text="student.grade_level || student.grade || 'No Grade'"></span>
+                      <span> | </span>
+                      <span x-text="student.section || 'No Section'"></span>
+                    </p>
+                  </div>
+                  <span class="shrink-0 rounded-full border border-slate-200 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-600">Select</span>
+                </button>
+              </template>
+            </div>
+          </section>
+
+          <section class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Export Summary</p>
+            <p class="mt-2 text-sm font-semibold text-slate-900" x-text="pdfExportSummaryText()"></p>
+            <p class="mt-1 text-xs text-slate-500">Download PDF starts directly from the browser, and Print opens a print-ready preview.</p>
+          </section>
+
+          <div class="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <button type="button" @click="pdfExportCloseModal()" class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">Cancel</button>
+            <div class="flex flex-col gap-3 sm:flex-row">
+              <button type="button" data-pdf-print :data-print-url="pdfExportPrintUrl()" data-print-title="SMS Logs PDF" class="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50" :disabled="Boolean(pdfExportValidationMessage())" @click="if (!pdfExportValidationMessage()) pdfExportCloseModal()">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M7 9V4h10v5M7 17h10M7 13h10m3 0a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v4h16v-4Z" />
+                </svg>
+                Print PDF
+              </button>
+              <button type="button" data-file-download data-download-mode="native" :data-download-url="pdfExportDownloadUrl()" data-pdf-download-link data-error-message="Unable to start the SMS logs PDF download right now." class="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-50" :disabled="Boolean(pdfExportValidationMessage())" @click="if (!pdfExportValidationMessage()) pdfExportCloseModal()">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v10m0 0-4-4m4 4 4-4M4 20h16" />
+                </svg>
+                Download PDF
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
-<script src="{{ url_for('static', filename='download_utils.js', v='20260326a') }}"></script>
+<script src="{{ url_for('static', filename='download_utils.js', v='20260328b') }}"></script>
+<script src="{{ url_for('static', filename='scoped_pdf_export.js', v='20260328d') }}"></script>
 <script>
 function smsLogsPage() {
   return {
+    ...window.createScopedPdfExportController({
+      baseUrl: "/sms-logs/export",
+      baseQuery: {{ export_query|tojson }},
+      schoolYear: {{ selected_school_year|tojson }},
+      gradeOptions: {{ grade_options|tojson }},
+      sectionsByGrade: {{ sections_by_grade|tojson }},
+      studentSearchUrl: "/api/logs/export/students",
+      emptyResultsLabel: "No matching students found for SMS logs export.",
+    }),
     toastMessage: '',
     toastType: 'success',
     templateText: {{ sms_template.template|tojson }},
@@ -497,12 +596,19 @@ function smsLogsPage() {
       this.requestReload(700);
     },
     init() {
+      this.pdfExportRefreshSectionOptions();
       document.addEventListener('app-file-download-start', () => {
         this.suppressReloadUntil = Date.now() + 10000;
         this.clearReloadTimer();
       });
       document.addEventListener('app-file-download-end', () => {
         this.suppressReloadUntil = Date.now() + 2500;
+      });
+      document.addEventListener('file-download-error', (event) => {
+        const trigger = event.target instanceof Element ? event.target.closest('[data-pdf-download-link]') : null;
+        if (!trigger) return;
+        event.preventDefault();
+        this.setToast(event.detail?.error || 'Unable to start the SMS logs PDF download right now.', 'error');
       });
       if (!this.realtimeEnabled) return;
       this.connectRealtime();

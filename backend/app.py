@@ -27,6 +27,14 @@ from reportlab.lib.units import inch
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from dotenv import load_dotenv
+from face_matching import (
+    build_face_registration_metadata,
+    build_student_face_index,
+    detect_face_registration_conflict,
+    face_distance,
+    match_face_probe,
+    sanitize_face_encodings,
+)
 from config import (
     DB_NAME,
     client,
@@ -67,6 +75,7 @@ from PIL import Image
 import base64
 import threading
 import time
+import sys
 import unicodedata
 from functools import wraps
 from urllib.parse import urlencode
@@ -113,6 +122,21 @@ def env_int(name, default, minimum=None, maximum=None):
     except (TypeError, ValueError):
         print(f"[WARNING] Invalid integer for {name}: {raw!r}. Using default={default}.")
         value = int(default)
+
+    if minimum is not None and value < minimum:
+        value = minimum
+    if maximum is not None and value > maximum:
+        value = maximum
+    return value
+
+
+def env_float(name, default, minimum=None, maximum=None):
+    raw = os.getenv(name, str(default))
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        print(f"[WARNING] Invalid float for {name}: {raw!r}. Using default={default}.")
+        value = float(default)
 
     if minimum is not None and value < minimum:
         value = minimum
@@ -181,8 +205,20 @@ SCAN_REPEAT_SUPPRESSION_SECONDS = env_int("SCAN_REPEAT_SUPPRESSION_SECONDS", 20,
 SCAN_FACE_PRESENCE_RESET_SECONDS = env_int("SCAN_FACE_PRESENCE_RESET_SECONDS", 1, minimum=1, maximum=5)
 UNKNOWN_ALERT_COOLDOWN_SECONDS = 30
 UNREGISTERED_EVENT_COOLDOWN_SECONDS = 2
-RECOGNITION_TOLERANCE = 0.50
-MIN_RECOGNITION_CONFIDENCE = 50.0
+FACE_INDEX_MAX_ENCODINGS_PER_STUDENT = env_int("FACE_INDEX_MAX_ENCODINGS_PER_STUDENT", 20, minimum=5, maximum=60)
+FACE_CAPTURE_DUPLICATE_DISTANCE = env_float("FACE_CAPTURE_DUPLICATE_DISTANCE", 0.018, minimum=0.0, maximum=0.1)
+FACE_REGISTRATION_CONFLICT_DISTANCE = env_float("FACE_REGISTRATION_CONFLICT_DISTANCE", 0.30, minimum=0.0, maximum=0.6)
+FACE_REGISTRATION_CONFLICT_MEAN_DISTANCE = env_float("FACE_REGISTRATION_CONFLICT_MEAN_DISTANCE", 0.36, minimum=0.0, maximum=0.8)
+FACE_REGISTRATION_CONFLICT_SUPPORT_DISTANCE = env_float("FACE_REGISTRATION_CONFLICT_SUPPORT_DISTANCE", 0.40, minimum=0.0, maximum=0.8)
+FACE_REGISTRATION_CONFLICT_SUPPORT_COUNT = env_int("FACE_REGISTRATION_CONFLICT_SUPPORT_COUNT", 3, minimum=1, maximum=10)
+RECOGNITION_TOLERANCE = env_float("RECOGNITION_TOLERANCE", 0.45, minimum=0.2, maximum=0.75)
+RECOGNITION_SCORE_TOLERANCE = env_float("RECOGNITION_SCORE_TOLERANCE", 0.47, minimum=0.2, maximum=0.8)
+RECOGNITION_SUPPORT_TOLERANCE = env_float("RECOGNITION_SUPPORT_TOLERANCE", 0.50, minimum=0.2, maximum=0.8)
+RECOGNITION_STRONG_MATCH_DISTANCE = env_float("RECOGNITION_STRONG_MATCH_DISTANCE", 0.36, minimum=0.2, maximum=0.75)
+RECOGNITION_MARGIN_THRESHOLD = env_float("RECOGNITION_MARGIN_THRESHOLD", 0.035, minimum=0.0, maximum=0.2)
+RECOGNITION_SHORTLIST_SIZE = env_int("RECOGNITION_SHORTLIST_SIZE", 8, minimum=1, maximum=24)
+RECOGNITION_MIN_SUPPORT_COUNT = env_int("RECOGNITION_MIN_SUPPORT_COUNT", 2, minimum=1, maximum=6)
+MIN_RECOGNITION_CONFIDENCE = env_float("MIN_RECOGNITION_CONFIDENCE", 55.0, minimum=0.0, maximum=100.0)
 PASSWORD_HASH_METHOD = "pbkdf2:sha256:600000"
 ALLOWED_AVATAR_EXTENSIONS = {"jpg", "jpeg", "png", "webp"}
 MAX_AVATAR_SIZE_BYTES = 5 * 1024 * 1024
@@ -1797,6 +1833,216 @@ def update_student_base_fields_across_enrollments(student_id, update_fields):
         result = collection.update_many({"student_id": normalized_student_id}, {"$set": dict(update_fields)})
         modified_count += int(result.modified_count or 0)
     return modified_count
+
+
+def build_student_reference_cleanup_query(student_id="", student_ref_id=None):
+    normalized_student_id = normalize_lrn_value(student_id)
+    clauses = []
+    if normalized_student_id:
+        clauses.extend([
+            {"student_id": normalized_student_id},
+            {"lrn": normalized_student_id},
+        ])
+
+    student_ref_text = ""
+    if isinstance(student_ref_id, ObjectId):
+        student_ref_text = str(student_ref_id)
+    else:
+        student_ref_text = str(student_ref_id or "").strip()
+        parsed_ref = parse_student_oid(student_ref_text)
+        if parsed_ref:
+            student_ref_text = str(parsed_ref)
+
+    if student_ref_text:
+        clauses.append({"student_ref_id": student_ref_text})
+
+    if not clauses:
+        return {}
+    if len(clauses) == 1:
+        return clauses[0]
+    return {"$or": clauses}
+
+
+def purge_student_runtime_face_references(student_id):
+    normalized_student_id = normalize_lrn_value(student_id)
+    if not normalized_student_id:
+        return {"removed": False, "events_pruned": 0, "runtime_remaining": False}
+
+    removed = False
+    events_pruned = 0
+    runtime_remaining = False
+
+    with scan_lock:
+        last_scanned.pop(normalized_student_id, None)
+        scan_presence_locks.pop(normalized_student_id, None)
+
+        existing_events = list(scan_state.get("events") or [])
+        filtered_events = [
+            row for row in existing_events
+            if normalize_lrn_value(row.get("student_id") or (row.get("activity_entry") or {}).get("student_id")) != normalized_student_id
+        ]
+        events_pruned = max(len(existing_events) - len(filtered_events), 0)
+        if events_pruned:
+            scan_state["events"] = filtered_events
+
+        known_students = list(scan_state.get("known_students") or [])
+        keep_indices = []
+        filtered_students = []
+        for index, row in enumerate(known_students):
+            current_student_id = normalize_lrn_value((row or {}).get("student_id") or (row or {}).get("lrn"))
+            if current_student_id == normalized_student_id:
+                removed = True
+                continue
+            keep_indices.append(index)
+            filtered_students.append(row)
+
+        if removed:
+            scan_state["known_students"] = filtered_students
+            known_encodings = scan_state.get("known_encodings", np.empty((0, 128), dtype=np.float64))
+            if isinstance(known_encodings, np.ndarray) and known_encodings.ndim == 2 and known_encodings.shape[0] == len(known_students):
+                scan_state["known_encodings"] = known_encodings[keep_indices] if keep_indices else np.empty((0, 128), dtype=np.float64)
+            elif isinstance(known_encodings, list) and len(known_encodings) == len(known_students):
+                scan_state["known_encodings"] = [known_encodings[index] for index in keep_indices]
+            else:
+                scan_state["known_encodings"] = np.empty((0, 128), dtype=np.float64)
+                if scan_state.get("active"):
+                    scan_state["model_status"] = "loading"
+
+            if scan_state.get("active") and not filtered_students:
+                scan_state["model_status"] = "no_registered_students"
+
+        runtime_remaining = (
+            any(normalize_lrn_value((row or {}).get("student_id") or (row or {}).get("lrn")) == normalized_student_id for row in scan_state.get("known_students", []))
+            or normalized_student_id in last_scanned
+            or normalized_student_id in scan_presence_locks
+        )
+
+    return {
+        "removed": removed,
+        "events_pruned": events_pruned,
+        "runtime_remaining": runtime_remaining,
+    }
+
+
+def refresh_loaded_face_processors():
+    refresh_scan_face_index_if_active()
+    enhanced_module = sys.modules.get("enhanced_face_processor")
+    face_processor = getattr(enhanced_module, "face_processor", None) if enhanced_module else None
+    if face_processor is None:
+        return
+    try:
+        face_processor.load_known_faces()
+    except Exception as exc:
+        print(f"[WARNING] Could not refresh enhanced face processor after student cleanup: {exc}")
+
+
+def delete_student_profile_and_related_data(student_doc=None, enrollment_doc=None):
+    base_student = dict(student_doc or {})
+    source_enrollment = dict(enrollment_doc or {})
+
+    student_ref_id = parse_student_oid(base_student.get("_id") or source_enrollment.get("student_ref_id"))
+    if not base_student and student_ref_id:
+        base_student = students.find_one({"_id": student_ref_id}) or {}
+
+    normalized_student_id = normalize_lrn_value(
+        base_student.get("student_id")
+        or base_student.get("lrn")
+        or source_enrollment.get("student_id")
+        or source_enrollment.get("lrn")
+    )
+    cleanup_query = build_student_reference_cleanup_query(normalized_student_id, student_ref_id)
+    if not cleanup_query and student_ref_id is None:
+        return {
+            "ok": False,
+            "message": "Student profile could not be resolved for deletion.",
+            "counts": {},
+            "validation": {"completed": False},
+        }
+
+    counts = {
+        "student_profiles_deleted": 0,
+        "enrollment_records_deleted": 0,
+        "legacy_enrollment_records_deleted": 0,
+        "attendance_logs_deleted": 0,
+        "attendance_logs_archive_deleted": 0,
+        "sms_logs_deleted": 0,
+        "sms_logs_archive_deleted": 0,
+        "failed_scans_deleted": 0,
+        "attendance_corrections_deleted": 0,
+        "attendance_corrections_archive_deleted": 0,
+        "early_timeout_requests_deleted": 0,
+        "early_timeout_requests_archive_deleted": 0,
+        "alerts_deleted": 0,
+        "alerts_archive_deleted": 0,
+    }
+
+    if student_ref_id:
+        delete_result = students.delete_one({"_id": student_ref_id})
+        counts["student_profiles_deleted"] += int(delete_result.deleted_count or 0)
+    if normalized_student_id:
+        duplicate_cleanup = students.delete_many(build_lrn_duplicate_query(normalized_student_id, exclude_oid=student_ref_id))
+        counts["student_profiles_deleted"] += int(duplicate_cleanup.deleted_count or 0)
+
+    school_year_labels = set(list_student_enrollment_school_year_labels(include_legacy=True))
+    source_school_year = normalize_school_year_value(source_enrollment.get("school_year"))
+    if source_school_year:
+        school_year_labels.add(source_school_year)
+
+    for school_year_label in school_year_labels:
+        collection = get_school_year_enrollment_collection(school_year_label)
+        if cleanup_query:
+            result = collection.delete_many(cleanup_query)
+            counts["enrollment_records_deleted"] += int(result.deleted_count or 0)
+
+    if cleanup_query and student_enrollments.count_documents({}, limit=1) > 0:
+        legacy_result = student_enrollments.delete_many(cleanup_query)
+        counts["legacy_enrollment_records_deleted"] += int(legacy_result.deleted_count or 0)
+
+    if normalized_student_id:
+        counts["attendance_logs_deleted"] = int(attendance_logs.delete_many({"student_id": normalized_student_id}).deleted_count or 0)
+        counts["attendance_logs_archive_deleted"] = int(attendance_logs_archive.delete_many({"student_id": normalized_student_id}).deleted_count or 0)
+        counts["sms_logs_deleted"] = int(sms_logs.delete_many({"student_id": normalized_student_id}).deleted_count or 0)
+        counts["sms_logs_archive_deleted"] = int(sms_logs_archive.delete_many({"student_id": normalized_student_id}).deleted_count or 0)
+        counts["failed_scans_deleted"] = int(failed_scans.delete_many({"student_id": normalized_student_id}).deleted_count or 0)
+        counts["attendance_corrections_deleted"] = int(attendance_corrections.delete_many({"student_id": normalized_student_id}).deleted_count or 0)
+        counts["attendance_corrections_archive_deleted"] = int(attendance_corrections_archive.delete_many({"student_id": normalized_student_id}).deleted_count or 0)
+        counts["early_timeout_requests_deleted"] = int(early_timeout_requests.delete_many({"student_id": normalized_student_id}).deleted_count or 0)
+        counts["early_timeout_requests_archive_deleted"] = int(early_timeout_requests_archive.delete_many({"student_id": normalized_student_id}).deleted_count or 0)
+        counts["alerts_deleted"] = int(alerts.delete_many({"meta.student_id": normalized_student_id}).deleted_count or 0)
+        counts["alerts_archive_deleted"] = int(alerts_archive.delete_many({"meta.student_id": normalized_student_id}).deleted_count or 0)
+
+    runtime_cleanup = purge_student_runtime_face_references(normalized_student_id)
+    refresh_loaded_face_processors()
+
+    remaining_profile_count = 0
+    remaining_enrollment_count = 0
+    if student_ref_id:
+        remaining_profile_count += int(students.count_documents({"_id": student_ref_id}, limit=1))
+    if normalized_student_id:
+        remaining_profile_count += int(students.count_documents(build_lrn_duplicate_query(normalized_student_id)))
+    if cleanup_query:
+        for school_year_label in school_year_labels:
+            collection = get_school_year_enrollment_collection(school_year_label)
+            remaining_enrollment_count += int(collection.count_documents(cleanup_query))
+        if student_enrollments.count_documents({}, limit=1) > 0:
+            remaining_enrollment_count += int(student_enrollments.count_documents(cleanup_query))
+
+    validation = {
+        "completed": remaining_profile_count == 0 and remaining_enrollment_count == 0 and not runtime_cleanup.get("runtime_remaining"),
+        "remaining_profiles": remaining_profile_count,
+        "remaining_enrollment_records": remaining_enrollment_count,
+        "runtime_remaining": bool(runtime_cleanup.get("runtime_remaining")),
+        "events_pruned": int(runtime_cleanup.get("events_pruned") or 0),
+    }
+
+    return {
+        "ok": validation["completed"],
+        "message": "Student account and all related face data were deleted successfully." if validation["completed"] else "Student deletion completed with leftover references that need attention.",
+        "counts": counts,
+        "validation": validation,
+        "student_id": normalized_student_id,
+        "student_name": str(base_student.get("name") or source_enrollment.get("name") or "").strip(),
+    }
 
 
 def find_student_enrollment_record(enrollment_oid, school_year=""):
@@ -3462,16 +3708,11 @@ def calculate_match_confidence(distance):
         return 0.0
 
 def _extract_encodings_from_student(student_doc, allow_legacy_fallback=False):
-    encs = []
     stored = student_doc.get("face_encodings", student_doc.get("face_embeddings", []))
-    if isinstance(stored, list):
-        for row in stored:
-            if isinstance(row, list) and len(row) == 128:
-                try:
-                    encs.append(np.array(row, dtype=np.float64))
-                except Exception:
-                    pass
-
+    encs = sanitize_face_encodings(
+        stored,
+        max_count=FACE_INDEX_MAX_ENCODINGS_PER_STUDENT,
+    )
     if encs:
         return encs
 
@@ -3490,7 +3731,12 @@ def _extract_encodings_from_student(student_doc, allow_legacy_fallback=False):
                 np_img = np.array(img)
                 face_enc = face_recognition.face_encodings(np_img)
                 if face_enc:
-                    encs.append(face_enc[0])
+                    encs.extend(
+                        sanitize_face_encodings(
+                            [face_enc[0]],
+                            max_count=FACE_INDEX_MAX_ENCODINGS_PER_STUDENT,
+                        )
+                    )
             except Exception:
                 continue
     return encs
@@ -3522,10 +3768,7 @@ def count_legacy_face_only_students():
         return 0
 
 
-def load_face_index_from_db(allow_legacy_fallback=False):
-    known_db_encodings = []
-    known_db_students = []
-
+def load_face_index_from_db(allow_legacy_fallback=False, prefer_current_roster=True):
     face_source_match = {
         "$or": [
             {"face_encodings.0": {"$exists": True}},
@@ -3543,6 +3786,8 @@ def load_face_index_from_db(allow_legacy_fallback=False):
         "name": 1,
         "parent_contact": 1,
         "status": 1,
+        "grade_level": 1,
+        "section": 1,
         "face_encodings": 1,
         "face_embeddings": 1,
     }
@@ -3551,8 +3796,7 @@ def load_face_index_from_db(allow_legacy_fallback=False):
         projection["faces"] = 1
 
     def collect_face_index_rows(extra_clauses=None):
-        encodings = []
-        matched_students = []
+        raw_students = []
         query = {"$and": [_active_students_match_clause(), face_source_match]}
         if extra_clauses:
             query["$and"].extend(extra_clauses)
@@ -3564,14 +3808,24 @@ def load_face_index_from_db(allow_legacy_fallback=False):
                 continue
 
             encs = _extract_encodings_from_student(row, allow_legacy_fallback=allow_legacy_fallback)
-            for enc in encs:
-                encodings.append(enc)
-                matched_students.append({
-                    "student_id": sid,
-                    "name": name,
-                    "parent_contact": row.get("parent_contact", ""),
-                })
-        return encodings, matched_students
+            if not encs:
+                continue
+
+            raw_students.append({
+                "student_id": sid,
+                "name": name,
+                "parent_contact": row.get("parent_contact", ""),
+                "grade_level": row.get("grade_level", ""),
+                "section": row.get("section", ""),
+                "student_ref_id": str(row.get("_id") or ""),
+                "encodings": encs,
+            })
+
+        face_index = build_student_face_index(
+            raw_students,
+            max_encodings_per_student=FACE_INDEX_MAX_ENCODINGS_PER_STUDENT,
+        )
+        return face_index.get("centroids"), face_index.get("students")
 
     # Prefer current school year enrollments, but do not let a missing/misaligned
     # enrollment mirror collapse the live face index to zero usable encodings.
@@ -3579,7 +3833,7 @@ def load_face_index_from_db(allow_legacy_fallback=False):
     roster_clause = None
     roster_filter_applied = False
     roster_has_rows = False
-    if current_sy:
+    if current_sy and prefer_current_roster:
         try:
             enrollment_coll = get_student_enrollment_collection(current_sy)
             enrolled_ids = set()
@@ -3611,7 +3865,7 @@ def load_face_index_from_db(allow_legacy_fallback=False):
         except Exception as exc:
             print(f"[WARNING] Failed to resolve current-year enrollment roster for face index: {exc}")
 
-    if current_sy and not roster_filter_applied:
+    if current_sy and prefer_current_roster and not roster_filter_applied:
         print(
             f"[WARNING] Face index roster filter unavailable for {current_sy}; "
             "falling back to active registered students."
@@ -3619,7 +3873,7 @@ def load_face_index_from_db(allow_legacy_fallback=False):
 
     if roster_clause:
         known_db_encodings, known_db_students = collect_face_index_rows([roster_clause])
-        if known_db_encodings:
+        if known_db_encodings is not None and len(known_db_encodings) > 0:
             return known_db_encodings, known_db_students
         if roster_has_rows:
             print(
@@ -5128,7 +5382,7 @@ def handle_verified_student(student, confidence=0.0):
         return None
 
     current_mode = get_scan_session_mode()
-    if current_mode == "auto" and should_suppress_persistent_face_scan(student_id, now_ts):
+    if current_mode == "auto" and should_suppress_persistent_face_scan(student_id):
         return None
 
     with scan_lock:
@@ -5157,6 +5411,7 @@ def handle_verified_student(student, confidence=0.0):
     if current_mode == "auto":
         mark_persistent_face_scan(student_id, now_ts)
 
+    result_session = str(result.get("session") or "")
     push_scan_event("verified", {
         "student_id": student_id,
         "name": student_name,
@@ -5165,7 +5420,7 @@ def handle_verified_student(student, confidence=0.0):
         "sms_status": result["sms_status"],
         "gate_action": result["gate_action"],
         "verification_label": result["verification_label"],
-        "session": result["session"],
+        "session": result_session,
         "display_message": result["display_message"],
         "voice_message": result["voice_message"],
         "voice_key": f"{student_id}:{result['gate_action']}:{result['timestamp']}",
@@ -5249,7 +5504,7 @@ def _refresh_face_index_worker():
         db_encodings, db_students = load_face_index_from_db(
             allow_legacy_fallback=SCAN_FACE_INDEX_ALLOW_LEGACY_IMAGE_FALLBACK
         )
-        if db_encodings:
+        if db_encodings is not None and len(db_encodings) > 0:
             encoding_matrix = np.asarray(db_encodings, dtype=np.float64)
             if encoding_matrix.ndim != 2:
                 encoding_matrix = np.empty((0, 128), dtype=np.float64)
@@ -5264,9 +5519,10 @@ def _refresh_face_index_worker():
             else:
                 model_status = "no_registered_students"
         elapsed = time.time() - started_at
+        total_samples = sum(int(row.get("encoding_count") or 0) for row in db_students)
         print(
             f"[INFO] Face index loaded: status={model_status}, "
-            f"encodings={len(encoding_matrix)}, profiles={len(db_students)}, "
+            f"profiles={len(db_students)}, centroids={len(encoding_matrix)}, samples={total_samples}, "
             f"legacy_fallback={'on' if SCAN_FACE_INDEX_ALLOW_LEGACY_IMAGE_FALLBACK else 'off'}, "
             f"elapsed={elapsed:.2f}s"
         )
@@ -6635,7 +6891,7 @@ def start_scan():
 
     with scan_lock:
         model_status = scan_state.get("model_status", "idle")
-        registered_faces = len(scan_state.get("known_encodings", []))
+        registered_faces = len(scan_state.get("known_students", []))
         session_mode = normalize_scan_session_mode(scan_state.get("session_mode", "auto"), default="auto")
         face_index_loading = bool(scan_state.get("face_index_loading"))
     effective_session = resolve_gate_session(now_local())
@@ -6667,6 +6923,28 @@ def start_scan():
 def stop_scan():
     stop_scan_capture()
     return jsonify({"status": "ok", "message": "Scan stopped"})
+
+
+def filter_live_face_locations(face_locations, frame_shape):
+    if not isinstance(face_locations, list):
+        return []
+
+    frame_height = max(int((frame_shape or [0, 0])[0] or 0), 1)
+    frame_width = max(int((frame_shape or [0, 0])[1] or 0), 1)
+    min_face_height = frame_height * 0.12
+    min_face_width = frame_width * 0.10
+    filtered = []
+
+    for location in face_locations:
+        if not isinstance(location, (list, tuple)) or len(location) != 4:
+            continue
+        top, right, bottom, left = location
+        face_height = max(float(bottom) - float(top), 0.0)
+        face_width = max(float(right) - float(left), 0.0)
+        if face_height < min_face_height or face_width < min_face_width:
+            continue
+        filtered.append(location)
+    return filtered
 
 
 def process_client_frame(frame_bytes):
@@ -6710,12 +6988,18 @@ def process_client_frame(frame_bytes):
             number_of_times_to_upsample=0,
             model="hog",
         )
-        
+
         if len(face_locations_small) == 0:
             return True, "No faces detected"
-            
+
+        face_locations_small = filter_live_face_locations(face_locations_small, rgb_small.shape)
+        if len(face_locations_small) == 0:
+            push_not_registered_event("face_too_small", 0.0)
+            return True, "Face detected but too small for reliable recognition"
+
         db_encoding_count = int(len(db_encodings)) if db_encodings is not None else 0
-        
+        legacy_flat_index = any("encodings" not in (student or {}) for student in db_students)
+
         if model_status == "loading":
             return True, "Model still loading"
         elif model_status != "ready" or db_encoding_count == 0:
@@ -6737,40 +7021,85 @@ def process_client_frame(frame_bytes):
         verified_students = []
         duplicate_students = []
         unknown_confidences = []
+        unknown_reasons = []
         seen_student_ids = set()
         for enc in face_encs:
-            distances = face_recognition.face_distance(db_encodings, enc)
-            
-            if len(distances) > 0:
-                best_idx = int(np.argmin(distances))
-                best_distance = float(distances[best_idx])
-                confidence_pct = calculate_match_confidence(best_distance)
-                is_match = best_distance <= RECOGNITION_TOLERANCE and confidence_pct >= MIN_RECOGNITION_CONFIDENCE
-                
-                if is_match and best_idx < len(db_students):
-                    candidate = db_students[best_idx]
-                    candidate_student_id = str(candidate.get("student_id") or "").strip()
-                    if candidate_student_id and candidate_student_id in seen_student_ids:
-                        duplicate_students.append(candidate.get("name", "Unknown"))
-                        continue
-                    if candidate_student_id:
-                        seen_student_ids.add(candidate_student_id)
-                    verification = handle_verified_student(candidate, confidence_pct)
-                    if verification:
-                        verified_students.append(candidate.get("name", "Unknown"))
-                        results.append(f"Verified: {candidate.get('name', 'Unknown')}")
-                    else:
-                        duplicate_students.append(candidate.get("name", "Unknown"))
-                        results.append(f"Duplicate scan (cooldown) - {candidate.get('name', 'Unknown')}")
+            if legacy_flat_index:
+                distances = face_recognition.face_distance(db_encodings, enc)
+                if len(distances) > 0:
+                    best_idx = int(np.argmin(distances))
+                    best_distance = float(distances[best_idx])
+                    confidence_pct = calculate_match_confidence(best_distance)
+                    is_match = (
+                        best_distance <= RECOGNITION_TOLERANCE
+                        and confidence_pct >= MIN_RECOGNITION_CONFIDENCE
+                        and best_idx < len(db_students)
+                    )
+                    match_result = {
+                        "recognized": is_match,
+                        "student": db_students[best_idx] if is_match else None,
+                        "confidence": confidence_pct,
+                        "distance": best_distance,
+                        "candidate": {
+                            "student": db_students[best_idx],
+                            "best_distance": best_distance,
+                        } if best_idx < len(db_students) else None,
+                        "reason": "match" if is_match else "low_confidence",
+                    }
                 else:
+                    match_result = {"recognized": False, "candidate": None, "reason": "no_face_index", "confidence": 0.0}
+            else:
+                match_result = match_face_probe(
+                    enc,
+                    {"students": db_students, "centroids": db_encodings},
+                    shortlist_size=RECOGNITION_SHORTLIST_SIZE,
+                    match_distance_threshold=RECOGNITION_TOLERANCE,
+                    score_threshold=RECOGNITION_SCORE_TOLERANCE,
+                    support_distance_threshold=RECOGNITION_SUPPORT_TOLERANCE,
+                    strong_match_distance=RECOGNITION_STRONG_MATCH_DISTANCE,
+                    margin_threshold=RECOGNITION_MARGIN_THRESHOLD,
+                    min_support_count=RECOGNITION_MIN_SUPPORT_COUNT,
+                )
+
+            if match_result.get("recognized"):
+                candidate = match_result.get("student") or {}
+                confidence_pct = float(match_result.get("confidence") or 0.0)
+                if confidence_pct < MIN_RECOGNITION_CONFIDENCE:
                     unknown_confidences.append(confidence_pct)
+                    unknown_reasons.append("low_confidence")
                     results.append(f"Low confidence: {confidence_pct:.1f}%")
+                    continue
+
+                candidate_student_id = str(candidate.get("student_id") or "").strip()
+                if candidate_student_id and candidate_student_id in seen_student_ids:
+                    duplicate_students.append(candidate.get("name", "Unknown"))
+                    continue
+                if candidate_student_id:
+                    seen_student_ids.add(candidate_student_id)
+                verification = handle_verified_student(candidate, confidence_pct)
+                if verification:
+                    verified_students.append(candidate.get("name", "Unknown"))
+                    results.append(f"Verified: {candidate.get('name', 'Unknown')}")
+                else:
+                    duplicate_students.append(candidate.get("name", "Unknown"))
+                    results.append(f"Duplicate scan (cooldown) - {candidate.get('name', 'Unknown')}")
+            elif match_result.get("candidate"):
+                confidence_pct = float(match_result.get("confidence") or 0.0)
+                unknown_confidences.append(confidence_pct)
+                unknown_reasons.append(str(match_result.get("reason") or "low_confidence"))
+                results.append(
+                    f"No reliable match ({str(match_result.get('reason') or 'unmatched').replace('_', ' ')})"
+                )
             else:
                 unknown_confidences.append(0.0)
+                unknown_reasons.append("no_face_index")
                 results.append("No face index")
 
         if not verified_students and unknown_confidences:
-            push_not_registered_event("low_confidence", max(unknown_confidences))
+            rejection_reason = "low_confidence"
+            if "ambiguous_match" in unknown_reasons:
+                rejection_reason = "ambiguous_match"
+            push_not_registered_event(rejection_reason, max(unknown_confidences))
 
         if verified_students:
             verified_count = len(verified_students)
@@ -6782,9 +7111,6 @@ def process_client_frame(frame_bytes):
             if unknown_count and not verified_count:
                 summary += f" | {unknown_count} unmatched face{'s' if unknown_count != 1 else ''}"
             return True, summary
-
-        if len(face_locations_small) > 1:
-            return True, f"Processed {len(face_locations_small)} faces: " + " | ".join(results)
 
         return True, results[0] if results else "Frame processed"
         
@@ -6909,7 +7235,7 @@ def face_metrics():
                     "active_tracks": 0,
                     "average_processing_time": 0,
                     "cache_size": 0,
-                    "known_faces": len(scan_state.get("known_encodings", []))
+                    "known_faces": len(scan_state.get("known_students", []))
                 }
             })
     except Exception as exc:
@@ -6937,7 +7263,7 @@ def scan_events():
         session_mode = normalize_scan_session_mode(scan_state.get("session_mode", "auto"), default="auto")
         model_status = str(scan_state.get("model_status") or "idle")
         face_index_loading = bool(scan_state.get("face_index_loading"))
-        registered_faces = len(scan_state.get("known_encodings", []))
+        registered_faces = len(scan_state.get("known_students", []))
     effective_session = resolve_gate_session(now_local())
     return jsonify({
         "events": events,
@@ -8147,7 +8473,7 @@ def validate_face_capture_image(raw_face):
         enc_rows = face_recognition.face_encodings(
             img_np,
             known_face_locations=face_locations,
-            num_jitters=1,
+            num_jitters=2,
         )
         if not enc_rows:
             return None
@@ -8224,8 +8550,8 @@ def parse_faces_payload(data):
         encoding = validated["encoding"]
         if seen_encodings:
             try:
-                distances = face_recognition.face_distance(seen_encodings, encoding)
-                if len(distances) and float(np.min(distances)) < 0.01:
+                distances = face_distance(seen_encodings, encoding)
+                if len(distances) and float(np.min(distances)) < FACE_CAPTURE_DUPLICATE_DISTANCE:
                     invalid_captures.append({
                         **row_detail,
                         "reason": "duplicate",
@@ -9373,6 +9699,89 @@ def build_students_export_payload(args, school_year_label):
     }
 
 
+def collect_export_scope_student_ids(collection, query, cap=5000):
+    student_ids = []
+    seen = set()
+    for row in collection.find(query, {"student_id": 1}).limit(max(1, int(cap or 5000))):
+        student_id = normalize_lrn_value(row.get("student_id"))
+        if not student_id or student_id in seen:
+            continue
+        seen.add(student_id)
+        student_ids.append(student_id)
+    return student_ids
+
+
+def build_logs_export_scope_payload(args, school_year_label):
+    collection = get_school_year_enrollment_collection(school_year_label)
+    raw_scope = str(args.get("scope", "")).strip().lower()
+    q_value = str(args.get("q", "")).strip()
+    grade_value = str(args.get("grade", "") or args.get("grade_level", "")).strip()
+    section_value = str(args.get("section", "")).strip()
+    student_record_id = str(args.get("student_record_id", "")).strip()
+    student_id = str(args.get("student_id", "")).strip()
+
+    effective_scope = resolve_students_export_scope(
+        raw_scope,
+        grade_level=grade_value,
+        section_value=section_value,
+        student_record_id=student_record_id,
+        student_id=student_id,
+        q_value=q_value,
+    )
+
+    selected_student = None
+    scope_label = "All Matching Records"
+    scope_detail = "All students in the selected log filters"
+    filename_prefix = "logs_export"
+    grade_level = ""
+    normalized_section = normalize_section_value(section_value)
+    scoped_student_ids = None
+
+    if effective_scope == "student":
+        selected_student = resolve_students_export_student_row(
+            collection,
+            school_year_label,
+            student_record_id=student_record_id,
+            student_id=student_id,
+            q_value=q_value,
+        )
+        selected_student_id = normalize_lrn_value(
+            (selected_student or {}).get("student_id") or student_id or q_value
+        )
+        scoped_student_ids = [selected_student_id] if selected_student_id else []
+        scope_label = "Individual Student"
+        if selected_student:
+            scope_detail = selected_student.get("name") or selected_student.get("student_id") or "Selected student"
+            filename_prefix = f"log_student_{sanitize_students_export_filename_part(selected_student.get('student_id') or selected_student.get('name'), 'record')}"
+        else:
+            scope_detail = selected_student_id or q_value or "Selected student"
+            filename_prefix = "log_student_record"
+    elif effective_scope == "grade":
+        query, _q, grade_level, _section, _face_status, _school_year = build_students_query("", grade_value, "", "", school_year_label)
+        scoped_student_ids = collect_export_scope_student_ids(collection, query)
+        scope_label = "Grade Level"
+        scope_detail = grade_level or grade_value or "Selected grade level"
+        filename_prefix = f"logs_grade_{sanitize_students_export_filename_part(scope_detail, 'grade')}"
+    elif effective_scope == "section":
+        query, _q, grade_level, normalized_section, _face_status, _school_year = build_students_query("", grade_value, section_value, "", school_year_label)
+        scoped_student_ids = collect_export_scope_student_ids(collection, query)
+        scope_label = "Section"
+        scope_detail = f"{grade_level} - {normalized_section}" if grade_level and normalized_section else (normalized_section or section_value or "Selected section")
+        filename_prefix = f"logs_section_{sanitize_students_export_filename_part(scope_detail, 'section')}"
+
+    return {
+        "scope": effective_scope,
+        "scope_label": scope_label,
+        "scope_detail": scope_detail,
+        "student_ids": scoped_student_ids,
+        "selected_student": selected_student,
+        "grade_level": grade_level,
+        "section": normalized_section,
+        "school_year": school_year_label,
+        "filename_prefix": filename_prefix,
+    }
+
+
 def build_students_plain_export_pdf(export_payload, signatories):
     generated_at_label = now_local().strftime("%B %d, %Y %I:%M:%S %p")
     rows = export_payload["rows"]
@@ -9480,12 +9889,16 @@ def wants_inline_pdf_response():
 
 
 def send_generated_pdf(buffer, filename):
-    return send_file(
+    response = send_file(
         buffer,
         as_attachment=not wants_inline_pdf_response(),
         download_name=filename,
         mimetype="application/pdf",
     )
+    response.headers["Cache-Control"] = "no-store, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
 
 
 @app.route("/students/export_pdf", methods=["GET"])
@@ -10035,6 +10448,32 @@ def api_students_collection():
     }, 201)
 
 
+@app.route("/api/logs/export/students", methods=["GET"])
+@require_permission("logs", api=True)
+def api_logs_export_students():
+    school_year_label = resolve_selected_school_year(request.args.get("school_year", ""))
+    collection = get_school_year_enrollment_collection(school_year_label)
+    query, _q_value, _grade_level, _section_value, _face_status, school_year_label = build_students_query(
+        request.args.get("q", ""),
+        "",
+        "",
+        "",
+        school_year_label,
+    )
+    try:
+        limit = int(request.args.get("limit", "8"))
+    except (TypeError, ValueError):
+        limit = 8
+    limit = min(max(limit, 1), 20)
+
+    rows = collection.find(query).sort([("name", 1), ("created_at", -1)]).limit(limit)
+    return api_success({
+        "students": [normalize_enrollment_doc(row) for row in rows],
+        "school_year": school_year_label,
+        "limit": limit,
+    })
+
+
 @app.route("/api/students/import", methods=["POST"])
 @require_permission("students_write", api=True)
 def api_students_import():
@@ -10239,11 +10678,39 @@ def api_students_item(id):
         return api_error("Archived school years are read-only.", 403, "school_year")
 
     if request.method == "DELETE":
-        result = collection.delete_one({"_id": enrollment_oid})
-        if result.deleted_count == 0:
-            return api_error("Student record not found.", 404)
+        student_ref_id = parse_student_oid(enrollment_doc.get("student_ref_id"))
+        base_student_doc = students.find_one({"_id": student_ref_id}) if student_ref_id else students.find_one(
+            build_lrn_duplicate_query(normalize_lrn_value(enrollment_doc.get("student_id") or enrollment_doc.get("lrn")))
+        )
+        deletion_result = delete_student_profile_and_related_data(
+            student_doc=base_student_doc,
+            enrollment_doc=enrollment_doc,
+        )
+        if not deletion_result.get("ok"):
+            return api_error(
+                deletion_result.get("message") or "Student deletion could not be fully completed.",
+                500,
+                "student",
+                {
+                    "counts": deletion_result.get("counts", {}),
+                    "validation": deletion_result.get("validation", {}),
+                },
+            )
+        log_audit_event(
+            action="student.delete",
+            target_type="student",
+            target_id=deletion_result.get("student_id") or str(enrollment_oid),
+            details={
+                "student_name": deletion_result.get("student_name", ""),
+                "counts": deletion_result.get("counts", {}),
+            },
+        )
         signal_data_change("students", "sections")
-        return api_success({"message": f"Student enrollment removed from School Year {enrollment_school_year}."})
+        return api_success({
+            "message": deletion_result.get("message") or f"Student removed from School Year {enrollment_school_year}.",
+            "counts": deletion_result.get("counts", {}),
+            "validation": deletion_result.get("validation", {}),
+        })
 
     student_ref_id = parse_student_oid(enrollment_doc.get("student_ref_id"))
     existing_doc = students.find_one({"_id": student_ref_id}) if student_ref_id else None
@@ -10443,25 +10910,81 @@ def save_face_registration(student_id, is_update=False):
     if not student_doc:
         return api_error("Student not found.", 404)
 
+    normalized_student_id = normalize_lrn_value(student_doc.get("student_id") or student_doc.get("lrn"))
+    existing_face_registration = bool(
+        student_doc.get("face_registered")
+        or student_doc.get("face_data")
+        or student_doc.get("faces")
+        or student_doc.get("face_encodings")
+        or student_doc.get("face_embeddings")
+    )
+    if existing_face_registration and not is_update:
+        return api_error(
+            "This student already has a registered face profile. Use the update action instead.",
+            409,
+            "faces",
+            {"requires_update": True},
+        )
+
     payload = request_payload()
     faces_array, face_encodings, capture_details, err_message, err_field, err_extra = parse_faces_payload(payload)
     if err_message:
         return api_error(err_message, 400, err_field, err_extra)
 
+    db_centroids, db_students = load_face_index_from_db(
+        allow_legacy_fallback=False,
+        prefer_current_roster=True,
+    )
+    face_conflict = detect_face_registration_conflict(
+        face_encodings,
+        {"students": db_students, "centroids": db_centroids},
+        exclude_student_id=normalized_student_id,
+        duplicate_distance_threshold=FACE_REGISTRATION_CONFLICT_DISTANCE,
+        duplicate_mean_threshold=FACE_REGISTRATION_CONFLICT_MEAN_DISTANCE,
+        support_distance_threshold=FACE_REGISTRATION_CONFLICT_SUPPORT_DISTANCE,
+        min_support_count=FACE_REGISTRATION_CONFLICT_SUPPORT_COUNT,
+    )
+    if face_conflict:
+        conflict_student = face_conflict.get("student") or {}
+        conflict_name = str(conflict_student.get("name") or "another student").strip()
+        conflict_student_id = str(conflict_student.get("student_id") or "").strip()
+        return api_error(
+            f"These face captures closely match the registered profile for {conflict_name}"
+            f"{f' ({conflict_student_id})' if conflict_student_id else ''}.",
+            409,
+            "faces",
+            {
+                "conflict_student_id": conflict_student_id,
+                "conflict_student_name": conflict_name,
+                "best_distance": round(float(face_conflict.get("best_distance") or 0.0), 6),
+                "support_count": int(face_conflict.get("support_count") or 0),
+            },
+        )
+
+    face_metadata = build_face_registration_metadata(face_encodings)
+
     update_doc = {
         "face_data": faces_array,
-        "faces": faces_array,
         "face_encodings": face_encodings,
-        "face_embeddings": face_encodings,
         "face_capture_profile": capture_details.get("capture_profile", "standard") if isinstance(capture_details, dict) else "standard",
-        "face_capture_count": capture_details.get("capture_count", len(faces_array)) if isinstance(capture_details, dict) else len(faces_array),
+        "face_capture_count": int(face_metadata.get("face_encoding_count") or len(faces_array)),
         "face_capture_meta": capture_details.get("capture_meta", []) if isinstance(capture_details, dict) else [],
         "profile_photo": faces_array[0] if faces_array else "",
         "face_registered": True,
         "face_updated_at": now_local(),
         "updated_at": now_iso(),
+        **face_metadata,
     }
-    students.update_one({"_id": student_oid}, {"$set": update_doc})
+    students.update_one(
+        {"_id": student_oid},
+        {
+            "$set": update_doc,
+            "$unset": {
+                "faces": "",
+                "face_embeddings": "",
+            },
+        },
+    )
     refresh_scan_face_index_if_active()
     saved_doc = students.find_one({"_id": student_oid})
     if saved_doc:
@@ -10487,10 +11010,24 @@ def api_student_face_update(id):
 @require_permission("students_write")
 def delete_student(id):
     try:
-        result = students.delete_one({"_id": ObjectId(id)})
-        if result.deleted_count:
+        student_oid = parse_student_oid(id)
+        base_student_doc = students.find_one({"_id": student_oid}) if student_oid else None
+        if not base_student_doc:
+            return redirect(url_for("students_page", message="Failed to delete student record.", message_type="error"))
+        deletion_result = delete_student_profile_and_related_data(student_doc=base_student_doc)
+        if deletion_result.get("ok"):
+            log_audit_event(
+                action="student.delete",
+                target_type="student",
+                target_id=deletion_result.get("student_id") or id,
+                details={
+                    "student_name": deletion_result.get("student_name", ""),
+                    "counts": deletion_result.get("counts", {}),
+                },
+            )
             signal_data_change("students", "sections")
-        return redirect(url_for("students_page", message="Student deleted successfully.", message_type="success"))
+            return redirect(url_for("students_page", message=deletion_result.get("message") or "Student deleted successfully.", message_type="success"))
+        return redirect(url_for("students_page", message=deletion_result.get("message") or "Failed to delete student record.", message_type="error"))
     except Exception:
         return redirect(url_for("students_page", message="Failed to delete student record.", message_type="error"))
 
@@ -10498,7 +11035,7 @@ def delete_student(id):
 # =====================================
 # LOG ROUTES
 # =====================================
-def build_gate_logs_query(args, school_year=""):
+def build_gate_logs_query(args, school_year="", include_export_scope=False):
     school_year_label = resolve_selected_school_year(school_year or args.get("school_year", ""))
     q = args.get("q", "").strip()
     start_date = args.get("start_date", "").strip()
@@ -10541,6 +11078,12 @@ def build_gate_logs_query(args, school_year=""):
         "session": session_filter,
         "sort": sort_by,
     }
+    if include_export_scope:
+        export_scope = build_logs_export_scope_payload(args, school_year_label)
+        scoped_student_ids = export_scope.get("student_ids")
+        if scoped_student_ids is not None:
+            query["student_id"] = {"$in": scoped_student_ids}
+        filters_payload["export_scope"] = export_scope
     return query, sort_spec, filters_payload, school_year_label
 
 
@@ -10564,7 +11107,7 @@ def build_student_photo_map(student_ids):
     return photo_map
 
 
-def build_sms_logs_query(args, school_year=""):
+def build_sms_logs_query(args, school_year="", include_export_scope=False):
     school_year_label = resolve_selected_school_year(school_year or args.get("school_year", ""))
     q = args.get("q", "").strip()
     start_date = args.get("start_date", "").strip()
@@ -10602,6 +11145,12 @@ def build_sms_logs_query(args, school_year=""):
         "status": status_filter,
         "sort": sort_by,
     }
+    if include_export_scope:
+        export_scope = build_logs_export_scope_payload(args, school_year_label)
+        scoped_student_ids = export_scope.get("student_ids")
+        if scoped_student_ids is not None:
+            query["student_id"] = {"$in": scoped_student_ids}
+        filters_payload["export_scope"] = export_scope
     return query, sort_spec, filters_payload, school_year_label
 
 
@@ -10707,6 +11256,8 @@ def gate_logs_page():
         filters=filters_payload,
         pagination=pagination,
         export_query=urlencode({k: v for k, v in filters_payload.items() if v not in ("", None)}),
+        grade_options=list(GRADE_LEVEL_OPTIONS),
+        sections_by_grade=build_sections_by_grade(school_year=selected_school_year),
         archived_view=archived_view,
         **sidebar_context("gate_logs", selected_school_year),
     )
@@ -10715,8 +11266,9 @@ def gate_logs_page():
 @app.route("/gate-logs/export")
 @require_permission("logs")
 def gate_logs_export():
-    query, sort_spec, filters_payload, selected_school_year = build_gate_logs_query(request.args)
+    query, sort_spec, filters_payload, selected_school_year = build_gate_logs_query(request.args, include_export_scope=True)
     logs_collection, selected_school_year, _ = get_attendance_logs_storage(selected_school_year)
+    export_scope = filters_payload.get("export_scope") or {}
     rows = list(logs_collection.find(query).sort(sort_spec).limit(5000))
     signatories = build_report_signatories(resolve_current_admin_export_name())
     generated_at_label = now_local().strftime("%B %d, %Y %I:%M:%S %p")
@@ -10728,6 +11280,8 @@ def gate_logs_export():
         ("Date Range", format_export_date_range_label(filters_payload.get("start_date"), filters_payload.get("end_date"))),
         ("Status", filters_payload.get("status") or "All statuses"),
         ("Gate Action", filters_payload.get("session") or "All actions"),
+        ("Export Scope", export_scope.get("scope_label") or "All Matching Records"),
+        ("Selection", export_scope.get("scope_detail") or "All students in the selected log filters"),
         ("Sort Order", format_export_sort_label(filters_payload.get("sort"))),
     ]
     buffer, doc, story, styles = build_school_export_document(
@@ -10827,7 +11381,7 @@ def gate_logs_export():
     doc.build(story, onFirstPage=build_school_export_footer, onLaterPages=build_school_export_footer)
     buffer.seek(0)
 
-    filename = f"gate_logs_{now_local().strftime('%Y%m%d_%H%M%S')}.pdf"
+    filename = f"{export_scope.get('filename_prefix') or 'gate_logs'}_{now_local().strftime('%Y%m%d_%H%M%S')}.pdf"
     return send_generated_pdf(buffer, filename)
 
 
@@ -11182,6 +11736,8 @@ def sms_logs_page():
         filters=filters_payload,
         pagination=pagination,
         export_query=urlencode({k: v for k, v in filters_payload.items() if v not in ("", None)}),
+        grade_options=list(GRADE_LEVEL_OPTIONS),
+        sections_by_grade=build_sections_by_grade(school_year=selected_school_year),
         archived_view=archived_view,
         **sidebar_context("sms_logs", selected_school_year),
     )
@@ -11247,8 +11803,9 @@ def sms_logs_template_update():
 @app.route("/sms-logs/export")
 @require_permission("logs")
 def sms_logs_export():
-    query, sort_spec, filters_payload, selected_school_year = build_sms_logs_query(request.args)
+    query, sort_spec, filters_payload, selected_school_year = build_sms_logs_query(request.args, include_export_scope=True)
     logs_collection, selected_school_year, _ = get_sms_logs_storage(selected_school_year)
+    export_scope = filters_payload.get("export_scope") or {}
     rows = list(logs_collection.find(query).sort(sort_spec).limit(5000))
     signatories = build_report_signatories(resolve_current_admin_export_name())
     generated_at_label = now_local().strftime("%B %d, %Y %I:%M:%S %p")
@@ -11259,6 +11816,8 @@ def sms_logs_export():
         ("Search Query", filters_payload.get("q") or "All records"),
         ("Date Range", format_export_date_range_label(filters_payload.get("start_date"), filters_payload.get("end_date"))),
         ("Status", filters_payload.get("status") or "All statuses"),
+        ("Export Scope", export_scope.get("scope_label") or "All Matching Records"),
+        ("Selection", export_scope.get("scope_detail") or "All students in the selected log filters"),
         ("Sort Order", format_export_sort_label(filters_payload.get("sort"))),
     ]
     buffer, doc, story, styles = build_school_export_document(
@@ -11354,7 +11913,7 @@ def sms_logs_export():
     doc.build(story, onFirstPage=build_school_export_footer, onLaterPages=build_school_export_footer)
     buffer.seek(0)
 
-    filename = f"sms_logs_{now_local().strftime('%Y%m%d_%H%M%S')}.pdf"
+    filename = f"{export_scope.get('filename_prefix') or 'sms_logs'}_{now_local().strftime('%Y%m%d_%H%M%S')}.pdf"
     return send_generated_pdf(buffer, filename)
 
 

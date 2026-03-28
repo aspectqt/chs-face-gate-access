@@ -1,6 +1,7 @@
 (function () {
   "use strict";
   let activeDownloads = 0;
+  const NATIVE_DOWNLOAD_SETTLE_MS = 10000;
 
   function emitDownloadLifecycleEvent(name, detail) {
     document.dispatchEvent(new CustomEvent(name, {
@@ -94,6 +95,65 @@
     anchor.click();
     anchor.remove();
     setTimeout(() => URL.revokeObjectURL(objectUrl), 1500);
+  }
+
+  function ensureBrowserDownloadFrame() {
+    let frame = document.getElementById("appBrowserDownloadFrame");
+    if (frame) return frame;
+
+    frame = document.createElement("iframe");
+    frame.id = "appBrowserDownloadFrame";
+    frame.name = "appBrowserDownloadFrame";
+    frame.hidden = true;
+    frame.setAttribute("aria-hidden", "true");
+    frame.style.display = "none";
+    document.body.appendChild(frame);
+    return frame;
+  }
+
+  function triggerBrowserManagedDownload(url) {
+    try {
+      const parsed = new URL(String(url || ""), window.location.origin);
+      const frame = ensureBrowserDownloadFrame();
+      const form = document.createElement("form");
+      form.method = "GET";
+      form.action = `${parsed.origin}${parsed.pathname}`;
+      form.target = frame.name;
+      form.style.display = "none";
+
+      parsed.searchParams.forEach((value, key) => {
+        const input = document.createElement("input");
+        input.type = "hidden";
+        input.name = key;
+        input.value = value;
+        form.appendChild(input);
+      });
+
+      document.body.appendChild(form);
+      form.submit();
+      window.setTimeout(() => form.remove(), 0);
+    } catch (_error) {
+      window.location.assign(String(url || ""));
+    }
+  }
+
+  function openFileInNewTab(url) {
+    const popup = window.open("about:blank", "_blank", "noopener");
+    if (!popup) {
+      throw new Error("Popup blocked. Allow popups to open the PDF in a new tab.");
+    }
+
+    try {
+      popup.opener = null;
+    } catch (_error) {
+      // Some browsers expose a read-only opener reference.
+    }
+
+    try {
+      popup.location.replace(url);
+    } catch (_error) {
+      popup.location.href = url;
+    }
   }
 
   async function downloadFile(url, preferredFilename = "") {
@@ -324,6 +384,12 @@
     return parent ? parent.closest("[data-file-download]") : null;
   }
 
+  function resolveDownloadMode(trigger) {
+    const explicit = String(trigger?.dataset?.downloadMode || "").trim().toLowerCase();
+    if (explicit) return explicit;
+    return trigger?.hasAttribute("data-open-in-new-tab") ? "new-tab" : "download";
+  }
+
   async function onDownloadLinkClick(event) {
     const link = resolveDownloadTrigger(event.target);
     if (!link) return;
@@ -335,15 +401,18 @@
     if (typeof event.preventDefault === "function") {
       event.preventDefault();
     }
-    if (typeof event.stopPropagation === "function") {
-      event.stopPropagation();
-    }
-    if (typeof event.stopImmediatePropagation === "function") {
-      event.stopImmediatePropagation();
-    }
     if (link.dataset.downloading === "1") return;
 
     const originalTitle = link.getAttribute("title") || "";
+    const downloadMode = resolveDownloadMode(link);
+    let deferLifecycleEnd = false;
+    let lifecycleClosed = false;
+    const closeDownloadLifecycle = () => {
+      if (lifecycleClosed) return;
+      lifecycleClosed = true;
+      activeDownloads = Math.max(0, activeDownloads - 1);
+      emitDownloadLifecycleEvent("app-file-download-end", { url, activeDownloads });
+    };
     link.dataset.downloading = "1";
     link.setAttribute("aria-busy", "true");
     link.classList.add("pointer-events-none", "opacity-70");
@@ -352,24 +421,44 @@
     emitDownloadLifecycleEvent("app-file-download-start", { url });
 
     try {
-      await downloadFile(url, link.dataset.filename || "");
+      if (downloadMode === "native") {
+        triggerBrowserManagedDownload(url);
+        deferLifecycleEnd = true;
+        window.setTimeout(closeDownloadLifecycle, NATIVE_DOWNLOAD_SETTLE_MS);
+      } else if (downloadMode === "new-tab") {
+        openFileInNewTab(url);
+      } else {
+        await downloadFile(url, link.dataset.filename || "");
+      }
       link.dispatchEvent(new CustomEvent("file-download-success", {
         bubbles: true,
-        detail: { url },
+        detail: { url, mode: downloadMode },
       }));
     } catch (error) {
       console.error("File download failed:", error);
-      link.dispatchEvent(new CustomEvent("file-download-error", {
+      const fallbackErrorMessage = downloadMode === "new-tab"
+        ? "Unable to open the PDF in a new tab right now. Please try again."
+        : "Unable to download the file right now. Please try again.";
+      const errorEvent = new CustomEvent("file-download-error", {
         bubbles: true,
-        detail: { url, error: error instanceof Error ? error.message : String(error || "Download failed.") },
-      }));
-      window.alert("Unable to download the file right now. Please try again.");
+        cancelable: true,
+        detail: {
+          url,
+          mode: downloadMode,
+          error: error instanceof Error ? error.message : String(error || "Download failed."),
+        },
+      });
+      const defaultPrevented = !link.dispatchEvent(errorEvent);
+      if (!defaultPrevented) {
+        window.alert(link.dataset.errorMessage || fallbackErrorMessage);
+      }
     } finally {
       link.dataset.downloading = "0";
       link.removeAttribute("aria-busy");
       link.classList.remove("pointer-events-none", "opacity-70");
-      activeDownloads = Math.max(0, activeDownloads - 1);
-      emitDownloadLifecycleEvent("app-file-download-end", { url, activeDownloads });
+      if (!deferLifecycleEnd) {
+        closeDownloadLifecycle();
+      }
       if (originalTitle) {
         link.setAttribute("title", originalTitle);
       } else {
@@ -388,12 +477,6 @@
 
     if (typeof event.preventDefault === "function") {
       event.preventDefault();
-    }
-    if (typeof event.stopPropagation === "function") {
-      event.stopPropagation();
-    }
-    if (typeof event.stopImmediatePropagation === "function") {
-      event.stopImmediatePropagation();
     }
     if (trigger.dataset.printing === "1") return;
 

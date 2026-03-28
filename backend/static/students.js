@@ -1543,7 +1543,8 @@
 
     const validationMessage = getStudentsExportValidationMessage();
     const downloadUrl = buildStudentsExportRequestUrl();
-    const printUrl = buildStudentsExportRequestUrl({ inline: true });
+    const previewUrl = buildStudentsExportRequestUrl({ inline: true });
+    const printUrl = previewUrl;
 
     if (refs.studentsExportSummary) refs.studentsExportSummary.textContent = getStudentsExportSummaryText();
     if (refs.studentsExportDownloadBtn) {
@@ -3456,6 +3457,15 @@
 
     refs.studentsExportPrintBtn?.addEventListener("click", () => {
       if (!refs.studentsExportPrintBtn.disabled) closeModal("studentsExportModal");
+    });
+
+    document.addEventListener("file-download-error", (event) => {
+      const trigger = event.target instanceof Element ? event.target.closest("[data-pdf-download-link]") : null;
+      if (!trigger) return;
+      event.preventDefault();
+      showToast(event.detail?.error || "Unable to start the PDF download right now.", true, {
+        title: "Export Error",
+      });
     });
 
     refs.openAddBtn.addEventListener("click", () => {

@@ -1130,10 +1130,11 @@
             display: flex;
             min-height: 100vh;
             min-height: 100svh;
-            align-items: center;
+            align-items: flex-start;
             justify-content: center;
             padding: 1rem;
-            overflow: hidden;
+            overflow-y: auto;
+            overflow-x: hidden;
         }
 
         body.staff-dashboard .dashboard-main > *:not(#gate-scanning) {
@@ -1142,15 +1143,15 @@
 
         body.staff-dashboard #gate-scanning {
             display: flex;
-            width: min(100%, 1180px);
+            width: 100%;
+            max-width: 1180px;
             align-items: center;
             justify-content: center;
-            margin: 0 auto;
+            margin: auto;
         }
 
         body.staff-dashboard #gateConsoleColumn {
             width: 100%;
-            max-width: 1180px;
         }
 
         body.staff-dashboard #gateSecondaryColumn {
@@ -1158,12 +1159,12 @@
         }
 
         body.staff-dashboard #gateConsoleCard {
-            margin: 0 auto;
-            width: min(100%, 1180px);
-            max-height: calc(100svh - 2rem);
+            margin: auto;
+            width: 100%;
             padding: 1.25rem;
             display: flex;
             flex-direction: column;
+            border-radius: 1.5rem;
         }
 
         body.staff-dashboard .gate-console-shell {
@@ -1222,8 +1223,8 @@
         body.staff-dashboard #gateConsoleLayout {
             display: grid;
             grid-template-columns: minmax(0, 1fr) 18rem;
-            gap: 1rem;
-            margin-top: 1rem;
+            gap: 1.5rem;
+            margin-top: 1.25rem;
             min-height: 0;
             flex: 1 1 auto;
             align-items: stretch;
@@ -1268,32 +1269,25 @@
             height: clamp(20rem, calc(100svh - 18rem), 40rem);
         }
 
-        @media (max-width: 768px) {
+        @media (max-width: 1024px) {
             body.staff-dashboard .dashboard-main {
-                padding: 1rem;
-            }
-
-            body.staff-dashboard #gate-scanning {
-                width: 100%;
+                padding: 1rem 0.5rem;
             }
 
             body.staff-dashboard #gateConsoleCard {
-                max-height: none;
+                padding: 1rem;
             }
 
             body.staff-dashboard #gateConsoleLayout {
                 grid-template-columns: 1fr;
-            }
-
-            body.staff-dashboard #gateControlsColumn,
-            body.staff-dashboard #gateCameraColumn {
-                order: initial;
+                gap: 1.25rem;
             }
 
             body.staff-dashboard #scanFrame {
                 aspect-ratio: 16 / 9;
                 height: auto;
-                min-height: 18rem;
+                min-height: 16rem;
+                max-height: 60vh;
             }
 
             .staff-dashboard-logout {

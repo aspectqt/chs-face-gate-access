@@ -126,10 +126,12 @@ def ensure_student_enrollment_collection_indexes(collection):
     _safe_create_index(collection, [("grade_level", ASCENDING), ("section", ASCENDING)])
     _safe_create_index(collection, [("status", ASCENDING)])
     _safe_create_index(collection, [("face_registered", ASCENDING)])
+    _safe_create_index(collection, [("face_registered", ASCENDING), ("status", ASCENDING), ("updated_at", DESCENDING)])
     _safe_create_index(collection, [("name", ASCENDING)])
     _safe_create_index(collection, [("student_ref_id", ASCENDING)])
     _safe_create_index(collection, [("section", ASCENDING)])
     _safe_create_index(collection, [("created_at", DESCENDING)])
+    _safe_create_index(collection, [("face_updated_at", DESCENDING)])
 
 
 def ensure_attendance_logs_indexes(collection):
@@ -195,9 +197,11 @@ def ensure_indexes():
     _safe_create_index(students, [("grade", ASCENDING), ("section", ASCENDING)])
     _safe_create_index(students, [("grade_level", ASCENDING), ("section", ASCENDING)])
     _safe_create_index(students, [("face_registered", ASCENDING)])
+    _safe_create_index(students, [("face_registered", ASCENDING), ("status", ASCENDING), ("face_updated_at", DESCENDING)])
     _safe_create_index(students, [("gender", ASCENDING)])
     _safe_create_index(students, [("status", ASCENDING)])
     _safe_create_index(students, [("created_at", DESCENDING)])
+    _safe_create_index(students, [("face_updated_at", DESCENDING)])
     _safe_create_index(students, [("grade", ASCENDING), ("section", ASCENDING), ("status", ASCENDING), ("created_at", DESCENDING)])
     _safe_create_index(students, [("gender", ASCENDING), ("grade_level", ASCENDING), ("section", ASCENDING), ("status", ASCENDING), ("created_at", DESCENDING)])
 

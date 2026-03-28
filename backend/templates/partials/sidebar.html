@@ -3,91 +3,73 @@
 {% set unread = alerts_unread|default(0) %}
 
 <style>
-  /* Color variables for light and dark modes (default) */
   :root {
     --sb-bg: #ffffff;
-    --sb-text: #0f172a; /* slate-900 */
-    --sb-muted: #64748b; /* slate-500 */
-    --sb-muted-2: #94a3b8; /* slate-400 */
-    --sb-hover: #f8fafc; /* slate-50 */
-    --sb-border: #e6eef7; /* light divider */
-    --sb-active-accent: #10b981; /* emerald-500 */
-    --sb-ghost: rgba(15,23,42,0.06);
-    --sb-shadow: rgba(2,6,23,0.06);
-    --sb-badge-bg: #f59e0b; /* amber-500 */
-    --sb-surface: rgba(15,23,42,0.02);
-  }
-
-  /* Explicit mapping when documentElement has data-theme (used by theme.js) */
-  html[data-theme="dark"] {
-    --sb-bg: #0f1724;
-    --sb-text: #e6eef7;
-    --sb-muted: #94a3b8;
-    --sb-muted-2: #cbd5e1;
-    --sb-hover: rgba(255,255,255,0.03);
-    --sb-border: rgba(255,255,255,0.04);
-    --sb-active-accent: #34d399;
-    --sb-ghost: rgba(255,255,255,0.06);
-    --sb-shadow: rgba(2,6,23,0.5);
-    --sb-badge-bg: #f59e0b;
-    --sb-surface: rgba(255,255,255,0.02);
-  }
-
-  html[data-theme="light"] {
-    --sb-bg: #ffffff;
+    --sb-surface: rgba(255, 255, 255, 0.96);
+    --sb-surface-soft: #f8fafc;
+    --sb-surface-elevated: #ffffff;
     --sb-text: #0f172a;
     --sb-muted: #64748b;
     --sb-muted-2: #94a3b8;
-    --sb-hover: #f8fafc;
-    --sb-border: #e6eef7;
+    --sb-border: #dbe5ef;
+    --sb-hover: rgba(16, 185, 129, 0.08);
+    --sb-active-bg: linear-gradient(90deg, rgba(16, 185, 129, 0.16) 0%, rgba(16, 185, 129, 0.05) 100%);
+    --sb-active-outline: rgba(16, 185, 129, 0.18);
     --sb-active-accent: #10b981;
-    --sb-ghost: rgba(15,23,42,0.06);
-    --sb-shadow: rgba(2,6,23,0.06);
+    --sb-icon: #16a34a;
+    --sb-icon-strong: #047857;
+    --sb-ghost: rgba(15, 23, 42, 0.14);
+    --sb-shadow: 0 20px 48px rgba(15, 23, 42, 0.10);
+    --sb-tooltip-shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
+    --sb-backdrop: rgba(15, 23, 42, 0.36);
     --sb-badge-bg: #f59e0b;
-    --sb-surface: rgba(15,23,42,0.02);
+    --sb-tooltip-bg: #ffffff;
+    --sb-brand-bg: linear-gradient(180deg, #f0fdf4 0%, #ffffff 100%);
+    --sb-brand-border: rgba(16, 185, 129, 0.16);
+    --sb-brand-shadow: 0 12px 24px rgba(16, 185, 129, 0.08);
+    --sb-active-pill-shadow: 0 8px 18px rgba(16, 185, 129, 0.18);
+    --sidebar-pill-width: 5px;
+    --sidebar-pill-height: 30px;
+    --sidebar-pill-left: 0.9rem;
+    --sidebar-pill-radius: 9999px;
   }
 
-  /* Fallback to prefers-color-scheme for users who rely on system */
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --sb-bg: #0f1724;
-      --sb-text: #e6eef7;
-      --sb-muted: #94a3b8;
-      --sb-muted-2: #cbd5e1;
-      --sb-hover: rgba(255,255,255,0.03);
-      --sb-border: rgba(255,255,255,0.04);
-      --sb-active-accent: #34d399;
-      --sb-ghost: rgba(255,255,255,0.06);
-      --sb-shadow: rgba(2,6,23,0.5);
-      --sb-badge-bg: #f59e0b;
-      --sb-surface: rgba(255,255,255,0.02);
-    }
-  }
-
-  /* Also support a .dark class on body for apps that toggle mode client-side */
+  html[data-theme="dark"],
   body.dark {
-    --sb-bg: #0f1724;
-    --sb-text: #e6eef7;
-    --sb-muted: #94a3b8;
-    --sb-muted-2: #cbd5e1;
-    --sb-hover: rgba(255,255,255,0.03);
-    --sb-border: rgba(255,255,255,0.04);
+    --sb-bg: #0f172a;
+    --sb-surface: rgba(17, 28, 47, 0.98);
+    --sb-surface-soft: #162337;
+    --sb-surface-elevated: #18263c;
+    --sb-text: #e2e8f0;
+    --sb-muted: #a7b4c8;
+    --sb-muted-2: #7f8ea3;
+    --sb-border: rgba(148, 163, 184, 0.18);
+    --sb-hover: rgba(52, 211, 153, 0.14);
+    --sb-active-bg: linear-gradient(90deg, rgba(16, 185, 129, 0.26) 0%, rgba(16, 185, 129, 0.09) 100%);
+    --sb-active-outline: rgba(52, 211, 153, 0.24);
     --sb-active-accent: #34d399;
-    --sb-ghost: rgba(255,255,255,0.06);
-    --sb-shadow: rgba(2,6,23,0.5);
-    --sb-badge-bg: #f59e0b;
-    --sb-surface: rgba(255,255,255,0.02);
+    --sb-icon: #34d399;
+    --sb-icon-strong: #6ee7b7;
+    --sb-ghost: rgba(148, 163, 184, 0.22);
+    --sb-shadow: 0 24px 56px rgba(2, 6, 23, 0.42);
+    --sb-tooltip-shadow: 0 20px 44px rgba(2, 6, 23, 0.42);
+    --sb-backdrop: rgba(2, 6, 23, 0.58);
+    --sb-tooltip-bg: #18263c;
+    --sb-brand-bg: linear-gradient(180deg, rgba(17, 28, 47, 0.98) 0%, rgba(15, 23, 42, 0.96) 100%);
+    --sb-brand-border: rgba(52, 211, 153, 0.18);
+    --sb-brand-shadow: 0 14px 30px rgba(2, 6, 23, 0.28);
+    --sb-active-pill-shadow: 0 10px 22px rgba(16, 185, 129, 0.22);
   }
 
-  /* Ensure the sidebar root enforces variables even if utility classes exist */
   .app-sidebar {
     height: 100vh;
     height: 100svh;
     background: var(--sb-bg) !important;
     color: var(--sb-text) !important;
+    border-color: var(--sb-border) !important;
+    box-shadow: var(--sb-shadow) !important;
   }
 
-  /* Surface for header/footer inside sidebar */
   .app-sidebar > div,
   .app-sidebar .border-b,
   .app-sidebar .border-t {
@@ -95,7 +77,19 @@
     border-color: var(--sb-border) !important;
   }
 
-  .app-sidebar img { background: transparent; }
+  .app-sidebar img {
+    background: transparent;
+  }
+
+  .sidebar-brand-mark {
+    background: var(--sb-brand-bg) !important;
+    border: 1px solid var(--sb-brand-border) !important;
+    box-shadow: var(--sb-brand-shadow);
+  }
+
+  .sidebar-brand-title {
+    color: var(--sb-text) !important;
+  }
 
   .sidebar-scroll {
     overflow-y: auto;
@@ -103,14 +97,17 @@
     overscroll-behavior: contain;
     scrollbar-gutter: stable;
     scrollbar-width: thin;
+    -webkit-overflow-scrolling: touch;
   }
 
   .sidebar-scroll::-webkit-scrollbar {
     width: 8px;
   }
+
   .sidebar-scroll::-webkit-scrollbar-track {
     background: transparent;
   }
+
   .sidebar-scroll::-webkit-scrollbar-thumb {
     background: var(--sb-ghost);
     border-radius: 9999px;
@@ -118,180 +115,248 @@
     background-clip: content-box;
     transition: background 0.2s ease;
   }
+
   .sidebar-scroll:hover::-webkit-scrollbar-thumb {
-    background: rgba(255,255,255,0.08);
+    background: var(--sb-ghost);
   }
 
-  /* Tooltip overrides to handle both light/dark */
   .sidebar-tooltip {
     pointer-events: none;
-    background: var(--sb-bg) !important;
+    background: var(--sb-tooltip-bg) !important;
     border: 1px solid var(--sb-border) !important;
     color: var(--sb-text) !important;
-    box-shadow: 0 6px 18px rgba(2,6,23,0.08);
+    box-shadow: var(--sb-tooltip-shadow) !important;
   }
 
-  /* Link states - use !important to override utility classes when present */
-  .sidebar-link { color: var(--sb-text) !important; }
-  .sidebar-link .icon { color: var(--sb-muted) !important; }
-  .sidebar-link:hover { background: var(--sb-hover) !important; }
-  .sidebar-link.active { background: var(--sb-hover) !important; box-shadow: 0 1px 0 var(--sb-shadow) !important; border-left: 4px solid var(--sb-active-accent) !important; }
+  .sidebar-link {
+    color: var(--sb-text) !important;
+  }
 
-  .sidebar-badge { background: var(--sb-badge-bg) !important; color: #fff !important; }
+  .sidebar-link .icon {
+    color: var(--sb-icon) !important;
+  }
 
-  /* Ensure anchors, icons and active states use the sidebar color variables regardless of utility classes */
-  /* Remove rectangular/pill backgrounds by default and remove border-radius */
   .app-sidebar a.group {
     color: var(--sb-text) !important;
     background: transparent !important;
-    border-radius: 0 !important;
+    border-radius: 1rem !important;
     box-shadow: none !important;
     border-left: 0 !important;
+    min-height: 3.25rem;
+    gap: 0.875rem !important;
+    padding: 0.9rem 1rem !important;
+    transition:
+      background-color 0.2s ease,
+      color 0.2s ease,
+      transform 0.2s ease,
+      box-shadow 0.2s ease !important;
   }
 
-  /* Neutralize common utilities applied directly to anchors inside sidebar */
   .app-sidebar a.group[class*="bg-slate-50"],
   .app-sidebar a.group[class*="rounded-lg"],
   .app-sidebar a.group[class*="shadow-sm"] {
     background: transparent !important;
-    border-radius: 0 !important;
+    border-radius: 1rem !important;
     box-shadow: none !important;
   }
 
-  /* Remove any background applied via inner utility selectors */
-  .app-sidebar [class*="bg-slate-50"] { background: transparent !important; }
-
-  /* Hover: minimal effect — change icon color to accent (no filled rectangle) */
   .app-sidebar a.group:hover {
-    background: transparent !important;
+    background: var(--sb-hover) !important;
     color: var(--sb-text) !important;
-  }
-  .app-sidebar a.group:hover svg, .app-sidebar a.group:hover .icon {
-    color: var(--sb-active-accent) !important;
+    transform: translateX(2px);
   }
 
-  .app-sidebar a.group svg, .app-sidebar a.group .icon {
-    color: var(--sb-muted) !important;
-    width: 22px !important; /* larger icons */
-    height: 22px !important;
+  .app-sidebar a.group:hover svg,
+  .app-sidebar a.group:hover .icon {
+    color: var(--sb-icon-strong) !important;
+  }
+
+  .app-sidebar a.group svg,
+  .app-sidebar a.group .icon {
+    color: var(--sb-icon) !important;
+    width: 20px !important;
+    height: 20px !important;
     flex-shrink: 0 !important;
+    transition: color 0.2s ease, transform 0.2s ease !important;
   }
 
-  /* Increase label size and weight, keep ellipsis to avoid overflow */
   .app-sidebar a.group span {
-    font-size: 15px !important; /* larger than text-sm */
+    color: inherit !important;
+    font-size: 14.5px !important;
     font-weight: 600 !important;
-    line-height: 1 !important;
+    line-height: 1.2 !important;
     white-space: nowrap !important;
     overflow: hidden !important;
     text-overflow: ellipsis !important;
   }
 
-  /* More breathing room: increase gap and vertical padding for menu items without changing sidebar width */
-  .app-sidebar a.group {
-    gap: 0.75rem !important; /* larger gap between icon and label */
-    padding-top: 0.85rem !important;
-    padding-bottom: 0.85rem !important;
+  .sidebar-badge {
+    background: var(--sb-badge-bg) !important;
+    color: #fff !important;
   }
 
-  /* Adjust collapse/footer button sizing inside sidebar */
-  .app-sidebar > .px-3.py-3 button svg,
-  .app-sidebar button svg {
-    width: 18px !important;
-    height: 18px !important;
-  }
-  .app-sidebar > .px-3.py-3 button span,
-  .app-sidebar button span {
-    font-size: 14px !important;
-    font-weight: 600 !important;
-  }
-
-  /* Responsive: slightly smaller on narrow viewports to avoid overflow */
-  @media (max-width: 767px) {
-    .app-sidebar a.group svg, .app-sidebar a.group .icon {
-      width: 18px !important;
-      height: 18px !important;
-    }
-    .app-sidebar a.group span { font-size: 14px !important; }
-    .app-sidebar a.group { gap: 0.6rem !important; padding-top: 0.6rem !important; padding-bottom: 0.6rem !important; }
-  }
-
-  /* Active/selected items: remove filled background and instead show a small rounded vertical pill */
   .app-sidebar a.group.active,
   .app-sidebar a.group[aria-current="page"],
   .app-sidebar a.group.sidebar-active {
-    background: transparent !important;
+    background: var(--sb-active-bg) !important;
     color: var(--sb-text) !important;
-    box-shadow: none !important;
-    border-radius: 0 !important;
+    box-shadow: inset 0 0 0 1px var(--sb-active-outline) !important;
+    border-radius: 1rem !important;
     position: relative !important;
-    padding-left: calc(0.75rem + var(--sidebar-pill-width)) !important; /* add space for the pill */
+    padding-left: calc(1rem + var(--sidebar-pill-width) + 0.55rem) !important;
   }
 
-  /* Vertical pill */
   .app-sidebar a.group.active::before,
   .app-sidebar a.group[aria-current="page"]::before,
   .app-sidebar a.group.sidebar-active::before {
-    content: '';
+    content: "";
     position: absolute;
-    left: var(--sidebar-pill-left); /* offset from left edge */
+    left: var(--sidebar-pill-left);
     top: 50%;
     transform: translateY(-50%);
     width: var(--sidebar-pill-width);
     height: var(--sidebar-pill-height);
     border-radius: var(--sidebar-pill-radius);
     background: var(--sb-active-accent) !important;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+    box-shadow: var(--sb-active-pill-shadow);
   }
 
-  /* Ensure icons on active items match accent */
   .app-sidebar a.group.active svg,
   .app-sidebar a.group[aria-current="page"] svg,
   .app-sidebar a.group.sidebar-active svg {
-    color: var(--sb-active-accent) !important;
+    color: var(--sb-icon-strong) !important;
   }
 
-  .app-sidebar a.group[class*="text-slate-900"] { color: var(--sb-text) !important; }
+  .app-sidebar a.group[class*="text-slate-900"] {
+    color: var(--sb-text) !important;
+  }
 
-  /* Smaller text styles */
-  .sb-section-title { color: var(--sb-muted-2) !important; }
-  .sb-subtitle { color: var(--sb-muted) !important; }
+  .sb-section-title {
+    color: var(--sb-muted-2) !important;
+  }
 
-  /* Override common Tailwind color utilities when inside the sidebar so theme toggles update visuals */
+  .sb-subtitle {
+    color: var(--sb-muted) !important;
+  }
+
   .app-sidebar .text-slate-700,
   .app-sidebar .text-slate-800,
-  .app-sidebar .text-slate-900 { color: var(--sb-text) !important; }
+  .app-sidebar .text-slate-900 {
+    color: var(--sb-text) !important;
+  }
 
-  .app-sidebar .text-slate-500 { color: var(--sb-muted) !important; }
-  .app-sidebar .text-slate-400 { color: var(--sb-muted-2) !important; }
+  .app-sidebar .text-slate-500 {
+    color: var(--sb-muted) !important;
+  }
 
-  /* Background utilities (match substrings to handle variants like bg-white/90) */
-  .app-sidebar [class*="bg-white"] { background: var(--sb-surface) !important; }
-  /* Remove pill/rectangle backgrounds applied by bg-slate-50 on menu items */
-  .app-sidebar [class*="bg-slate-50"] { background: transparent !important; }
-  .app-sidebar [class*="bg-white/90"] { background: var(--sb-surface) !important; }
+  .app-sidebar .text-slate-400 {
+    color: var(--sb-muted-2) !important;
+  }
 
-  /* Remove rounded pill shapes and shadows coming from utility classes */
-  .app-sidebar .rounded-lg { border-radius: 0 !important; }
-  .app-sidebar .shadow-sm { box-shadow: none !important; }
+  .app-sidebar [class*="bg-white"] {
+    background: var(--sb-surface-elevated) !important;
+  }
 
-  /* Border utilities */
-  .app-sidebar [class*="border-slate-100"] { border-color: var(--sb-border) !important; }
+  .app-sidebar [class*="bg-slate-50"] {
+    background: var(--sb-surface-soft) !important;
+  }
 
-  /* Badge utilities */
-  .app-sidebar .bg-amber-500 { background: var(--sb-badge-bg) !important; color: #fff !important; }
+  .app-sidebar [class*="bg-white/90"],
+  .app-sidebar [class*="bg-white/95"] {
+    background: var(--sb-surface) !important;
+  }
+
+  .app-sidebar .rounded-lg {
+    border-radius: 1rem !important;
+  }
+
+  .app-sidebar .shadow-sm {
+    box-shadow: none !important;
+  }
+
+  .app-sidebar [class*="border-slate-100"] {
+    border-color: var(--sb-border) !important;
+  }
+
+  .app-sidebar .bg-amber-500 {
+    background: var(--sb-badge-bg) !important;
+    color: #fff !important;
+  }
+
+  .sidebar-mobile-backdrop {
+    background: var(--sb-backdrop) !important;
+    backdrop-filter: blur(6px);
+  }
+
+  .sidebar-collapse-btn {
+    border: 1px solid var(--sb-border) !important;
+    background: var(--sb-surface-soft) !important;
+    color: var(--sb-text) !important;
+  }
+
+  .sidebar-collapse-btn:hover {
+    background: var(--sb-hover) !important;
+    color: var(--sb-icon-strong) !important;
+  }
+
+  .sidebar-collapse-btn svg {
+    color: var(--sb-icon) !important;
+    width: 18px !important;
+    height: 18px !important;
+  }
+
+  .sidebar-collapse-btn span {
+    font-size: 14px !important;
+    font-weight: 600 !important;
+  }
+
+  @media (max-width: 767px) {
+    .sidebar-tooltip {
+      display: none !important;
+    }
+
+    .app-sidebar {
+      width: min(20rem, calc(100vw - 1rem)) !important;
+      max-width: calc(100vw - 1rem) !important;
+      box-shadow: var(--sb-shadow) !important;
+    }
+
+    .app-sidebar a.group,
+    .app-sidebar a.group.active,
+    .app-sidebar a.group[aria-current="page"],
+    .app-sidebar a.group.sidebar-active {
+      min-height: 3rem;
+      padding: 0.825rem 0.9rem !important;
+    }
+
+    .app-sidebar a.group.active,
+    .app-sidebar a.group[aria-current="page"],
+    .app-sidebar a.group.sidebar-active {
+      padding-left: calc(0.9rem + var(--sidebar-pill-width) + 0.55rem) !important;
+    }
+
+    .app-sidebar a.group svg,
+    .app-sidebar a.group .icon {
+      width: 19px !important;
+      height: 19px !important;
+    }
+
+    .app-sidebar a.group span {
+      font-size: 14px !important;
+    }
+  }
 
   @media (min-width: 768px) {
     .app-sidebar {
       height: 100%;
       min-height: 100%;
       align-self: stretch;
+      box-shadow: none !important;
     }
   }
 </style>
 
-<!-- Mobile Sidebar Backdrop -->
-<div x-show="mobileMenuOpen" 
+<div x-show="mobileMenuOpen"
      x-transition:enter="transition-opacity ease-linear duration-300"
      x-transition:enter-start="opacity-0"
      x-transition:enter-end="opacity-100"
@@ -299,36 +364,38 @@
      x-transition:leave-start="opacity-100"
      x-transition:leave-end="opacity-0"
      @click="mobileMenuOpen = false"
-     class="fixed inset-0 z-40 bg-slate-900/40 md:hidden" 
+     class="sidebar-mobile-backdrop fixed inset-0 z-40 md:hidden"
      aria-hidden="true">
 </div>
 
 <aside x-data="sidebarPanel()"
+       @keydown.escape.window="mobileMenuOpen = false"
        :class="[
            open ? 'md:w-72' : 'md:w-20',
            mobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
        ]"
-       class="app-sidebar fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] shrink-0 flex-col border-r bg-white text-slate-800 shadow-sm transition-all duration-300 md:relative md:max-w-none">
-  <div class="px-4 py-4 border-b bg-white/90">
-    <div class="flex items-center gap-3">
-      <img src="/static/logo.png" alt="Logo" class="h-10 w-10 rounded-md object-cover shrink-0" :class="{'mx-auto': !open}">
+       class="app-sidebar fixed inset-y-0 left-0 z-50 flex w-[min(20rem,92vw)] max-w-[92vw] shrink-0 flex-col border-r bg-white text-slate-800 shadow-sm transition-all duration-300 md:relative md:max-w-none">
+  <div class="border-b bg-white/90 px-4 py-4">
+    <div class="flex items-center gap-3.5">
+      <div class="sidebar-brand-mark flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl" :class="{'mx-auto': !open}">
+        <img src="/static/logo.png" alt="Logo" class="h-9 w-9 object-contain">
+      </div>
       <div x-show="open" x-transition.opacity class="min-w-0">
-        <p class="text-lg font-semibold tracking-tight leading-tight text-slate-900">CHS Gate Access</p>
-        <p class="text-xs text-slate-500">Academic Security Console</p>
+        <p class="sidebar-brand-title text-lg font-semibold leading-tight tracking-tight text-slate-900">CHS Gate Access</p>
       </div>
     </div>
   </div>
 
-  <nav class="sidebar-scroll flex-1 px-3 py-4 pr-2 space-y-3">
-    <section class="space-y-1">
-      <p x-show="open" class="px-3 text-[11px] uppercase tracking-[0.18em] text-slate-400 font-semibold">Main</p>
+  <nav class="sidebar-scroll flex-1 space-y-5 px-3 py-5 pr-2">
+    <section class="space-y-1.5">
+      <p x-show="open" class="sb-section-title px-3 text-[11px] font-semibold uppercase tracking-[0.2em]">Main</p>
 
       <a href="/dashboard" class="group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-200 {% if page == 'dashboard' %}bg-slate-50 text-slate-900 border-l-4 border-emerald-500 shadow-sm{% else %}text-slate-700 hover:bg-slate-50{% endif %}">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0 text-slate-500 group-hover:text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M3 10.5L12 3l9 7.5V21a1 1 0 01-1 1h-5v-6H9v6H4a1 1 0 01-1-1z" />
         </svg>
         <span x-show="open" x-transition.opacity>Dashboard</span>
-        <span x-show="!open" x-transition.opacity class="sidebar-tooltip absolute left-full top-1/2 ml-3 -translate-y-1/2 rounded-md bg-white border border-slate-100 px-3 py-1 text-xs text-slate-800 shadow-md opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">Dashboard</span>
+        <span x-show="!open" x-transition.opacity class="sidebar-tooltip absolute left-full top-1/2 ml-3 -translate-y-1/2 rounded-md border border-slate-100 bg-white px-3 py-1 text-xs text-slate-800 shadow-md opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">Dashboard</span>
       </a>
 
       <a href="/students" class="group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-200 {% if page == 'students' %}bg-slate-50 text-slate-900 border-l-4 border-emerald-500 shadow-sm{% else %}text-slate-700 hover:bg-slate-50{% endif %}">
@@ -337,19 +404,19 @@
           <path stroke-linecap="round" stroke-linejoin="round" d="M4 21v-1a6 6 0 0112 0v1" />
         </svg>
         <span x-show="open" x-transition.opacity>Students</span>
-        <span x-show="!open" x-transition.opacity class="sidebar-tooltip absolute left-full top-1/2 ml-3 -translate-y-1/2 rounded-md bg-white border border-slate-100 px-3 py-1 text-xs text-slate-800 shadow-md opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">Students</span>
+        <span x-show="!open" x-transition.opacity class="sidebar-tooltip absolute left-full top-1/2 ml-3 -translate-y-1/2 rounded-md border border-slate-100 bg-white px-3 py-1 text-xs text-slate-800 shadow-md opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">Students</span>
       </a>
     </section>
 
-    <section class="space-y-1">
-      <p x-show="open" class="px-3 text-[11px] uppercase tracking-[0.18em] text-slate-400 font-semibold">Monitoring</p>
+    <section class="space-y-1.5">
+      <p x-show="open" class="sb-section-title px-3 text-[11px] font-semibold uppercase tracking-[0.2em]">Monitoring</p>
 
-      <a href="/dashboard#gate-scanning" class="group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-200 text-slate-700 hover:bg-slate-50">
+      <a href="/dashboard#gate-scanning" class="group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-700 transition-colors duration-200 hover:bg-slate-50">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0 text-slate-500 group-hover:text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M4 12h16M4 17h16" />
         </svg>
         <span x-show="open" x-transition.opacity>Gate Scanning</span>
-        <span x-show="!open" x-transition.opacity class="sidebar-tooltip absolute left-full top-1/2 ml-3 -translate-y-1/2 rounded-md bg-white border border-slate-100 px-3 py-1 text-xs text-slate-800 shadow-md opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">Gate Scanning</span>
+        <span x-show="!open" x-transition.opacity class="sidebar-tooltip absolute left-full top-1/2 ml-3 -translate-y-1/2 rounded-md border border-slate-100 bg-white px-3 py-1 text-xs text-slate-800 shadow-md opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">Gate Scanning</span>
       </a>
 
       <a href="/gate-logs" class="group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-200 {% if page == 'gate_logs' %}bg-slate-50 text-slate-900 border-l-4 border-emerald-500 shadow-sm{% else %}text-slate-700 hover:bg-slate-50{% endif %}">
@@ -357,7 +424,7 @@
           <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h10" />
         </svg>
         <span x-show="open" x-transition.opacity>Gate Logs</span>
-        <span x-show="!open" x-transition.opacity class="sidebar-tooltip absolute left-full top-1/2 ml-3 -translate-y-1/2 rounded-md bg-white border border-slate-100 px-3 py-1 text-xs text-slate-800 shadow-md opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">Gate Logs</span>
+        <span x-show="!open" x-transition.opacity class="sidebar-tooltip absolute left-full top-1/2 ml-3 -translate-y-1/2 rounded-md border border-slate-100 bg-white px-3 py-1 text-xs text-slate-800 shadow-md opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">Gate Logs</span>
       </a>
 
       <a href="/sms-logs" class="group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-200 {% if page == 'sms_logs' %}bg-slate-50 text-slate-900 border-l-4 border-emerald-500 shadow-sm{% else %}text-slate-700 hover:bg-slate-50{% endif %}">
@@ -365,7 +432,7 @@
           <path stroke-linecap="round" stroke-linejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M21 12c0 4.418-4.03 8-9 8s-9-3.582-9-8 4.03-8 9-8 9 3.582 9 8z" />
         </svg>
         <span x-show="open" x-transition.opacity>SMS Logs</span>
-        <span x-show="!open" x-transition.opacity class="sidebar-tooltip absolute left-full top-1/2 ml-3 -translate-y-1/2 rounded-md bg-white border border-slate-100 px-3 py-1 text-xs text-slate-800 shadow-md opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">SMS Logs</span>
+        <span x-show="!open" x-transition.opacity class="sidebar-tooltip absolute left-full top-1/2 ml-3 -translate-y-1/2 rounded-md border border-slate-100 bg-white px-3 py-1 text-xs text-slate-800 shadow-md opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">SMS Logs</span>
       </a>
 
       <a href="/analytics" class="group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-200 {% if page == 'analytics' %}bg-slate-50 text-slate-900 border-l-4 border-emerald-500 shadow-sm{% else %}text-slate-700 hover:bg-slate-50{% endif %}">
@@ -373,87 +440,88 @@
           <path stroke-linecap="round" stroke-linejoin="round" d="M11 3v18m4-12v12m-8-6v6" />
         </svg>
         <span x-show="open" x-transition.opacity>Analytics</span>
-        <span x-show="!open" x-transition.opacity class="sidebar-tooltip absolute left-full top-1/2 ml-3 -translate-y-1/2 rounded-md bg-white border border-slate-100 px-3 py-1 text-xs text-slate-800 shadow-md opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">Analytics</span>
+        <span x-show="!open" x-transition.opacity class="sidebar-tooltip absolute left-full top-1/2 ml-3 -translate-y-1/2 rounded-md border border-slate-100 bg-white px-3 py-1 text-xs text-slate-800 shadow-md opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">Analytics</span>
       </a>
 
       {% if is_full_admin %}
-      <!-- Early Time-Out Monitoring (Admin Only) -->
       <a href="/early-timeout?{{ school_year_query }}" class="group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-200 {% if page == 'early_timeout' %}bg-slate-50 text-slate-900 border-l-4 border-amber-500 shadow-sm{% else %}text-slate-700 hover:bg-slate-50{% endif %}">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0 text-slate-500 group-hover:text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-6 0v-1m6 0H9" />
         </svg>
         <span x-show="open" x-transition.opacity>Early Time-Out</span>
         <span id="sidebarETOBadge" class="ml-auto inline-flex items-center rounded-full bg-amber-500 px-2 py-0.5 text-[11px] font-semibold text-white {% if pending_count|default(0) == 0 %}hidden{% endif %}" :class="{'absolute -top-1 -right-1 ml-0': !open}">{{ pending_count|default(0) }}</span>
-        <span x-show="!open" x-transition.opacity class="sidebar-tooltip absolute left-full top-1/2 ml-3 -translate-y-1/2 rounded-md bg-white border border-slate-100 px-3 py-1 text-xs text-slate-800 shadow-md opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">Early Time-Out</span>
+        <span x-show="!open" x-transition.opacity class="sidebar-tooltip absolute left-full top-1/2 ml-3 -translate-y-1/2 rounded-md border border-slate-100 bg-white px-3 py-1 text-xs text-slate-800 shadow-md opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">Early Time-Out</span>
       </a>
       {% endif %}
     </section>
 
     {% if can_view_analytics %}
-    <section class="space-y-1">
-      <p x-show="open" class="px-3 text-[11px] uppercase tracking-[0.18em] text-slate-400 font-semibold">Schedule</p>
+    <section class="space-y-1.5">
+      <p x-show="open" class="sb-section-title px-3 text-[11px] font-semibold uppercase tracking-[0.2em]">Schedule</p>
       <a href="/calendar" class="group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-200 {% if page == 'calendar' %}bg-slate-50 text-slate-900 border-l-4 border-emerald-500 shadow-sm{% else %}text-slate-700 hover:bg-slate-50{% endif %}">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0 text-slate-500 group-hover:text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
         </svg>
         <span x-show="open" x-transition.opacity>School Calendar</span>
-        <span x-show="!open" x-transition.opacity class="sidebar-tooltip absolute left-full top-1/2 ml-3 -translate-y-1/2 rounded-md bg-white border border-slate-100 px-3 py-1 text-xs text-slate-800 shadow-md opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">Calendar</span>
+        <span x-show="!open" x-transition.opacity class="sidebar-tooltip absolute left-full top-1/2 ml-3 -translate-y-1/2 rounded-md border border-slate-100 bg-white px-3 py-1 text-xs text-slate-800 shadow-md opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">Calendar</span>
       </a>
     </section>
     {% endif %}
 
-    <section class="space-y-1">
-      <p x-show="open" class="px-3 text-[11px] uppercase tracking-[0.18em] text-slate-400 font-semibold">Reports</p>
-      <a href="/analytics#reports-charts" class="group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-200 text-slate-700 hover:bg-slate-50">
+    <section class="space-y-1.5">
+      <p x-show="open" class="sb-section-title px-3 text-[11px] font-semibold uppercase tracking-[0.2em]">Reports</p>
+      <a href="/analytics#reports-charts" class="group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-700 transition-colors duration-200 hover:bg-slate-50">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0 text-slate-500 group-hover:text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M9 17v-6m3 6v-10m3 10v-4m3 4V7M3 21h18" />
         </svg>
         <span x-show="open" x-transition.opacity>Charts</span>
-        <span x-show="!open" x-transition.opacity class="sidebar-tooltip absolute left-full top-1/2 ml-3 -translate-y-1/2 rounded-md bg-white border border-slate-100 px-3 py-1 text-xs text-slate-800 shadow-md opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">Charts</span>
+        <span x-show="!open" x-transition.opacity class="sidebar-tooltip absolute left-full top-1/2 ml-3 -translate-y-1/2 rounded-md border border-slate-100 bg-white px-3 py-1 text-xs text-slate-800 shadow-md opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">Charts</span>
       </a>
     </section>
 
     {% if can_manage_users %}
-    <section class="space-y-1">
-      <p x-show="open" class="px-3 text-[11px] uppercase tracking-[0.18em] text-slate-400 font-semibold">Management</p>
-      <a href="/dashboard#user-management" class="group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-200 text-slate-700 hover:bg-slate-50">
+    <section class="space-y-1.5">
+      <p x-show="open" class="sb-section-title px-3 text-[11px] font-semibold uppercase tracking-[0.2em]">Management</p>
+      <a href="/dashboard#user-management" class="group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-700 transition-colors duration-200 hover:bg-slate-50">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0 text-slate-500 group-hover:text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2m16 0h4v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" />
         </svg>
         <span x-show="open" x-transition.opacity>User Management</span>
-        <span x-show="!open" x-transition.opacity class="sidebar-tooltip absolute left-full top-1/2 ml-3 -translate-y-1/2 rounded-md bg-white border border-slate-100 px-3 py-1 text-xs text-slate-800 shadow-md opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">Users</span>
+        <span x-show="!open" x-transition.opacity class="sidebar-tooltip absolute left-full top-1/2 ml-3 -translate-y-1/2 rounded-md border border-slate-100 bg-white px-3 py-1 text-xs text-slate-800 shadow-md opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">Users</span>
       </a>
-      <a href="/dashboard#user-management" class="group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-200 text-slate-700 hover:bg-slate-50">
+
+      <a href="/dashboard#user-management" class="group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-700 transition-colors duration-200 hover:bg-slate-50">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0 text-slate-500 group-hover:text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M10 9V5a2 2 0 114 0v4m-7 0h10a2 2 0 012 2v8H5v-8a2 2 0 012-2z" />
         </svg>
         <span x-show="open" x-transition.opacity>Roles & Permissions</span>
-        <span x-show="!open" x-transition.opacity class="sidebar-tooltip absolute left-full top-1/2 ml-3 -translate-y-1/2 rounded-md bg-white border border-slate-100 px-3 py-1 text-xs text-slate-800 shadow-md opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">Roles</span>
+        <span x-show="!open" x-transition.opacity class="sidebar-tooltip absolute left-full top-1/2 ml-3 -translate-y-1/2 rounded-md border border-slate-100 bg-white px-3 py-1 text-xs text-slate-800 shadow-md opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">Roles</span>
       </a>
+
       <a href="{{ '/admin/archive-summary?' ~ school_year_query if school_year_query else '/admin/archive-summary' }}" class="group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-200 {% if page == 'archive_summary' %}bg-slate-50 text-slate-900 border-l-4 border-emerald-500 shadow-sm{% else %}text-slate-700 hover:bg-slate-50{% endif %}">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0 text-slate-500 group-hover:text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M4 7a2 2 0 012-2h12a2 2 0 012 2v3H4V7Zm0 7h16v3a2 2 0 01-2 2H6a2 2 0 01-2-2v-3Zm4-3V6m4 5V6m4 5V6" />
         </svg>
         <span x-show="open" x-transition.opacity>Archive Summary</span>
-        <span x-show="!open" x-transition.opacity class="sidebar-tooltip absolute left-full top-1/2 ml-3 -translate-y-1/2 rounded-md bg-white border border-slate-100 px-3 py-1 text-xs text-slate-800 shadow-md opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">Archive Summary</span>
+        <span x-show="!open" x-transition.opacity class="sidebar-tooltip absolute left-full top-1/2 ml-3 -translate-y-1/2 rounded-md border border-slate-100 bg-white px-3 py-1 text-xs text-slate-800 shadow-md opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">Archive Summary</span>
       </a>
     </section>
     {% endif %}
 
-    <section class="space-y-1">
-      <p x-show="open" class="px-3 text-[11px] uppercase tracking-[0.18em] text-slate-400 font-semibold">Support</p>
+    <section class="space-y-1.5">
+      <p x-show="open" class="sb-section-title px-3 text-[11px] font-semibold uppercase tracking-[0.2em]">Support</p>
       <a href="/developers" class="group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-200 {% if page == 'developers' %}bg-slate-50 text-slate-900 border-l-4 border-emerald-500 shadow-sm{% else %}text-slate-700 hover:bg-slate-50{% endif %}">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0 text-slate-500 group-hover:text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16h6M7 3h10a2 2 0 012 2v14l-5-3H7a2 2 0 01-2-2V5a2 2 0 012-2z" />
         </svg>
         <span x-show="open" x-transition.opacity>Help / Guide</span>
-        <span x-show="!open" x-transition.opacity class="sidebar-tooltip absolute left-full top-1/2 ml-3 -translate-y-1/2 rounded-md bg-white border border-slate-100 px-3 py-1 text-xs text-slate-800 shadow-md opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">Help</span>
+        <span x-show="!open" x-transition.opacity class="sidebar-tooltip absolute left-full top-1/2 ml-3 -translate-y-1/2 rounded-md border border-slate-100 bg-white px-3 py-1 text-xs text-slate-800 shadow-md opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">Help</span>
       </a>
     </section>
   </nav>
 
-  <div class="px-3 py-3 border-t bg-white/90">
-    <button type="button" @click="toggle()" class="w-full hidden md:flex items-center justify-center gap-2 rounded-lg bg-slate-50 hover:bg-slate-100 transition-all py-2 text-sm font-semibold text-slate-800">
+  <div class="border-t bg-white/90 px-3 py-3">
+    <button type="button" @click="toggle()" class="sidebar-collapse-btn hidden w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold transition-all md:flex">
       <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform" :class="{'rotate-180': !open}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
         <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
       </svg>

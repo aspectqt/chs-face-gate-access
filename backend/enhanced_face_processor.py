@@ -15,6 +15,7 @@ from datetime import datetime, timedelta
 from collections import defaultdict, deque
 from flask import request, jsonify
 import logging
+from face_matching import build_student_face_index, match_face_probe
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -106,34 +107,37 @@ class EnhancedFaceProcessor:
             
             # Load students with face data
             students = list(students_collection.find({
-                "face_data": {"$exists": True, "$ne": []},
                 "face_registered": True,
+                "$or": [
+                    {"face_encodings.0": {"$exists": True}},
+                    {"face_embeddings.0": {"$exists": True}},
+                ],
+            }, {
+                "student_id": 1,
+                "name": 1,
+                "grade_level": 1,
+                "section": 1,
+                "face_encodings": 1,
+                "face_embeddings": 1,
             }))
-            
-            self.known_encodings = []
-            self.known_students = []
-            
+
+            face_index_rows = []
             for student in students:
-                try:
-                    # Load face encodings
-                    face_data = student.get('face_data', [])
-                    if face_data:
-                        # Convert stored encodings back to numpy array
-                        for encoding_data in face_data:
-                            encoding = np.array(encoding_data['encoding'])
-                            self.known_encodings.append(encoding)
-                            self.known_students.append({
-                                'student_id': student['student_id'],
-                                'name': student['name'],
-                                'grade_level': student.get('grade_level', ''),
-                                'section': student.get('section', '')
-                            })
-                except Exception as e:
-                    logger.warning(f"Failed to load face data for student {student.get('student_id')}: {e}")
-            
-            self.known_encodings = np.array(self.known_encodings) if self.known_encodings else np.empty((0, 128))
-            
-            logger.info(f"Loaded {len(self.known_encodings)} face encodings for {len(self.known_students)} students")
+                encodings = student.get('face_encodings') or student.get('face_embeddings') or []
+                face_index_rows.append({
+                    'student_id': str(student.get('student_id') or '').strip(),
+                    'name': str(student.get('name') or '').strip(),
+                    'grade_level': str(student.get('grade_level') or '').strip(),
+                    'section': str(student.get('section') or '').strip(),
+                    'encodings': encodings,
+                })
+
+            self.face_index = build_student_face_index(face_index_rows, max_encodings_per_student=20)
+            self.known_students = self.face_index.get('students', [])
+            self.known_encodings = self.face_index.get('centroids', np.empty((0, 128)))
+
+            total_samples = sum(int(student.get('encoding_count') or 0) for student in self.known_students)
+            logger.info(f"Loaded {len(self.known_students)} face profiles with {total_samples} samples")
             
             client.close()
             
@@ -141,6 +145,7 @@ class EnhancedFaceProcessor:
             logger.error(f"Failed to load known faces: {e}")
             self.known_encodings = np.empty((0, 128))
             self.known_students = []
+            self.face_index = {'students': [], 'centroids': np.empty((0, 128))}
     
     def detect_faces(self, frame_bytes):
         """Detect faces in frame with optimized performance"""
@@ -254,8 +259,8 @@ class EnhancedFaceProcessor:
             if len(self.known_encodings) == 0:
                 return 0.5
             
-            # Compare with known faces
-            distances = face_recognition.face_distance(self.known_encodings, encoding)
+            # Compare with known student centroids
+            distances = np.linalg.norm(self.known_encodings - encoding, axis=1)
             min_distance = np.min(distances) if len(distances) > 0 else 1.0
             
             # Convert distance to confidence (lower distance = higher confidence)
@@ -309,27 +314,22 @@ class EnhancedFaceProcessor:
             if len(self.known_encodings) == 0:
                 return {'recognized': False, 'error': 'No known faces loaded'}
             
-            # Compare with known faces
-            distances = face_recognition.face_distance(self.known_encodings, encoding)
+            match_result = match_face_probe(
+                encoding,
+                self.face_index,
+            )
             
-            # Find best match
-            min_distance = np.min(distances)
-            best_match_index = np.argmin(distances)
-            
-            # Recognition threshold (adjustable based on requirements)
-            threshold = 0.6
-            
-            if min_distance < threshold:
-                # Face recognized
-                student = self.known_students[best_match_index]
+            if match_result.get('recognized'):
+                student = match_result.get('student') or {}
                 result = {
                     'recognized': True,
                     'student_id': student['student_id'],
                     'name': student['name'],
                     'grade_level': student['grade_level'],
                     'section': student['section'],
-                    'confidence': float(1.0 - min_distance),
-                    'distance': float(min_distance),
+                    'confidence': float((match_result.get('confidence') or 0.0) / 100.0),
+                    'distance': float(match_result.get('distance') or 1.0),
+                    'score_margin': float(match_result.get('score_margin') or 0.0),
                     'timestamp': current_time
                 }
                 
@@ -350,10 +350,13 @@ class EnhancedFaceProcessor:
                 return result
             else:
                 # Face not recognized
+                candidate = match_result.get('candidate') or {}
                 result = {
                     'recognized': False,
-                    'confidence': float(1.0 - min_distance),
-                    'distance': float(min_distance),
+                    'confidence': float((match_result.get('confidence') or 0.0) / 100.0),
+                    'distance': float(match_result.get('distance') or 1.0),
+                    'reason': match_result.get('reason', 'no_match'),
+                    'candidate_student_id': (candidate.get('student') or {}).get('student_id'),
                     'timestamp': current_time
                 }
                 
@@ -486,7 +489,7 @@ class EnhancedFaceProcessor:
             'active_tracks': len(self.face_tracks),
             'average_processing_time': np.mean(processing_times) if processing_times else 0,
             'cache_size': len(self.recognition_cache),
-            'known_faces': len(self.known_encodings)
+            'known_faces': len(self.known_students)
         }
     
     def start_cleanup_thread(self):

@@ -151,16 +151,29 @@ class AppSmokeTests(unittest.TestCase):
         finally:
             self.restore_default_schedule_doc(original_doc)
 
-    def test_pdf_action_menu_is_present_on_export_pages(self):
+    def test_pdf_export_controls_are_present_on_export_pages(self):
         client = self.make_client()
 
-        for route in ("/students", "/gate-logs", "/sms-logs"):
+        students_response = client.get("/students")
+        self.assertEqual(students_response.status_code, 200)
+        students_html = students_response.get_data(as_text=True)
+        self.assertIn("studentsExportModal", students_html)
+        self.assertIn("Download PDF", students_html)
+        self.assertIn("Print PDF", students_html)
+        self.assertIn('data-download-mode="native"', students_html)
+
+        for route, modal_id in (("/gate-logs", "gateLogsExportModal"), ("/sms-logs", "smsLogsExportModal")):
             with self.subTest(route=route):
                 response = client.get(route)
                 self.assertEqual(response.status_code, 200)
                 html = response.get_data(as_text=True)
+                self.assertIn(modal_id, html)
+                self.assertIn("By Grade Level", html)
+                self.assertIn("By Section", html)
+                self.assertIn("Individual Student", html)
                 self.assertIn("Download PDF", html)
                 self.assertIn("Print PDF", html)
+                self.assertIn('data-download-mode="native"', html)
 
     def test_students_page_uses_guided_face_registration_ui(self):
         client = self.make_client()
@@ -197,6 +210,8 @@ class AppSmokeTests(unittest.TestCase):
         pdf_response = client.get("/students/export_pdf")
         self.assertEqual(pdf_response.status_code, 200)
         self.assertEqual(pdf_response.content_type, "application/pdf")
+        self.assertIn("no-store", pdf_response.headers.get("Cache-Control", ""))
+        self.assertEqual(pdf_response.headers.get("X-Content-Type-Options"), "nosniff")
 
         payload = pdf_response.get_data()
         self.assertTrue(payload.startswith(b"%PDF-"))
@@ -245,6 +260,8 @@ class AppSmokeTests(unittest.TestCase):
                 response = client.get(route)
                 self.assertEqual(response.status_code, 200)
                 self.assertEqual(response.content_type, "application/pdf")
+                self.assertIn("no-store", response.headers.get("Cache-Control", ""))
+                self.assertEqual(response.headers.get("X-Content-Type-Options"), "nosniff")
                 payload = response.get_data()
                 self.assertTrue(payload.startswith(b"%PDF-"))
                 self.assertIn(b"Prepared by", payload)
@@ -253,6 +270,97 @@ class AppSmokeTests(unittest.TestCase):
                 inline_response = client.get(f"{route}?disposition=inline")
                 self.assertEqual(inline_response.status_code, 200)
                 self.assertIn("inline", inline_response.headers.get("Content-Disposition", "").lower())
+
+    def test_gate_and_sms_pdf_exports_support_grade_section_and_student_scopes(self):
+        client = self.make_client()
+        school_year_label = self.app_module.get_current_school_year_label()
+        unique_suffix = uuid.uuid4().hex[:8]
+        student_id = f"EXPORT-{unique_suffix}"
+        student_name = f"Scoped Export {unique_suffix}"
+        grade_level = "Grade 11"
+        section_value = f"SEC-{unique_suffix[:4].upper()}"
+        timestamp_value = datetime(2026, 3, 28, 8, 15, 0).isoformat()
+
+        attendance_collection, _, _ = self.app_module.get_attendance_logs_storage(school_year_label)
+        sms_collection, _, _ = self.app_module.get_sms_logs_storage(school_year_label)
+
+        inserted_student_id = None
+        inserted_attendance_id = None
+        inserted_sms_id = None
+
+        try:
+            inserted_student_id = self.app_module.students.insert_one({
+                "student_id": student_id,
+                "name": student_name,
+                "parent_contact": "09171234567",
+                "status": "Active",
+            }).inserted_id
+            stored_student = self.app_module.students.find_one({"_id": inserted_student_id})
+            self.app_module.upsert_student_enrollment(
+                stored_student,
+                school_year_label,
+                grade_level=grade_level,
+                section=section_value,
+                status="Active",
+                update_existing=True,
+            )
+            enrollment_collection = self.app_module.get_school_year_enrollment_collection(school_year_label)
+            enrollment_row = enrollment_collection.find_one({"student_id": student_id}, {"_id": 1})
+            self.assertIsNotNone(enrollment_row)
+
+            inserted_attendance_id = attendance_collection.insert_one({
+                "student_id": student_id,
+                "student_name": student_name,
+                "date": "2026-03-28",
+                "time": "08:15",
+                "timestamp": timestamp_value,
+                "gate_action": "IN",
+                "session": "AM",
+                "status": "Present",
+                "verification_label": "Verified",
+                "source": "test-suite",
+                "school_year": school_year_label,
+            }).inserted_id
+            inserted_sms_id = sms_collection.insert_one({
+                "student_id": student_id,
+                "name": student_name,
+                "parent_contact": "09171234567",
+                "date": "2026-03-28",
+                "time": "08:16",
+                "timestamp": timestamp_value,
+                "status": self.app_module.sms_status_mongo_filter("sent"),
+                "message": f"Scoped export test for {student_name}",
+                "sid": f"SM-{unique_suffix}",
+                "error": "",
+                "school_year": school_year_label,
+            }).inserted_id
+
+            scoped_urls = [
+                f"/gate-logs/export?scope=grade&grade={grade_level}&school_year={school_year_label}",
+                f"/gate-logs/export?scope=section&grade={grade_level}&section={section_value}&school_year={school_year_label}",
+                f"/gate-logs/export?scope=student&student_record_id={enrollment_row['_id']}&student_id={student_id}&school_year={school_year_label}",
+                f"/sms-logs/export?scope=grade&grade={grade_level}&school_year={school_year_label}",
+                f"/sms-logs/export?scope=section&grade={grade_level}&section={section_value}&school_year={school_year_label}",
+                f"/sms-logs/export?scope=student&student_record_id={enrollment_row['_id']}&student_id={student_id}&school_year={school_year_label}",
+            ]
+
+            for url in scoped_urls:
+                with self.subTest(url=url):
+                    response = client.get(url)
+                    self.assertEqual(response.status_code, 200)
+                    self.assertEqual(response.content_type, "application/pdf")
+                    payload = response.get_data()
+                    self.assertTrue(payload.startswith(b"%PDF-"))
+                    self.assertIn(b"Scoped Export", payload)
+                    self.assertIn(unique_suffix.encode("utf-8"), payload)
+        finally:
+            if inserted_attendance_id is not None:
+                attendance_collection.delete_many({"_id": inserted_attendance_id})
+            if inserted_sms_id is not None:
+                sms_collection.delete_many({"_id": inserted_sms_id})
+            self.app_module.get_school_year_enrollment_collection(school_year_label).delete_many({"student_id": student_id})
+            if inserted_student_id is not None:
+                self.app_module.students.delete_many({"_id": inserted_student_id})
 
     def test_simulated_gate_scans_follow_tracked_in_out_rules(self):
         client = self.make_client()
@@ -891,3 +999,219 @@ class AppSmokeTests(unittest.TestCase):
             self.assertEqual(len(saved.get("face_capture_meta", [])), 20)
         finally:
             self.app_module.students.delete_many({"_id": inserted_id})
+
+    def test_face_registration_ignores_orphan_face_profiles_without_current_enrollment(self):
+        client = self.make_client()
+        csrf_headers = {self.app_module.CSRF_HEADER_NAME: "test-csrf-token"}
+        current_school_year = self.app_module.get_current_school_year_label()
+        target_student = {
+            "student_id": f"FACE-{uuid.uuid4().hex[:8]}",
+            "name": "Current Enrolled Student",
+            "parent_contact": "",
+            "status": "Active",
+        }
+        orphan_student = {
+            "student_id": f"ORPHAN-{uuid.uuid4().hex[:8]}",
+            "name": "Orphan Face Student",
+            "parent_contact": "",
+            "status": "Active",
+            "face_registered": True,
+            "face_data": ["data:image/jpeg;base64,orphan-shot"],
+            "face_encodings": [[0.22] * 128, [0.225] * 128, [0.23] * 128],
+            "face_embeddings": [[0.22] * 128, [0.225] * 128, [0.23] * 128],
+            "profile_photo": "data:image/jpeg;base64,orphan-shot",
+        }
+        target_inserted_id = self.app_module.students.insert_one(target_student).inserted_id
+        orphan_inserted_id = self.app_module.students.insert_one(orphan_student).inserted_id
+        stored_target = self.app_module.students.find_one({"_id": target_inserted_id})
+        self.app_module.upsert_student_enrollment(
+            stored_target,
+            current_school_year,
+            grade_level="Grade 12",
+            section="BSINT",
+            status="Active",
+            update_existing=True,
+        )
+
+        payload = {
+            "capture_profile": "standard",
+            "faces": [f"data:image/jpeg;base64,shot-{index}" for index in range(10)],
+            "capture_meta": [
+                {"step_key": f"step_{index}", "label": f"Capture {index + 1}", "instruction": "Hold still."}
+                for index in range(10)
+            ],
+        }
+        validated_rows = [
+            {
+                "encoding": self.app_module.np.array([0.22 + (index * 0.003)] * 128, dtype=self.app_module.np.float64),
+                "brightness": 120.0,
+                "contrast": 40.0,
+                "sharpness": 80.0,
+            }
+            for index in range(10)
+        ]
+
+        try:
+            with patch.object(self.app_module, "validate_face_capture_image", side_effect=validated_rows), \
+                    patch.object(self.app_module, "refresh_scan_face_index_if_active"), \
+                    patch.object(self.app_module, "sync_student_base_fields_to_enrollments"):
+                response = client.post(
+                    f"/api/students/{target_inserted_id}/face/register",
+                    json=payload,
+                    headers=csrf_headers,
+                )
+
+            self.assertEqual(response.status_code, 200)
+            body = response.get_json()
+            self.assertEqual(body["status"], "ok")
+            saved = self.app_module.students.find_one({"_id": target_inserted_id})
+            self.assertTrue(saved.get("face_registered"))
+            self.assertEqual(len(saved.get("face_encodings", [])), 10)
+        finally:
+            self.app_module.students.delete_many({"_id": target_inserted_id})
+            self.app_module.students.delete_many({"_id": orphan_inserted_id})
+            self.app_module.get_school_year_enrollment_collection(current_school_year).delete_many({"student_id": target_student["student_id"]})
+
+    def test_delete_student_api_removes_profile_face_data_and_runtime_references(self):
+        client = self.make_client()
+        csrf_headers = {self.app_module.CSRF_HEADER_NAME: "test-csrf-token"}
+        student_id = f"DEL-{uuid.uuid4().hex[:8]}"
+        current_school_year = self.app_module.get_current_school_year_label()
+        other_school_year = "2098-2099"
+        student_doc = {
+            "student_id": student_id,
+            "name": "Delete Face Student",
+            "parent_contact": "",
+            "status": "Active",
+            "face_registered": True,
+            "face_data": ["data:image/jpeg;base64,profile-shot"],
+            "face_encodings": [[0.12] * 128],
+            "face_encoding_count": 1,
+            "profile_photo": "data:image/jpeg;base64,profile-shot",
+        }
+        inserted_id = self.app_module.students.insert_one(student_doc).inserted_id
+        stored_student = self.app_module.students.find_one({"_id": inserted_id})
+        current_enrollment = self.app_module.upsert_student_enrollment(
+            stored_student,
+            current_school_year,
+            grade_level="Grade 7",
+            section="AVILA",
+            status="Active",
+            update_existing=True,
+        )
+        self.app_module.upsert_student_enrollment(
+            stored_student,
+            other_school_year,
+            grade_level="Grade 8",
+            section="ELNAR",
+            status="Active",
+            update_existing=True,
+        )
+        self.app_module.attendance_logs.insert_one({
+            "student_id": student_id,
+            "student_name": "Delete Face Student",
+            "school_year": current_school_year,
+            "timestamp": "2026-03-28T08:00:00",
+            "date": "2026-03-28",
+            "time": "08:00:00",
+            "gate_action": "IN",
+            "status": "Present",
+        })
+        self.app_module.sms_logs.insert_one({
+            "student_id": student_id,
+            "name": "Delete Face Student",
+            "school_year": current_school_year,
+            "timestamp": "2026-03-28T08:00:00",
+            "date": "2026-03-28",
+            "time": "08:00:00",
+            "status": "sent",
+            "message": "Test",
+        })
+        self.app_module.failed_scans.insert_one({
+            "student_id": student_id,
+            "reason": "unknown_face",
+            "date": "2026-03-28",
+            "timestamp": "2026-03-28T08:05:00",
+        })
+
+        with self.app_module.scan_lock:
+            original_active = self.app_module.scan_state.get("active")
+            original_known_encodings = self.app_module.scan_state.get("known_encodings")
+            original_known_students = self.app_module.scan_state.get("known_students")
+            original_model_status = self.app_module.scan_state.get("model_status")
+            original_events = list(self.app_module.scan_state.get("events") or [])
+            self.app_module.scan_state["active"] = False
+            self.app_module.scan_state["known_encodings"] = self.app_module.np.array(
+                [
+                    [0.12] * 128,
+                    [0.91] * 128,
+                ],
+                dtype=self.app_module.np.float64,
+            )
+            self.app_module.scan_state["known_students"] = [
+                {"student_id": student_id, "name": "Delete Face Student", "encodings": self.app_module.np.array([[0.12] * 128], dtype=self.app_module.np.float64)},
+                {"student_id": "KEEP-001", "name": "Keep Student", "encodings": self.app_module.np.array([[0.91] * 128], dtype=self.app_module.np.float64)},
+            ]
+            self.app_module.scan_state["model_status"] = "ready"
+            self.app_module.scan_state["events"] = [
+                {"id": 1, "type": "verified", "student_id": student_id},
+                {"id": 2, "type": "verified", "student_id": "KEEP-001"},
+            ]
+
+        self.app_module.last_scanned[student_id] = 12345.0
+        self.app_module.scan_presence_locks[student_id] = {"last_seen_ts": 12345.0}
+
+        try:
+            with patch.object(self.app_module, "refresh_loaded_face_processors") as refresh_mock:
+                response = client.delete(
+                    f"/api/students/{current_enrollment['_id']}",
+                    headers=csrf_headers,
+                )
+
+            self.assertEqual(response.status_code, 200)
+            body = response.get_json()
+            self.assertEqual(body["status"], "ok")
+            self.assertTrue(body["validation"]["completed"])
+            self.assertEqual(body["validation"]["remaining_profiles"], 0)
+            self.assertEqual(body["validation"]["remaining_enrollment_records"], 0)
+            self.assertGreaterEqual(body["counts"]["student_profiles_deleted"], 1)
+            self.assertGreaterEqual(body["counts"]["enrollment_records_deleted"], 2)
+            self.assertEqual(body["counts"]["attendance_logs_deleted"], 1)
+            self.assertEqual(body["counts"]["sms_logs_deleted"], 1)
+            self.assertEqual(body["counts"]["failed_scans_deleted"], 1)
+            refresh_mock.assert_called_once()
+
+            self.assertIsNone(self.app_module.students.find_one({"_id": inserted_id}))
+            self.assertIsNone(self.app_module.students.find_one({"student_id": student_id}))
+            self.assertEqual(
+                self.app_module.get_school_year_enrollment_collection(current_school_year).count_documents({"student_id": student_id}),
+                0,
+            )
+            self.assertEqual(
+                self.app_module.get_school_year_enrollment_collection(other_school_year).count_documents({"student_id": student_id}),
+                0,
+            )
+            self.assertEqual(self.app_module.attendance_logs.count_documents({"student_id": student_id}), 0)
+            self.assertEqual(self.app_module.sms_logs.count_documents({"student_id": student_id}), 0)
+            self.assertEqual(self.app_module.failed_scans.count_documents({"student_id": student_id}), 0)
+            self.assertNotIn(student_id, self.app_module.last_scanned)
+            self.assertNotIn(student_id, self.app_module.scan_presence_locks)
+            with self.app_module.scan_lock:
+                self.assertFalse(any(row.get("student_id") == student_id for row in self.app_module.scan_state.get("known_students", [])))
+                self.assertFalse(any(row.get("student_id") == student_id for row in self.app_module.scan_state.get("events", [])))
+        finally:
+            with self.app_module.scan_lock:
+                self.app_module.scan_state["active"] = original_active
+                self.app_module.scan_state["known_encodings"] = original_known_encodings
+                self.app_module.scan_state["known_students"] = original_known_students
+                self.app_module.scan_state["model_status"] = original_model_status
+                self.app_module.scan_state["events"] = original_events
+            self.app_module.last_scanned.pop(student_id, None)
+            self.app_module.scan_presence_locks.pop(student_id, None)
+            self.app_module.students.delete_many({"_id": inserted_id})
+            self.app_module.students.delete_many({"student_id": student_id})
+            self.app_module.get_school_year_enrollment_collection(current_school_year).delete_many({"student_id": student_id})
+            self.app_module.get_school_year_enrollment_collection(other_school_year).delete_many({"student_id": student_id})
+            self.app_module.attendance_logs.delete_many({"student_id": student_id})
+            self.app_module.sms_logs.delete_many({"student_id": student_id})
+            self.app_module.failed_scans.delete_many({"student_id": student_id})
