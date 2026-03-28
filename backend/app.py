@@ -219,6 +219,21 @@ RECOGNITION_MARGIN_THRESHOLD = env_float("RECOGNITION_MARGIN_THRESHOLD", 0.035, 
 RECOGNITION_SHORTLIST_SIZE = env_int("RECOGNITION_SHORTLIST_SIZE", 8, minimum=1, maximum=24)
 RECOGNITION_MIN_SUPPORT_COUNT = env_int("RECOGNITION_MIN_SUPPORT_COUNT", 2, minimum=1, maximum=6)
 MIN_RECOGNITION_CONFIDENCE = env_float("MIN_RECOGNITION_CONFIDENCE", 55.0, minimum=0.0, maximum=100.0)
+LIVE_RECOGNITION_DISTANCE_TOLERANCE = env_float("LIVE_RECOGNITION_DISTANCE_TOLERANCE", 0.41, minimum=0.2, maximum=0.75)
+LIVE_RECOGNITION_MARGIN_THRESHOLD = env_float("LIVE_RECOGNITION_MARGIN_THRESHOLD", 0.055, minimum=0.0, maximum=0.2)
+LIVE_RECOGNITION_DISTANCE_MARGIN_THRESHOLD = env_float("LIVE_RECOGNITION_DISTANCE_MARGIN_THRESHOLD", 0.028, minimum=0.0, maximum=0.2)
+LIVE_RECOGNITION_MIN_CONFIDENCE = env_float("LIVE_RECOGNITION_MIN_CONFIDENCE", 60.0, minimum=0.0, maximum=100.0)
+LIVE_RECOGNITION_CONFIRMATION_FRAMES = env_int("LIVE_RECOGNITION_CONFIRMATION_FRAMES", 2, minimum=1, maximum=6)
+LIVE_RECOGNITION_CONFIRMATION_WINDOW_MS = env_int("LIVE_RECOGNITION_CONFIRMATION_WINDOW_MS", 900, minimum=300, maximum=3000)
+LIVE_RECOGNITION_STRONG_MATCH_CONFIRMATION_FRAMES = env_int("LIVE_RECOGNITION_STRONG_MATCH_CONFIRMATION_FRAMES", 1, minimum=1, maximum=6)
+LIVE_RECOGNITION_MIN_SHARPNESS = env_float("LIVE_RECOGNITION_MIN_SHARPNESS", 6.0, minimum=0.0, maximum=200.0)
+LIVE_RECOGNITION_LOW_LIGHT_BRIGHTNESS = env_float("LIVE_RECOGNITION_LOW_LIGHT_BRIGHTNESS", 90.0, minimum=0.0, maximum=255.0)
+LIVE_RECOGNITION_LOW_LIGHT_MIN_SHARPNESS = env_float("LIVE_RECOGNITION_LOW_LIGHT_MIN_SHARPNESS", 3.5, minimum=0.0, maximum=200.0)
+LIVE_RECOGNITION_DOMINANT_FACE_RATIO = env_float("LIVE_RECOGNITION_DOMINANT_FACE_RATIO", 0.45, minimum=0.0, maximum=1.0)
+LIVE_RECOGNITION_IMMEDIATE_MATCH_DISTANCE = env_float("LIVE_RECOGNITION_IMMEDIATE_MATCH_DISTANCE", 0.34, minimum=0.2, maximum=0.75)
+LIVE_RECOGNITION_IMMEDIATE_CONFIDENCE = env_float("LIVE_RECOGNITION_IMMEDIATE_CONFIDENCE", 66.0, minimum=0.0, maximum=100.0)
+LIVE_RECOGNITION_ENCODING_MAX_WIDTH = env_int("LIVE_RECOGNITION_ENCODING_MAX_WIDTH", 960, minimum=480, maximum=1920)
+LIVE_RECOGNITION_ENCODING_JITTERS = env_int("LIVE_RECOGNITION_ENCODING_JITTERS", 1, minimum=1, maximum=4)
 PASSWORD_HASH_METHOD = "pbkdf2:sha256:600000"
 ALLOWED_AVATAR_EXTENSIONS = {"jpg", "jpeg", "png", "webp"}
 MAX_AVATAR_SIZE_BYTES = 5 * 1024 * 1024
@@ -368,6 +383,7 @@ scan_state = {
     "known_students": [],
     "face_index_loading": False,
     "session_mode": "auto",
+    "pending_recognition": {},
 }
 
 alert_lock = threading.Lock()
@@ -464,6 +480,15 @@ def validate_email_format(value):
 
 def normalize_email_value(value):
     return str(value or "").strip().lower()
+
+
+def build_internal_account_email(username):
+    username_text = str(username or "").strip().lower()
+    local_part = re.sub(r"[^a-z0-9._-]+", ".", username_text)
+    local_part = re.sub(r"[._-]{2,}", ".", local_part).strip("._-")
+    if not local_part:
+        local_part = f"user-{uuid.uuid4().hex[:8]}"
+    return normalize_email_value(f"{local_part}@chs.local")
 
 
 def validate_password_reset_input(new_password, confirm_password):
@@ -996,7 +1021,7 @@ def normalize_profile_user_doc(user_doc):
     username = (user_doc.get("username") or "").strip()
     email = (user_doc.get("email") or "").strip()
     if not email:
-        email = f"{username}@chs.local" if username else ""
+        email = build_internal_account_email(username) if username else ""
 
     full_name = (user_doc.get("fullName") or "").strip() or username
     avatar_url = (user_doc.get("avatarUrl") or "").strip()
@@ -1038,7 +1063,6 @@ def serialize_dashboard_identity_user(user_doc):
         "_id": str(user_doc.get("_id") or ""),
         "username": username,
         "displayName": display_name,
-        "email": str(profile.get("email") or "").strip(),
         "role": normalize_account_role(profile.get("role"), username),
         "avatarUrl": str(profile.get("avatarUrl") or "").strip(),
     }
@@ -2969,6 +2993,20 @@ def should_suppress_persistent_face_scan(student_id, now_ts=None):
             return False
         lock_entry["last_seen_ts"] = current_ts
         return True
+
+
+def should_suppress_recent_live_scan(student_id, now_ts=None):
+    normalized_student_id = str(student_id or "").strip()
+    if not normalized_student_id:
+        return False
+
+    current_ts = float(now_ts if now_ts is not None else time.time())
+    with scan_lock:
+        cooldown_until = float(last_scanned.get(normalized_student_id, 0) or 0.0)
+        if current_ts < cooldown_until:
+            return True
+
+    return should_suppress_persistent_face_scan(normalized_student_id, current_ts)
 
 
 def mark_persistent_face_scan(student_id, now_ts=None):
@@ -5147,7 +5185,7 @@ def ensure_user_profile_defaults():
         for doc in users.find({}):
             username = (doc.get("username") or "").strip()
             fallback_name = username or "User"
-            fallback_email = f"{username}@chs.local" if username else ""
+            fallback_email = build_internal_account_email(username) if username else ""
             updated = (doc.get("updatedAt") or doc.get("updated_at") or doc.get("created_at") or now_iso())
 
             patch = {}
@@ -5382,13 +5420,9 @@ def handle_verified_student(student, confidence=0.0):
         return None
 
     current_mode = get_scan_session_mode()
-    if current_mode == "auto" and should_suppress_persistent_face_scan(student_id):
+    if should_suppress_recent_live_scan(student_id, now_ts):
         return None
 
-    with scan_lock:
-        cooldown_until = float(last_scanned.get(student_id, 0) or 0)
-        if now_ts < cooldown_until:
-            return None
     result = log_attendance_and_sms(student, mode=current_mode)
     if not result:
         return None
@@ -5408,8 +5442,7 @@ def handle_verified_student(student, confidence=0.0):
     if result["duplicate"]:
         return None
 
-    if current_mode == "auto":
-        mark_persistent_face_scan(student_id, now_ts)
+    mark_persistent_face_scan(student_id, now_ts)
 
     result_session = str(result.get("session") or "")
     push_scan_event("verified", {
@@ -5584,6 +5617,7 @@ def start_scan_capture():
         scan_state["face_index_loading"] = False
         scan_state["last_not_registered_ts"] = 0.0
         scan_state["last_multi_face_ts"] = 0.0
+        scan_state["pending_recognition"] = {}
 
     refresh_face_index_async()
     return True, "Scan started (waiting for client frames)"
@@ -5599,6 +5633,7 @@ def stop_scan_capture():
         scan_state["known_students"] = []
         scan_state["model_status"] = "idle"
         scan_state["face_index_loading"] = False
+        scan_state["pending_recognition"] = {}
 
     if capture is not None:
         try:
@@ -6337,6 +6372,8 @@ def profile_update_api():
     user_doc, profile = current_user_profile()
     if not user_doc or not profile:
         return jsonify({"status": "error", "message": "User session is invalid."}), 401
+    if current_role() == ROLE_STAFF:
+        return jsonify({"status": "error", "message": "Staff profile details cannot be edited from live recognition mode."}), 403
 
     payload = request.get_json(silent=True) or {}
     full_name = sanitize_profile_text(payload.get("fullName"), 120)
@@ -6429,6 +6466,8 @@ def profile_photo_upload_api():
     user_doc, profile = current_user_profile()
     if not user_doc or not profile:
         return jsonify({"status": "error", "message": "User session is invalid."}), 401
+    if current_role() == ROLE_STAFF:
+        return jsonify({"status": "error", "message": "Staff profile photos cannot be edited from live recognition mode.", "field": "avatar"}), 403
 
     file = request.files.get("avatar")
     if not file or not file.filename:
@@ -6947,20 +6986,282 @@ def filter_live_face_locations(face_locations, frame_shape):
     return filtered
 
 
+def prioritize_live_face_locations(face_locations):
+    normalized = [
+        location
+        for location in list(face_locations or [])
+        if isinstance(location, (list, tuple)) and len(location) == 4
+    ]
+    normalized.sort(
+        key=lambda location: max(float(location[2]) - float(location[0]), 0.0) * max(float(location[1]) - float(location[3]), 0.0),
+        reverse=True,
+    )
+
+    if len(normalized) <= 1:
+        return normalized, False
+
+    def face_area(location):
+        return max(float(location[2]) - float(location[0]), 0.0) * max(float(location[1]) - float(location[3]), 0.0)
+
+    largest_area = face_area(normalized[0])
+    second_area = face_area(normalized[1])
+    if largest_area <= 0:
+        return normalized[:1], False
+
+    if second_area <= largest_area * float(LIVE_RECOGNITION_DOMINANT_FACE_RATIO):
+        return [normalized[0]], False
+
+    return normalized, True
+
+
+def clear_pending_live_recognition(student_id=None):
+    normalized_student_id = str(student_id or "").strip()
+    with scan_lock:
+        pending = scan_state.setdefault("pending_recognition", {})
+        if not isinstance(pending, dict):
+            scan_state["pending_recognition"] = {}
+            return
+        if normalized_student_id:
+            pending.pop(normalized_student_id, None)
+            return
+        pending.clear()
+
+
+def measure_live_face_quality(frame, face_location, scale_back=1.0):
+    metrics = {
+        "brightness": 0.0,
+        "contrast": 0.0,
+        "sharpness": 0.0,
+        "area_ratio": 0.0,
+    }
+
+    if frame is None or frame.size == 0:
+        return metrics
+
+    try:
+        frame_height, frame_width = frame.shape[:2]
+        top, right, bottom, left = face_location
+        top = max(0, min(frame_height, int(round(float(top) * scale_back))))
+        right = max(0, min(frame_width, int(round(float(right) * scale_back))))
+        bottom = max(0, min(frame_height, int(round(float(bottom) * scale_back))))
+        left = max(0, min(frame_width, int(round(float(left) * scale_back))))
+
+        if bottom <= top or right <= left:
+            return metrics
+
+        roi = frame[top:bottom, left:right]
+        if roi.size == 0:
+            return metrics
+
+        gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+        metrics["brightness"] = round(float(np.mean(gray)), 2)
+        metrics["contrast"] = round(float(np.std(gray)), 2)
+        metrics["sharpness"] = round(float(cv2.Laplacian(gray, cv2.CV_64F).var()), 2)
+        metrics["area_ratio"] = round(float(((bottom - top) * (right - left)) / max(frame_height * frame_width, 1)), 6)
+        return metrics
+    except Exception:
+        return metrics
+
+
+def upscale_face_locations(face_locations, scale_back, frame_shape):
+    frame_height = max(int((frame_shape or [0, 0])[0] or 0), 1)
+    frame_width = max(int((frame_shape or [0, 0])[1] or 0), 1)
+    scaled_locations = []
+
+    for location in list(face_locations or []):
+        if not isinstance(location, (list, tuple)) or len(location) != 4:
+            continue
+        top, right, bottom, left = location
+        scaled_top = max(0, min(frame_height, int(round(float(top) * scale_back))))
+        scaled_right = max(0, min(frame_width, int(round(float(right) * scale_back))))
+        scaled_bottom = max(0, min(frame_height, int(round(float(bottom) * scale_back))))
+        scaled_left = max(0, min(frame_width, int(round(float(left) * scale_back))))
+        if scaled_bottom <= scaled_top or scaled_right <= scaled_left:
+            continue
+        scaled_locations.append((scaled_top, scaled_right, scaled_bottom, scaled_left))
+
+    return scaled_locations
+
+
+def prepare_live_encoding_frame(frame, face_locations):
+    if frame is None or frame.size == 0:
+        return frame, list(face_locations or [])
+
+    frame_height, frame_width = frame.shape[:2]
+    max_width = max(int(LIVE_RECOGNITION_ENCODING_MAX_WIDTH or 0), 1)
+    if frame_width <= max_width:
+        return frame, list(face_locations or [])
+
+    resize_scale = max_width / float(frame_width)
+    resized_height = max(1, int(round(frame_height * resize_scale)))
+    resized_frame = cv2.resize(frame, (max_width, resized_height), interpolation=cv2.INTER_LINEAR)
+
+    resized_locations = []
+    for location in list(face_locations or []):
+        if not isinstance(location, (list, tuple)) or len(location) != 4:
+            continue
+        top, right, bottom, left = location
+        resized_locations.append((
+            max(0, min(resized_height, int(round(float(top) * resize_scale)))),
+            max(0, min(max_width, int(round(float(right) * resize_scale)))),
+            max(0, min(resized_height, int(round(float(bottom) * resize_scale)))),
+            max(0, min(max_width, int(round(float(left) * resize_scale)))),
+        ))
+
+    return resized_frame, resized_locations
+
+
+def evaluate_live_recognition_match(match_result, confidence_pct, face_quality):
+    candidate = match_result.get("candidate") or {}
+    runner_up = match_result.get("runner_up")
+    best_distance = float(match_result.get("distance") or candidate.get("best_distance") or 1.0)
+    score_margin = float(match_result.get("score_margin") or 0.0)
+    distance_margin = float(match_result.get("distance_margin") or 0.0)
+    brightness = float(face_quality.get("brightness") or 0.0)
+    sharpness = float(face_quality.get("sharpness") or 0.0)
+    strong_match = best_distance <= float(RECOGNITION_STRONG_MATCH_DISTANCE)
+    strict_distance = min(float(RECOGNITION_TOLERANCE), float(LIVE_RECOGNITION_DISTANCE_TOLERANCE))
+    strict_confidence = max(float(MIN_RECOGNITION_CONFIDENCE), float(LIVE_RECOGNITION_MIN_CONFIDENCE))
+    strict_score_margin = max(float(RECOGNITION_MARGIN_THRESHOLD), float(LIVE_RECOGNITION_MARGIN_THRESHOLD))
+    has_margin_data = runner_up is not None or "score_margin" in match_result or "distance_margin" in match_result
+    strict_sharpness = float(LIVE_RECOGNITION_MIN_SHARPNESS)
+
+    if brightness > 0.0 and brightness < float(LIVE_RECOGNITION_LOW_LIGHT_BRIGHTNESS):
+        strict_confidence = max(float(MIN_RECOGNITION_CONFIDENCE), strict_confidence - 2.0)
+        strict_sharpness = min(strict_sharpness, float(LIVE_RECOGNITION_LOW_LIGHT_MIN_SHARPNESS))
+
+    if strong_match:
+        strict_confidence = max(float(MIN_RECOGNITION_CONFIDENCE), strict_confidence - 1.0)
+        strict_sharpness = max(float(LIVE_RECOGNITION_LOW_LIGHT_MIN_SHARPNESS), strict_sharpness - 0.5)
+
+    if confidence_pct < strict_confidence:
+        return {
+            "accepted": False,
+            "reason": "awaiting_clearer_frame",
+            "message": "Holding for a clearer face sample.",
+        }
+
+    if best_distance > strict_distance:
+        return {
+            "accepted": False,
+            "reason": "awaiting_better_match",
+            "message": "Holding for a stronger face match.",
+        }
+
+    if sharpness < strict_sharpness:
+        return {
+            "accepted": False,
+            "reason": "motion_blur",
+            "message": "Hold still for a moment to confirm identity.",
+        }
+
+    if has_margin_data and not strong_match and score_margin < strict_score_margin:
+        return {
+            "accepted": False,
+            "reason": "awaiting_clearer_separation",
+            "message": "Holding for a more distinct face angle.",
+        }
+
+    if has_margin_data and not strong_match and distance_margin < float(LIVE_RECOGNITION_DISTANCE_MARGIN_THRESHOLD):
+        return {
+            "accepted": False,
+            "reason": "awaiting_clearer_separation",
+            "message": "Holding for a more distinct face angle.",
+        }
+
+    return {
+        "accepted": True,
+        "reason": "stable_match",
+        "message": "Stable face match ready.",
+    }
+
+
+def track_pending_live_recognition(student, confidence_pct, match_result, face_quality, now_ts=None):
+    student_id = str((student or {}).get("student_id") or "").strip()
+    if not student_id:
+        return {
+            "confirmed": False,
+            "observed_frames": 0,
+            "required_frames": int(LIVE_RECOGNITION_CONFIRMATION_FRAMES),
+        }
+
+    current_ts = float(now_ts if now_ts is not None else time.time())
+    confirmation_window_seconds = max(float(LIVE_RECOGNITION_CONFIRMATION_WINDOW_MS) / 1000.0, 0.1)
+    candidate = match_result.get("candidate") or {}
+    best_distance = float(match_result.get("distance") or candidate.get("best_distance") or 1.0)
+    score_margin = float(match_result.get("score_margin") or 0.0)
+    distance_margin = float(match_result.get("distance_margin") or 0.0)
+    required_frames = max(int(LIVE_RECOGNITION_CONFIRMATION_FRAMES or 0), 1)
+    if (
+        best_distance <= float(LIVE_RECOGNITION_IMMEDIATE_MATCH_DISTANCE)
+        and float(confidence_pct or 0.0) >= max(float(MIN_RECOGNITION_CONFIDENCE), float(LIVE_RECOGNITION_IMMEDIATE_CONFIDENCE))
+    ):
+        required_frames = 1
+    elif (
+        best_distance <= float(RECOGNITION_STRONG_MATCH_DISTANCE)
+        and float(confidence_pct or 0.0) >= max(float(MIN_RECOGNITION_CONFIDENCE), float(LIVE_RECOGNITION_MIN_CONFIDENCE))
+    ):
+        required_frames = min(required_frames, max(int(LIVE_RECOGNITION_STRONG_MATCH_CONFIRMATION_FRAMES or 0), 1))
+
+    with scan_lock:
+        pending = scan_state.setdefault("pending_recognition", {})
+        if not isinstance(pending, dict):
+            pending = {}
+            scan_state["pending_recognition"] = pending
+
+        stale_student_ids = [
+            pending_student_id
+            for pending_student_id, entry in pending.items()
+            if current_ts - float((entry or {}).get("last_seen_ts") or 0.0) > confirmation_window_seconds
+        ]
+        for pending_student_id in stale_student_ids:
+            pending.pop(pending_student_id, None)
+
+        for pending_student_id in list(pending.keys()):
+            if pending_student_id != student_id:
+                pending.pop(pending_student_id, None)
+
+        existing = pending.get(student_id)
+        if existing and current_ts - float(existing.get("last_seen_ts") or 0.0) <= confirmation_window_seconds:
+            observed_frames = int(existing.get("observed_frames") or 0) + 1
+        else:
+            observed_frames = 1
+
+        snapshot = {
+            "last_seen_ts": current_ts,
+            "observed_frames": observed_frames,
+            "confidence_pct": max(float(confidence_pct or 0.0), float((existing or {}).get("confidence_pct") or 0.0)),
+            "best_distance": min(best_distance, float((existing or {}).get("best_distance") or best_distance)),
+            "score_margin": max(score_margin, float((existing or {}).get("score_margin") or 0.0)),
+            "distance_margin": max(distance_margin, float((existing or {}).get("distance_margin") or 0.0)),
+            "sharpness": max(float(face_quality.get("sharpness") or 0.0), float((existing or {}).get("sharpness") or 0.0)),
+        }
+        pending[student_id] = snapshot
+
+        confirmed = observed_frames >= required_frames
+        if confirmed:
+            pending.pop(student_id, None)
+
+    snapshot["confirmed"] = confirmed
+    snapshot["required_frames"] = required_frames
+    return snapshot
+
+
 def process_client_frame(frame_bytes):
     """
     Process a frame sent from the client device's camera.
     Performs face recognition and pushes events.
     
-    Returns: (success: bool, message: str)
+    Returns: (success: bool, message: str, payload: dict)
     """
+    payload = {"faces": []}
     try:
         # Decode image from bytes
         nparr = np.frombuffer(frame_bytes, np.uint8)
         frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         
         if frame is None or frame.size == 0:
-            return False, "Failed to decode image"
+            return False, "Failed to decode image", payload
         
         # Get current scan state
         with scan_lock:
@@ -6970,7 +7271,7 @@ def process_client_frame(frame_bytes):
             model_status = scan_state.get("model_status", "idle")
         
         if not active:
-            return False, "Scan not active"
+            return False, "Scan not active", payload
         
         # Process frame for face recognition
         scale = min(max(SCAN_RECOGNITION_SCALE, 0.25), 1.0)
@@ -6989,33 +7290,69 @@ def process_client_frame(frame_bytes):
             model="hog",
         )
 
+        frame_height, frame_width = frame.shape[:2]
+        scale_back = 1.0 / scale if scale > 0 else 1.0
+        payload["faces"] = [
+            {
+                "id": f"scan-face-{index}",
+                "track_id": f"scan-face-{index}",
+                "x": int(round(float(left) * scale_back)),
+                "y": int(round(float(top) * scale_back)),
+                "width": int(round((float(right) - float(left)) * scale_back)),
+                "height": int(round((float(bottom) - float(top)) * scale_back)),
+                "frame_width": int(frame_width),
+                "frame_height": int(frame_height),
+            }
+            for index, (top, right, bottom, left) in enumerate(face_locations_small)
+            if (float(right) - float(left)) > 0 and (float(bottom) - float(top)) > 0
+        ]
+
         if len(face_locations_small) == 0:
-            return True, "No faces detected"
+            return True, "No faces detected", payload
 
         face_locations_small = filter_live_face_locations(face_locations_small, rgb_small.shape)
         if len(face_locations_small) == 0:
             push_not_registered_event("face_too_small", 0.0)
-            return True, "Face detected but too small for reliable recognition"
+            return True, "Face detected but too small for reliable recognition", payload
+
+        face_locations_small, multiple_prominent_faces = prioritize_live_face_locations(face_locations_small)
+
+        if multiple_prominent_faces:
+            clear_pending_live_recognition()
+            push_multi_face_event(len(face_locations_small))
+            return True, "Multiple faces detected", payload
 
         db_encoding_count = int(len(db_encodings)) if db_encodings is not None else 0
         legacy_flat_index = any("encodings" not in (student or {}) for student in db_students)
 
         if model_status == "loading":
-            return True, "Model still loading"
+            return True, "Model still loading", payload
         elif model_status != "ready" or db_encoding_count == 0:
             reason = "model_not_ready" if model_status == "model_not_ready" else "no_registered_students"
             push_not_registered_event(reason, 0.0)
-            return True, f"Not ready: {reason}"
+            return True, f"Not ready: {reason}", payload
 
+        face_locations_full = upscale_face_locations(face_locations_small, scale_back, frame.shape)
+        encoding_frame, encoding_face_locations = prepare_live_encoding_frame(frame, face_locations_full)
+        rgb_encoding = cv2.cvtColor(encoding_frame, cv2.COLOR_BGR2RGB) if encoding_frame is not None and encoding_frame.size else None
         face_encs = face_recognition.face_encodings(
-            rgb_small,
-            face_locations_small,
+            rgb_encoding,
+            encoding_face_locations,
+            num_jitters=LIVE_RECOGNITION_ENCODING_JITTERS,
             model="small",
-        )
+        ) if rgb_encoding is not None else []
+
+        if not face_encs:
+            face_encs = face_recognition.face_encodings(
+                rgb_small,
+                face_locations_small,
+                num_jitters=LIVE_RECOGNITION_ENCODING_JITTERS,
+                model="small",
+            )
         
         if not face_encs:
             push_not_registered_event("face_not_encoded", 0.0)
-            return True, "Face(s) not encoded"
+            return True, "Face(s) not encoded", payload
 
         results = []
         verified_students = []
@@ -7023,7 +7360,8 @@ def process_client_frame(frame_bytes):
         unknown_confidences = []
         unknown_reasons = []
         seen_student_ids = set()
-        for enc in face_encs:
+        frame_now_ts = time.time()
+        for enc, face_location_small in zip(face_encs, face_locations_small):
             if legacy_flat_index:
                 distances = face_recognition.face_distance(db_encodings, enc)
                 if len(distances) > 0:
@@ -7071,6 +7409,30 @@ def process_client_frame(frame_bytes):
                     continue
 
                 candidate_student_id = str(candidate.get("student_id") or "").strip()
+                if candidate_student_id and should_suppress_recent_live_scan(candidate_student_id, frame_now_ts):
+                    clear_pending_live_recognition(candidate_student_id)
+                    continue
+                face_quality = measure_live_face_quality(frame, face_location_small, scale_back=scale_back)
+                live_match_gate = evaluate_live_recognition_match(match_result, confidence_pct, face_quality)
+                if not live_match_gate.get("accepted"):
+                    results.append(str(live_match_gate.get("message") or "Hold still for identity confirmation."))
+                    continue
+
+                confirmation_state = track_pending_live_recognition(
+                    candidate,
+                    confidence_pct,
+                    match_result,
+                    face_quality,
+                    now_ts=frame_now_ts,
+                )
+                if not confirmation_state.get("confirmed"):
+                    observed_frames = int(confirmation_state.get("observed_frames") or 0)
+                    required_frames = int(confirmation_state.get("required_frames") or LIVE_RECOGNITION_CONFIRMATION_FRAMES)
+                    results.append(
+                        f"Confirming {candidate.get('name', 'identity')} ({observed_frames}/{required_frames})"
+                    )
+                    continue
+
                 if candidate_student_id and candidate_student_id in seen_student_ids:
                     duplicate_students.append(candidate.get("name", "Unknown"))
                     continue
@@ -7096,6 +7458,7 @@ def process_client_frame(frame_bytes):
                 results.append("No face index")
 
         if not verified_students and unknown_confidences:
+            clear_pending_live_recognition()
             rejection_reason = "low_confidence"
             if "ambiguous_match" in unknown_reasons:
                 rejection_reason = "ambiguous_match"
@@ -7110,14 +7473,14 @@ def process_client_frame(frame_bytes):
                 summary += f" | {duplicate_count} duplicate scan{'s' if duplicate_count != 1 else ''} ignored"
             if unknown_count and not verified_count:
                 summary += f" | {unknown_count} unmatched face{'s' if unknown_count != 1 else ''}"
-            return True, summary
+            return True, summary, payload
 
-        return True, results[0] if results else "Frame processed"
+        return True, results[0] if results else "Frame processed", payload
         
     except Exception as exc:
         error_msg = f"Frame processing error: {str(exc)}"
         print(f"[ERROR] {error_msg}")
-        return False, error_msg
+        return False, error_msg, payload
 
 
 @app.route("/process_scan_frame", methods=["POST"])
@@ -7141,12 +7504,13 @@ def process_scan_frame():
             return jsonify({"status": "error", "message": "No frame content"}), 400
         
         # Process the frame
-        success, message = process_client_frame(frame_bytes)
+        success, message, payload = process_client_frame(frame_bytes)
         
         return jsonify({
             "status": "ok" if success else "error",
             "message": message,
             "processed": success,
+            "faces": payload.get("faces", []),
         }), (200 if success else 400)
         
     except Exception as exc:
@@ -7526,11 +7890,11 @@ def add_user():
 
     username = request.form.get("username", "").strip()
     password = request.form.get("password", "")
-    email = normalize_email_value(request.form.get("email", ""))
     role = normalize_account_role(request.form.get("role", ROLE_STAFF), username)
+    email = build_internal_account_email(username) if username else ""
 
-    if not username or not password or not email:
-        create_alert("warning", "User creation requires username, password, and email.", "system")
+    if not username or not password:
+        create_alert("warning", "User creation requires username and password.", "system")
         log_audit_event(
             action="admin.user_create",
             outcome="failed",
@@ -7539,19 +7903,7 @@ def add_user():
             target_id=username,
             details={"reason": "missing_fields"},
         )
-        return dashboard_management_redirect("Username, password, and email are required.", "error")
-
-    if not validate_email_format(email):
-        create_alert("warning", f"User creation skipped: invalid email format '{email}'.", "system")
-        log_audit_event(
-            action="admin.user_create",
-            outcome="failed",
-            severity="warn",
-            target_type="user",
-            target_id=username,
-            details={"reason": "invalid_email"},
-        )
-        return dashboard_management_redirect("Enter a valid email address.", "error")
+        return dashboard_management_redirect("Username and password are required.", "error")
 
     if users.count_documents({"username": username}) > 0:
         create_alert("warning", f"User creation skipped: {username} already exists.", "system")
@@ -7569,16 +7921,16 @@ def add_user():
         "email": {"$regex": f"^{re.escape(email)}$", "$options": "i"},
     })
     if duplicate_email_user:
-        create_alert("warning", f"User creation skipped: email '{email}' is already in use.", "system")
+        create_alert("warning", f"User creation skipped: generated system address for '{username}' is already in use.", "system")
         log_audit_event(
             action="admin.user_create",
             outcome="failed",
             severity="warn",
             target_type="user",
             target_id=username,
-            details={"reason": "email_exists"},
+            details={"reason": "system_identity_conflict", "system_email": email},
         )
-        return dashboard_management_redirect(f"Email '{email}' is already in use.", "error")
+        return dashboard_management_redirect("Choose a different username for this account.", "error")
 
     password_error, _ = validate_password_reset_input(password, password)
     if password_error:
@@ -7602,14 +7954,14 @@ def add_user():
         "updatedAt": created,
     })
     signal_data_change("users")
-    create_alert("info", f"New user '{username}' added with role {role} and email {email}.", "system")
+    create_alert("info", f"New user '{username}' added with role {role}.", "system")
     log_audit_event(
         action="admin.user_create",
         outcome="success",
         severity="info",
         target_type="user",
         target_id=username,
-        details={"role": role, "email": email},
+        details={"role": role, "system_email": email},
     )
     return dashboard_management_redirect(f"Account '{username}' created successfully.", "success")
 

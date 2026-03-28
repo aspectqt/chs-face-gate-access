@@ -15,6 +15,10 @@ class EnhancedClientCamera {
         this.onFaceDetected = null;
         this.onFaceRecognized = null;
         this.onMultipleFaces = null;
+        this.onStreamEnded = null;
+        this.trackEventBindings = [];
+        this.streamInactiveBinding = null;
+        this.suppressStreamEndedCallback = false;
         
         // Performance optimization
         this.frameProcessingQueue = [];
@@ -30,6 +34,8 @@ class EnhancedClientCamera {
         this.detectionInterval = 100; // Detect faces every 100ms
         this.trackFadeDuration = 450;
         this.trackSmoothingFactor = 0.42;
+        this.faceDetectionLoopActive = false;
+        this.faceDetectionRafId = null;
         
         // Voice feedback
         this.voiceQueue = [];
@@ -82,6 +88,8 @@ class EnhancedClientCamera {
 
             // Request camera access with optimized settings
             this.stream = await navigator.mediaDevices.getUserMedia(mediaConstraints);
+            this.suppressStreamEndedCallback = false;
+            this.bindStreamLifecycleEvents();
 
             // Apply advanced camera settings if supported
             await this.optimizeCameraSettings();
@@ -101,6 +109,61 @@ class EnhancedClientCamera {
             const errorMessage = this.getErrorMessage(error);
             this.triggerError(errorMessage);
             return false;
+        }
+    }
+
+    /**
+     * Bind lifecycle handlers for the active media stream so manual camera exits
+     * can be handled gracefully by the dashboard.
+     */
+    bindStreamLifecycleEvents() {
+        this.unbindStreamLifecycleEvents();
+        if (!this.stream) return;
+
+        const handleTrackEnded = () => {
+            if (this.suppressStreamEndedCallback || !this.isStreaming) return;
+            this.isStreaming = false;
+            this.faceDetectionLoopActive = false;
+            if (this.faceDetectionRafId) {
+                cancelAnimationFrame(this.faceDetectionRafId);
+                this.faceDetectionRafId = null;
+            }
+            if (this.onStreamEnded && typeof this.onStreamEnded === 'function') {
+                this.onStreamEnded('Camera stream ended.');
+            }
+        };
+
+        this.stream.getTracks().forEach((track) => {
+            const endedHandler = () => handleTrackEnded();
+            track.addEventListener('ended', endedHandler);
+            this.trackEventBindings.push({ track, endedHandler });
+        });
+
+        if (typeof this.stream.addEventListener === 'function') {
+            const inactiveHandler = () => handleTrackEnded();
+            this.stream.addEventListener('inactive', inactiveHandler);
+            this.streamInactiveBinding = { stream: this.stream, inactiveHandler };
+        }
+    }
+
+    unbindStreamLifecycleEvents() {
+        this.trackEventBindings.forEach(({ track, endedHandler }) => {
+            try {
+                track.removeEventListener('ended', endedHandler);
+            } catch (_error) {
+                // Ignore cleanup failures for stale tracks.
+            }
+        });
+        this.trackEventBindings = [];
+
+        if (this.streamInactiveBinding) {
+            const { stream, inactiveHandler } = this.streamInactiveBinding;
+            try {
+                stream.removeEventListener('inactive', inactiveHandler);
+            } catch (_error) {
+                // Ignore cleanup failures for stale streams.
+            }
+            this.streamInactiveBinding = null;
         }
     }
 
@@ -270,14 +333,20 @@ class EnhancedClientCamera {
      * Start face detection loop with optimized performance
      */
     startFaceDetectionLoop() {
+        if (this.faceDetectionLoopActive) return;
+        this.faceDetectionLoopActive = true;
+
         const detectFaces = async () => {
-            if (!this.isStreaming) return;
+            if (!this.isStreaming || !this.faceDetectionLoopActive) {
+                this.faceDetectionRafId = null;
+                return;
+            }
             
             const now = Date.now();
             
             // Throttle face detection to maintain performance
             if (now - this.lastDetectionTime < this.detectionInterval) {
-                requestAnimationFrame(detectFaces);
+                this.faceDetectionRafId = requestAnimationFrame(detectFaces);
                 return;
             }
             
@@ -297,11 +366,11 @@ class EnhancedClientCamera {
             }
             
             // Continue detection loop
-            requestAnimationFrame(detectFaces);
+            this.faceDetectionRafId = requestAnimationFrame(detectFaces);
         };
         
         // Start the detection loop
-        requestAnimationFrame(detectFaces);
+        this.faceDetectionRafId = requestAnimationFrame(detectFaces);
     }
 
     /**
@@ -328,7 +397,17 @@ class EnhancedClientCamera {
                     faces: visibleFaces.map((trackedFace) => ({
                         id: trackedFace.id,
                         trackId: trackedFace.serverTrackId || trackedFace.id,
-                        ...trackedFace.detection
+                        x: Number((trackedFace.renderBox || trackedFace.detection || {}).x || 0),
+                        y: Number((trackedFace.renderBox || trackedFace.detection || {}).y || 0),
+                        width: Number((trackedFace.renderBox || trackedFace.detection || {}).width || 0),
+                        height: Number((trackedFace.renderBox || trackedFace.detection || {}).height || 0),
+                        confidence: Number((trackedFace.detection || {}).confidence || 0),
+                        stability: Number(trackedFace.stabilityCount || 0),
+                        recognized: Boolean(trackedFace.recognized),
+                        studentId: trackedFace.studentId || null,
+                        frameWidth: Number((trackedFace.detection || {}).frame_width || this.videoElement?.videoWidth || 0),
+                        frameHeight: Number((trackedFace.detection || {}).frame_height || this.videoElement?.videoHeight || 0),
+                        lastSeen: trackedFace.lastSeen || Date.now(),
                     })),
                     timestamp: Date.now()
                 });
@@ -734,11 +813,16 @@ class EnhancedClientCamera {
      */
     captureFrame(canvas = null) {
         if (!this.isStreaming || !this.videoElement) {
-            this.triggerError('Camera not initialized or not streaming');
             return null;
         }
 
         try {
+            const videoWidth = Number(this.videoElement.videoWidth) || 0;
+            const videoHeight = Number(this.videoElement.videoHeight) || 0;
+            if (!videoWidth || !videoHeight || this.videoElement.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+                return null;
+            }
+
             // Get or create canvas
             if (typeof canvas === 'string') {
                 this.canvas = document.getElementById(canvas);
@@ -749,8 +833,8 @@ class EnhancedClientCamera {
             }
 
             // Set canvas size to match video
-            this.canvas.width = this.videoElement.videoWidth;
-            this.canvas.height = this.videoElement.videoHeight;
+            this.canvas.width = videoWidth;
+            this.canvas.height = videoHeight;
 
             // Get 2D context
             this.canvasContext = this.canvas.getContext('2d');
@@ -761,7 +845,9 @@ class EnhancedClientCamera {
             return this.canvas;
 
         } catch (error) {
-            this.triggerError('Failed to capture frame: ' + error.message);
+            if (this.isStreaming) {
+                this.triggerError('Failed to capture frame: ' + error.message);
+            }
             return null;
         }
     }
@@ -789,7 +875,9 @@ class EnhancedClientCamera {
             });
 
         } catch (error) {
-            this.triggerError('Failed to get frame as blob: ' + error.message);
+            if (this.isStreaming) {
+                this.triggerError('Failed to get frame as blob: ' + error.message);
+            }
             return null;
         }
     }
@@ -801,6 +889,12 @@ class EnhancedClientCamera {
         try {
             // Stop face detection
             this.isStreaming = false;
+            this.faceDetectionLoopActive = false;
+            if (this.faceDetectionRafId) {
+                cancelAnimationFrame(this.faceDetectionRafId);
+                this.faceDetectionRafId = null;
+            }
+            this.suppressStreamEndedCallback = true;
             
             // Clear tracked faces
             this.trackedFaces.clear();
@@ -811,6 +905,7 @@ class EnhancedClientCamera {
             
             // Stop camera stream
             if (this.stream) {
+                this.unbindStreamLifecycleEvents();
                 this.stream.getTracks().forEach(track => track.stop());
                 this.stream = null;
             }
@@ -832,7 +927,10 @@ class EnhancedClientCamera {
      * Check if camera is currently streaming
      */
     isActive() {
-        return this.isStreaming;
+        if (!this.isStreaming || !this.stream) return false;
+        const tracks = this.stream.getVideoTracks();
+        if (!tracks.length) return false;
+        return tracks.some((track) => track.readyState === 'live');
     }
 
     /**

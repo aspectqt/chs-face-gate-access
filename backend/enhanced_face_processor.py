@@ -189,11 +189,13 @@ class EnhancedFaceProcessor:
             if frame is None or frame.size == 0:
                 return {'faces': [], 'error': 'Invalid frame'}
             
-            # Resize for faster detection
-            height, width = frame.shape[:2]
-            if width > self.max_face_size:
-                scale = self.max_face_size / width
-                frame = cv2.resize(frame, (self.max_face_size, int(height * scale)))
+            # Resize for faster detection while preserving coordinates in the
+            # original camera frame so client overlays stay aligned.
+            original_height, original_width = frame.shape[:2]
+            detection_scale = 1.0
+            if original_width > self.max_face_size:
+                detection_scale = self.max_face_size / original_width
+                frame = cv2.resize(frame, (self.max_face_size, int(original_height * detection_scale)))
             
             # Convert to RGB for face_recognition
             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -222,15 +224,18 @@ class EnhancedFaceProcessor:
                 if face_width < self.min_face_size or face_height < self.min_face_size:
                     continue
                 
+                scale_back = 1.0 / detection_scale if detection_scale > 0 else 1.0
                 face_data = {
                     'id': f'face_{i}_{int(time.time() * 1000)}',
-                    'x': int(left),
-                    'y': int(top),
-                    'width': int(face_width),
-                    'height': int(face_height),
+                    'x': int(round(left * scale_back)),
+                    'y': int(round(top * scale_back)),
+                    'width': int(round(face_width * scale_back)),
+                    'height': int(round(face_height * scale_back)),
                     'encoding': encoding.tolist(),
                     'confidence': self.calculate_face_confidence(encoding),
-                    'timestamp': time.time()
+                    'timestamp': time.time(),
+                    'frame_width': int(original_width),
+                    'frame_height': int(original_height),
                 }
                 
                 faces.append(face_data)

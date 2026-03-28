@@ -86,6 +86,32 @@
             color: #475569 !important;
         }
 
+        body.login-page .password-toggle-icon-stack {
+            position: relative;
+            display: inline-flex;
+            height: 1.25rem;
+            width: 1.25rem;
+        }
+
+        body.login-page .password-toggle-icon {
+            position: absolute;
+            inset: 0;
+            transition: opacity 180ms ease, transform 180ms ease;
+            transform-origin: center;
+        }
+
+        body.login-page .login-toggle[aria-pressed="false"] .password-toggle-icon-show,
+        body.login-page .login-toggle[aria-pressed="true"] .password-toggle-icon-hide {
+            opacity: 1;
+            transform: scale(1) rotate(0deg);
+        }
+
+        body.login-page .login-toggle[aria-pressed="false"] .password-toggle-icon-hide,
+        body.login-page .login-toggle[aria-pressed="true"] .password-toggle-icon-show {
+            opacity: 0;
+            transform: scale(0.82) rotate(-12deg);
+        }
+
         body.login-page .login-link {
             color: #047857 !important;
         }
@@ -159,7 +185,7 @@
 <body class="login-page min-h-screen" data-authenticated="0" data-user-theme="">
     <main class="min-h-screen flex items-center justify-center px-4 py-10">
         <section class="app-content-card login-shell-card w-full max-w-md">
-            <div class="login-divider border-b px-7 py-6 text-center">
+            <div class="login-divider px-7 py-6 text-center">
                 <div class="mx-auto flex w-fit items-center gap-4">
                     <img src="{{ url_for('static', filename='deped-logo.png') }}" alt="DepEd Logo" class="h-16 w-16 object-contain">
                     <img src="{{ url_for('static', filename='logo.png') }}" alt="CHS Logo" class="h-16 w-16 object-contain">
@@ -243,11 +269,19 @@
                                 data-form-type="other"
                                 class="login-input w-full rounded-xl border pl-10 pr-11 py-2.5 text-sm outline-none transition"
                             >
-                            <button type="button" id="togglePassword" aria-label="Show or hide password" class="login-toggle absolute inset-y-0 right-0 flex items-center px-3 transition">
-                                <svg id="toggleIcon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5s8.268 2.943 9.542 7c-1.274 4.057-5.065 7-9.542 7s-8.268-2.943-9.542-7z" />
-                                </svg>
+                            <button type="button" id="togglePassword" aria-label="Show password" aria-pressed="false" class="login-toggle absolute inset-y-0 right-0 flex items-center px-3 transition">
+                                <span class="password-toggle-icon-stack" aria-hidden="true">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="password-toggle-icon password-toggle-icon-show h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5s8.268 2.943 9.542 7c-1.274 4.057-5.065 7-9.542 7s-8.268-2.943-9.542-7z" />
+                                    </svg>
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="password-toggle-icon password-toggle-icon-hide h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="m3 3 18 18" />
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M10.585 10.587A2 2 0 0013.414 13.4" />
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M9.88 5.09A9.772 9.772 0 0112 4.875c4.478 0 8.268 2.943 9.542 7a9.79 9.79 0 01-4.132 5.145" />
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M6.228 6.228A9.793 9.793 0 002.458 11.875c1.274 4.057 5.064 7 9.542 7a9.77 9.77 0 004.095-.894" />
+                                    </svg>
+                                </span>
                             </button>
                         </div>
                         <div class="mt-2 flex justify-end">
@@ -381,6 +415,8 @@
     togglePassword.addEventListener('click', () => {
         const isPassword = passwordInput.type === 'password';
         passwordInput.type = isPassword ? 'text' : 'password';
+        togglePassword.setAttribute('aria-pressed', isPassword ? 'true' : 'false');
+        togglePassword.setAttribute('aria-label', isPassword ? 'Hide password' : 'Show password');
     });
 
     loginForm.addEventListener('submit', (event) => {

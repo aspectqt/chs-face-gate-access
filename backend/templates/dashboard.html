@@ -82,6 +82,144 @@
             box-shadow: var(--dash-card-shadow-hover);
         }
 
+        .dashboard-header.app-page-header {
+            border-bottom-color: var(--sb-border, rgba(148, 163, 184, 0.18)) !important;
+            background: var(--sb-surface, rgba(255, 255, 255, 0.94)) !important;
+        }
+
+        .dashboard-header .app-header-title {
+            color: var(--sb-text, #0f172a) !important;
+        }
+
+        .dashboard-header .app-header-icon-btn,
+        .dashboard-header .app-header-menu-btn,
+        .dashboard-header .app-header-avatar-btn {
+            color: var(--sb-muted, #64748b) !important;
+        }
+
+        .dashboard-header .app-header-icon-btn:hover,
+        .dashboard-header .app-header-icon-btn:focus-visible,
+        .dashboard-header .app-header-menu-btn:hover,
+        .dashboard-header .app-header-menu-btn[aria-expanded="true"],
+        .dashboard-header .app-header-menu-btn:focus-visible,
+        .dashboard-header .app-header-avatar-btn:hover,
+        .dashboard-header .app-header-avatar-btn:focus-visible {
+            background: var(--sb-hover, rgba(16, 185, 129, 0.08)) !important;
+            border-color: var(--sb-border, rgba(148, 163, 184, 0.18)) !important;
+            color: var(--sb-text, #0f172a) !important;
+        }
+
+        .dashboard-header .app-header-avatar-fallback {
+            background: var(--sb-surface-elevated, #ffffff) !important;
+            color: var(--sb-text, #0f172a) !important;
+        }
+
+        .dashboard-identity-actions {
+            display: flex;
+            flex-wrap: nowrap;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 0.55rem;
+        }
+
+        .identity-action-btn {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.15rem;
+            border-radius: 9999px;
+            border: none;
+            background: transparent;
+            color: #2563eb;
+            transition:
+                transform 180ms ease,
+                color 180ms ease,
+                opacity 180ms ease;
+        }
+
+        .identity-action-btn svg {
+            width: 1.2rem;
+            height: 1.2rem;
+            fill: currentColor;
+            flex-shrink: 0;
+        }
+
+        .identity-action-btn:hover {
+            transform: translateY(-1px);
+            color: #1d4ed8;
+            opacity: 0.88;
+        }
+
+        .identity-action-btn:focus-visible {
+            outline: none;
+            box-shadow:
+                0 0 0 3px rgba(96, 165, 250, 0.18);
+            color: #1d4ed8;
+        }
+
+        .identity-action-btn--danger {
+            color: #dc2626;
+        }
+
+        .identity-action-btn--danger:hover {
+            color: #b91c1c;
+        }
+
+        .identity-action-btn--danger:focus-visible {
+            box-shadow:
+                0 0 0 3px rgba(248, 113, 113, 0.22);
+            color: #b91c1c;
+        }
+
+        .identity-action-btn::before,
+        .identity-action-btn::after {
+            display: none;
+        }
+
+        html[data-theme="dark"] .dashboard-header.app-page-header {
+            border-bottom-color: var(--sb-border, rgba(148, 163, 184, 0.18)) !important;
+            background: var(--sb-surface, rgba(17, 28, 47, 0.98)) !important;
+        }
+
+        html[data-theme="dark"] .dashboard-header .app-header-title,
+        html[data-theme="dark"] .dashboard-header .app-header-icon-btn:hover,
+        html[data-theme="dark"] .dashboard-header .app-header-icon-btn:focus-visible,
+        html[data-theme="dark"] .dashboard-header .app-header-menu-btn:hover,
+        html[data-theme="dark"] .dashboard-header .app-header-menu-btn[aria-expanded="true"],
+        html[data-theme="dark"] .dashboard-header .app-header-menu-btn:focus-visible,
+        html[data-theme="dark"] .dashboard-header .app-header-avatar-btn:hover,
+        html[data-theme="dark"] .dashboard-header .app-header-avatar-btn:focus-visible {
+            color: var(--sb-text, #e2e8f0) !important;
+        }
+
+        html[data-theme="dark"] .dashboard-header .app-header-avatar-fallback {
+            background: var(--sb-surface-elevated, #18263c) !important;
+            color: var(--sb-text, #e2e8f0) !important;
+        }
+
+        html[data-theme="dark"] .identity-action-btn {
+            color: #60a5fa;
+        }
+
+        html[data-theme="dark"] .identity-action-btn:hover,
+        html[data-theme="dark"] .identity-action-btn:focus-visible {
+            color: #bfdbfe;
+            box-shadow:
+                0 0 0 3px rgba(96, 165, 250, 0.16);
+        }
+
+        html[data-theme="dark"] .identity-action-btn--danger {
+            color: #f87171;
+        }
+
+        html[data-theme="dark"] .identity-action-btn--danger:hover,
+        html[data-theme="dark"] .identity-action-btn--danger:focus-visible {
+            color: #fca5a5;
+            box-shadow:
+                0 0 0 3px rgba(248, 113, 113, 0.18);
+        }
+
         #scanFrame:fullscreen,
         #scanFrame:-webkit-full-screen {
             background: #020617;
@@ -137,6 +275,14 @@
         }
 
         @media (max-width: 640px) {
+            .dashboard-identity-actions {
+                gap: 0.45rem;
+            }
+
+            .identity-action-btn {
+                padding: 0.12rem;
+            }
+
             #scanOverlay.scan-camera-status {
                 bottom: 0.75rem;
                 width: min(calc(100% - 1rem), 26rem);
@@ -1331,8 +1477,6 @@
                 </div>
 
                 <div class="dashboard-header-actions app-header-actions md:gap-3">
-                    <a href="/developers" class="app-header-text-link">Help</a>
-
                     {% set theme_toggle_classes = 'app-header-icon-btn' %}
                     {% include 'partials/theme_toggle_button.html' %}
 
@@ -1718,6 +1862,7 @@
                                                 </div>
                                             </div>
                                             <video id="videoFeed" class="hidden h-full w-full object-cover" autoplay playsinline style="transform: scaleX(-1);" title="Client device camera stream"></video>
+                                            <canvas id="scanFaceOverlayCanvas" class="pointer-events-none absolute inset-0 z-10 hidden h-full w-full" aria-hidden="true" style="transform: scaleX(-1);"></canvas>
                                             <div id="scanOverlay" class="scan-camera-status hidden absolute px-4 py-2.5 text-sm text-white">No active verification event.</div>
                                         </div>
                                     </div>
@@ -1935,7 +2080,7 @@
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
                                     Provision New Account
                                 </p>
-                                <form action="/admin/users/add" method="POST" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3 min-w-0">
+                                <form action="/admin/users/add" method="POST" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 min-w-0">
                                     <input type="hidden" name="school_year" value="{{ selected_school_year }}">
                                     <div class="relative xl:col-span-1">
                                         <input type="text" name="username" placeholder="Username"
@@ -1943,10 +2088,6 @@
                                     </div>
                                     <div class="relative xl:col-span-1">
                                         <input type="text" name="password" placeholder="Temporary Password"
-                                            class="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition-shadow placeholder:text-slate-400 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/10" required>
-                                    </div>
-                                    <div class="relative xl:col-span-1">
-                                        <input type="email" name="email" placeholder="Corporate Email"
                                             class="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition-shadow placeholder:text-slate-400 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/10" required>
                                     </div>
                                     <div class="relative xl:col-span-1">
@@ -1974,13 +2115,13 @@
                             <!-- User List Data Table -->
                             <p class="dashboard-list-label mb-3 pl-1">Identities Roster</p>
                             <div class="dashboard-table-shell rounded-xl overflow-hidden shadow-sm">
-                                <div class="overflow-x-auto">
-                                    <table class="w-full text-left border-collapse">
+                                <div class="overflow-x-hidden">
+                                    <table class="w-full table-fixed text-left border-collapse">
                                         <thead>
                                             <tr class="bg-slate-50 border-b border-slate-200">
-                                                <th class="py-3 px-4 text-[10px] font-bold uppercase tracking-wider text-slate-500">System Identity</th>
-                                                <th class="py-3 px-4 text-[10px] font-bold uppercase tracking-wider text-slate-500 text-right">Assigned Role</th>
-                                                <th class="py-3 px-4 text-[10px] font-bold uppercase tracking-wider text-slate-500 text-right">Actions</th>
+                                                <th class="w-[56%] py-3 px-4 text-[10px] font-bold uppercase tracking-wider text-slate-500">System Identity</th>
+                                                <th class="w-[24%] py-3 px-4 text-[10px] font-bold uppercase tracking-wider text-slate-500 text-right">Assigned Role</th>
+                                                <th class="w-[20%] py-3 px-4 text-[10px] font-bold uppercase tracking-wider text-slate-500 text-right">Actions</th>
                                             </tr>
                                         </thead>
                                         <tbody id="usersRosterBody" class="divide-y divide-slate-100">
@@ -2000,7 +2141,6 @@
                                                         </div>
                                                         <div class="min-w-0">
                                                             <p class="font-bold text-slate-800 tracking-tight leading-tight truncate">{{ user.displayName }}</p>
-                                                            <p class="text-[11px] text-slate-500 truncate mt-0.5">{{ user.email }}</p>
                                                         </div>
                                                     </div>
                                                 </td>
@@ -2016,24 +2156,37 @@
                                                 </td>
                                                 <td class="py-3 px-4 text-right">
                                                     {% if user.role == 'Staff' %}
-                                                    <div class="flex flex-wrap items-center justify-end gap-2">
+                                                    <div class="dashboard-identity-actions">
                                                         <button
                                                             type="button"
-                                                            class="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-[11px] font-semibold text-blue-700 transition hover:bg-blue-100"
+                                                            class="identity-action-btn"
                                                             data-open-staff-password
                                                             data-user-id="{{ user._id }}"
                                                             data-display-name="{{ user.displayName }}"
+                                                            data-tooltip="Reset Password"
+                                                            title="Reset Password"
+                                                            aria-label="Reset password for {{ user.displayName }}"
                                                         >
-                                                            Reset Password
+                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" aria-hidden="true">
+                                                                <path fill-rule="evenodd" d="M7.5 6a2.5 2.5 0 115 0v1h.75A2.25 2.25 0 0115.5 9.25v5.5A2.25 2.25 0 0113.25 17h-6.5A2.25 2.25 0 014.5 14.75v-5.5A2.25 2.25 0 016.75 7H7.5V6Zm3.25 0v1h-1.5V6a1.75 1.75 0 113.5 0v1h-1.5V6ZM10 9a1.25 1.25 0 00-.75 2.25v1a.75.75 0 001.5 0v-1A1.25 1.25 0 0010 9Z" clip-rule="evenodd" />
+                                                            </svg>
+                                                            <span class="sr-only">Reset Password</span>
                                                         </button>
                                                         <button
                                                             type="button"
-                                                            class="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-[11px] font-semibold text-rose-700 transition hover:bg-rose-100"
+                                                            class="identity-action-btn identity-action-btn--danger"
                                                             data-open-staff-delete
                                                             data-user-id="{{ user._id }}"
                                                             data-display-name="{{ user.displayName }}"
+                                                            data-tooltip="Delete Staff"
+                                                            title="Delete Staff"
+                                                            aria-label="Delete staff account for {{ user.displayName }}"
                                                         >
-                                                            Delete Staff
+                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" aria-hidden="true">
+                                                                <path fill-rule="evenodd" d="M8.25 2.25A.75.75 0 019 1.5h2a.75.75 0 01.75.75V3H15a.75.75 0 010 1.5h-.443l-.63 11.338A2.25 2.25 0 0111.68 18H8.32a2.25 2.25 0 01-2.246-2.162L5.443 4.5H5a.75.75 0 010-1.5h3.25V2.25Zm1.5 0V3h.5v-.75h-.5Zm-1.954 2.25.618 11.124a.75.75 0 00.749.72h3.674a.75.75 0 00.749-.72L14.204 4.5H7.796Z" clip-rule="evenodd" />
+                                                                <path d="M9 7.5a.75.75 0 01.75.75v4.5a.75.75 0 01-1.5 0v-4.5A.75.75 0 019 7.5Zm3 .75a.75.75 0 00-1.5 0v4.5a.75.75 0 001.5 0v-4.5Z" />
+                                                            </svg>
+                                                            <span class="sr-only">Delete Staff</span>
                                                         </button>
                                                     </div>
                                                     {% else %}
@@ -2503,11 +2656,7 @@
 
         // Enhanced face detection callbacks
         clientCamera.onFaceDetected = function(data) {
-            console.log('[Face Detection]', data);
-            // Update face count in UI if needed
-            if (data.count > 0) {
-                setScanState('scanning', `Status: ${data.count} face(s) detected`);
-            }
+            updateTrackedFaceOverlayTargets(data?.faces || []);
         };
 
         clientCamera.onFaceRecognized = function(data) {
@@ -2515,10 +2664,7 @@
         };
 
         clientCamera.onMultipleFaces = function(data) {
-            console.log('[Multiple Faces]', data);
-            if (data.count > 1) {
-                setScanState('scanning', `Status: ${data.count} faces detected`);
-            }
+            void data;
         };
 
         clientCamera.onVoiceFeedback = function(name, studentId) {
@@ -2526,8 +2672,19 @@
             void studentId;
             // Voice feedback is confirmed by backend attendance events only.
         };
+        
+        clientCamera.onStreamEnded = function(message) {
+            if (!isScanning) return;
+            stopScanning({
+                badgeTone: 'warning',
+                badgeMessage: message || 'Camera closed. The dashboard is still running.',
+                statusMessage: 'Status: Camera closed',
+            });
+        };
 
         const video = document.getElementById('videoFeed');
+        const scanFaceOverlayCanvas = document.getElementById('scanFaceOverlayCanvas');
+        const scanFaceOverlayCtx = scanFaceOverlayCanvas ? scanFaceOverlayCanvas.getContext('2d') : null;
         const statusText = document.getElementById('status');
         const scanOverlay = document.getElementById('scanOverlay');
         const scanPlaceholder = document.getElementById('scanPlaceholder');
@@ -2589,10 +2746,20 @@
         let smsBalanceLoading = false;
         let scanStoppedAt = null;
         let scanFrameRequestInFlight = false;
+        let scanFrameAbortController = null;
+        let scanFaceOverlayFrameRequest = null;
+        let scanTrackedFaceTargets = [];
+        let scanFaceOverlaySourceSize = null;
+        const scanRenderedFaceTracks = new Map();
         const SCAN_ACTIVITY_LIMIT = 10;
         const SCAN_ACTIVITY_OUTRO_MS = 280;
         const PROCESSED_SCAN_EVENT_HISTORY_LIMIT = 120;
         const VOICE_FEEDBACK_HISTORY_LIMIT = 40;
+        const SCAN_FACE_BOX_COLOR = '#22c55e';
+        const SCAN_FACE_BOX_SMOOTHING = 0.42;
+        const SCAN_FACE_BOX_FAST_SMOOTHING = 0.72;
+        const SCAN_FACE_BOX_SNAP_DISTANCE_RATIO = 0.08;
+        const SCAN_FACE_BOX_IMMEDIATE_DISTANCE_RATIO = 0.22;
         const processedScanEventIds = [];
         const voiceFeedbackQueue = [];
         const spokenVoiceKeys = [];
@@ -2601,6 +2768,194 @@
         // School year variables for disabling scanning console
         const selectedSchoolYear = "{{ selected_school_year }}";
         const currentSchoolYear = "{{ current_school_year }}";
+
+        function resizeScanFaceOverlayCanvas() {
+            if (!scanFaceOverlayCanvas || !scanFrame) return { width: 0, height: 0 };
+            const rect = scanFrame.getBoundingClientRect();
+            const width = Math.max(1, Math.round(rect.width));
+            const height = Math.max(1, Math.round(rect.height));
+            if (scanFaceOverlayCanvas.width !== width || scanFaceOverlayCanvas.height !== height) {
+                scanFaceOverlayCanvas.width = width;
+                scanFaceOverlayCanvas.height = height;
+                scanFaceOverlayCanvas.style.width = `${width}px`;
+                scanFaceOverlayCanvas.style.height = `${height}px`;
+            }
+            return { width, height };
+        }
+
+        function clearTrackedFaceOverlay({ hide = false } = {}) {
+            scanTrackedFaceTargets = [];
+            scanFaceOverlaySourceSize = null;
+            scanRenderedFaceTracks.clear();
+            if (scanFaceOverlayFrameRequest) {
+                cancelAnimationFrame(scanFaceOverlayFrameRequest);
+                scanFaceOverlayFrameRequest = null;
+            }
+            if (scanFaceOverlayCtx) {
+                const size = resizeScanFaceOverlayCanvas();
+                scanFaceOverlayCtx.clearRect(0, 0, size.width, size.height);
+            }
+            if (scanFaceOverlayCanvas && hide) {
+                scanFaceOverlayCanvas.classList.add('hidden');
+            }
+        }
+
+        function getVideoCoverMetrics(renderWidth, renderHeight, sourceSize = null) {
+            const sourceWidth = Number(sourceSize?.width || video?.videoWidth || 0) || 0;
+            const sourceHeight = Number(sourceSize?.height || video?.videoHeight || 0) || 0;
+            if (!sourceWidth || !sourceHeight || !renderWidth || !renderHeight) {
+                return null;
+            }
+
+            const sourceAspect = sourceWidth / sourceHeight;
+            const renderAspect = renderWidth / renderHeight;
+            let drawWidth = renderWidth;
+            let drawHeight = renderHeight;
+            let offsetX = 0;
+            let offsetY = 0;
+
+            if (sourceAspect > renderAspect) {
+                drawHeight = renderHeight;
+                drawWidth = drawHeight * sourceAspect;
+                offsetX = (renderWidth - drawWidth) / 2;
+            } else {
+                drawWidth = renderWidth;
+                drawHeight = drawWidth / sourceAspect;
+                offsetY = (renderHeight - drawHeight) / 2;
+            }
+
+            return { sourceWidth, sourceHeight, drawWidth, drawHeight, offsetX, offsetY };
+        }
+
+        function drawTrackedFaceOverlayFrame() {
+            if (!scanFaceOverlayCanvas || !scanFaceOverlayCtx) return false;
+
+            const size = resizeScanFaceOverlayCanvas();
+            scanFaceOverlayCtx.clearRect(0, 0, size.width, size.height);
+
+            if (!isScanning || video.classList.contains('hidden')) {
+                scanRenderedFaceTracks.clear();
+                return false;
+            }
+
+            const metrics = getVideoCoverMetrics(size.width, size.height, scanFaceOverlaySourceSize);
+            if (!metrics) return false;
+
+            const activeTrackKeys = new Set();
+            for (const target of scanTrackedFaceTargets) {
+                const key = String(target.trackId || target.id || `${target.x}-${target.y}-${target.width}-${target.height}`);
+                activeTrackKeys.add(key);
+
+                const existing = scanRenderedFaceTracks.get(key) || {
+                    x: target.x,
+                    y: target.y,
+                    width: target.width,
+                    height: target.height,
+                    opacity: 0,
+                };
+
+                const deltaX = Math.abs(target.x - existing.x);
+                const deltaY = Math.abs(target.y - existing.y);
+                const deltaWidth = Math.abs(target.width - existing.width);
+                const deltaHeight = Math.abs(target.height - existing.height);
+                const movement = Math.max(deltaX, deltaY, deltaWidth, deltaHeight);
+                const referenceSize = Math.max(target.width, target.height, 1);
+                let followStrength = SCAN_FACE_BOX_SMOOTHING;
+
+                if (movement >= referenceSize * SCAN_FACE_BOX_IMMEDIATE_DISTANCE_RATIO) {
+                    followStrength = 1;
+                } else if (movement >= referenceSize * SCAN_FACE_BOX_SNAP_DISTANCE_RATIO) {
+                    followStrength = SCAN_FACE_BOX_FAST_SMOOTHING;
+                }
+
+                existing.x += (target.x - existing.x) * followStrength;
+                existing.y += (target.y - existing.y) * followStrength;
+                existing.width += (target.width - existing.width) * followStrength;
+                existing.height += (target.height - existing.height) * followStrength;
+                existing.opacity += (1 - existing.opacity) * 0.34;
+                scanRenderedFaceTracks.set(key, existing);
+            }
+
+            for (const [key, box] of scanRenderedFaceTracks.entries()) {
+                if (activeTrackKeys.has(key)) continue;
+                box.opacity *= 0.82;
+                if (box.opacity <= 0.04) {
+                    scanRenderedFaceTracks.delete(key);
+                }
+            }
+
+            const scaleX = metrics.drawWidth / metrics.sourceWidth;
+            const scaleY = metrics.drawHeight / metrics.sourceHeight;
+            const lineWidth = Math.max(2, Math.min(4, Math.round(size.width * 0.0045)));
+            let drewFace = false;
+
+            scanFaceOverlayCtx.save();
+            scanFaceOverlayCtx.strokeStyle = SCAN_FACE_BOX_COLOR;
+            scanFaceOverlayCtx.lineJoin = 'round';
+            scanFaceOverlayCtx.lineWidth = lineWidth;
+
+            for (const box of scanRenderedFaceTracks.values()) {
+                const width = Math.max(0, box.width * scaleX);
+                const height = Math.max(0, box.height * scaleY);
+                if (width < 12 || height < 12 || box.opacity <= 0.04) continue;
+
+                const x = metrics.offsetX + (box.x * scaleX);
+                const y = metrics.offsetY + (box.y * scaleY);
+
+                scanFaceOverlayCtx.globalAlpha = Math.max(0, Math.min(1, box.opacity));
+                scanFaceOverlayCtx.strokeRect(x, y, width, height);
+                drewFace = true;
+            }
+
+            scanFaceOverlayCtx.restore();
+            return drewFace || scanRenderedFaceTracks.size > 0;
+        }
+
+        function renderTrackedFaceOverlayLoop() {
+            scanFaceOverlayFrameRequest = null;
+            const keepRendering = drawTrackedFaceOverlayFrame();
+            if (keepRendering) {
+                scanFaceOverlayFrameRequest = requestAnimationFrame(renderTrackedFaceOverlayLoop);
+            }
+        }
+
+        function startTrackedFaceOverlayLoop() {
+            if (!scanFaceOverlayCanvas || !scanFaceOverlayCtx || scanFaceOverlayFrameRequest) return;
+            scanFaceOverlayFrameRequest = requestAnimationFrame(renderTrackedFaceOverlayLoop);
+        }
+
+        function updateTrackedFaceOverlayTargets(faces = []) {
+            scanTrackedFaceTargets = Array.isArray(faces)
+                ? faces
+                    .filter((face) => Number(face?.width) > 0 && Number(face?.height) > 0)
+                    .map((face) => ({
+                        id: String(face.id || ''),
+                        trackId: String(face.trackId || face.track_id || face.id || ''),
+                        x: Number(face.x || 0),
+                        y: Number(face.y || 0),
+                        width: Number(face.width || 0),
+                        height: Number(face.height || 0),
+                        frameWidth: Number(face.frameWidth || face.frame_width || 0),
+                        frameHeight: Number(face.frameHeight || face.frame_height || 0),
+                    }))
+                : [];
+
+            const primaryFace = scanTrackedFaceTargets[0];
+            scanFaceOverlaySourceSize = primaryFace && primaryFace.frameWidth > 0 && primaryFace.frameHeight > 0
+                ? { width: primaryFace.frameWidth, height: primaryFace.frameHeight }
+                : null;
+
+            if (scanFaceOverlayCanvas) {
+                scanFaceOverlayCanvas.classList.toggle('hidden', !isScanning);
+            }
+
+            if (!scanTrackedFaceTargets.length && !scanRenderedFaceTracks.size) {
+                clearTrackedFaceOverlay({ hide: !isScanning });
+                return;
+            }
+
+            startTrackedFaceOverlayLoop();
+        }
 
         function isPreviousYearSelected() {
             return selectedSchoolYear !== currentSchoolYear;
@@ -3024,6 +3379,36 @@
                 setStatusChip(accessStatusChip, 'Access: Standby', 'neutral');
                 setStatusChip(smsStatusChip, 'SMS: Standby', 'neutral');
             }, Math.max(500, Number(delay) || 1800));
+        }
+
+        function applyScanProcessingFeedback(message = '') {
+            if (!isScanning || !scanOverlay) return;
+
+            const text = String(message || '').trim();
+            if (!text || /^Verified\b/i.test(text) || /^Frame processed$/i.test(text) || /^No faces detected$/i.test(text)) {
+                scheduleScanningStateRestore(500);
+                return;
+            }
+
+            const isHoldingState = /^Holding\b/i.test(text)
+                || /^Confirming\b/i.test(text)
+                || /^Face\(s\) not encoded$/i.test(text)
+                || /^Face detected but too small/i.test(text)
+                || /^Low confidence:/i.test(text)
+                || /^No reliable match/i.test(text)
+                || /^Model still loading$/i.test(text)
+                || /^Not ready:/i.test(text);
+
+            if (!isHoldingState) {
+                return;
+            }
+
+            scanOverlay.classList.remove('hidden');
+            scanOverlay.textContent = text;
+            setScanState('scanning', `Status: ${text}`);
+            setStatusChip(faceStatusChip, 'Face: Analyzing', 'info');
+            setStatusChip(accessStatusChip, 'Access: Standby', 'neutral');
+            setStatusChip(smsStatusChip, 'SMS: Standby', 'neutral');
         }
 
         function scanFullscreenSupported() {
@@ -3781,29 +4166,71 @@
         }
 
         let frameProcessingTimer = null;
-        const FRAME_SEND_INTERVAL = 180;
+        const FRAME_SEND_INTERVAL = 120;
 
         async function sendScanFrameOnce() {
-            if (!isScanning || !clientCamera.isActive() || scanFrameRequestInFlight) return;
+            if (!isScanning || scanFrameRequestInFlight) return;
+            if (!clientCamera.isActive()) {
+                stopScanning({
+                    badgeTone: 'warning',
+                    badgeMessage: 'Camera closed. The dashboard is still running.',
+                    statusMessage: 'Status: Camera closed',
+                });
+                return;
+            }
             scanFrameRequestInFlight = true;
+            let requestController = null;
 
             try {
-                const frameBlob = await clientCamera.getFrameAsBlob('image/jpeg');
-                if (!frameBlob) return;
+                const frameBlob = await clientCamera.getFrameAsBlob('image/jpeg', 0.88);
+                if (!frameBlob) {
+                    if (isScanning && !clientCamera.isActive()) {
+                        stopScanning({
+                            badgeTone: 'warning',
+                            badgeMessage: 'Camera closed. The dashboard is still running.',
+                            statusMessage: 'Status: Camera closed',
+                        });
+                    }
+                    return;
+                }
 
                 const formData = new FormData();
                 formData.append('frame', frameBlob, 'frame.jpg');
+                requestController = new AbortController();
+                scanFrameAbortController = requestController;
 
                 const response = await fetch('/process_scan_frame', {
                     method: 'POST',
-                    body: formData
+                    body: formData,
+                    signal: requestController.signal,
                 });
+                if (!isScanning) return;
+                const payload = await response.json().catch(() => ({}));
+                if (Array.isArray(payload.faces)) {
+                    updateTrackedFaceOverlayTargets(payload.faces);
+                } else if (response.ok) {
+                    updateTrackedFaceOverlayTargets([]);
+                }
                 if (response.ok) {
+                    applyScanProcessingFeedback(payload.message || '');
                     void pollScanEventsOnce();
                 }
             } catch (error) {
+                if (error.name === 'AbortError') {
+                    return;
+                }
                 console.debug('Frame capture error:', error.message);
+                if (isScanning && !clientCamera.isActive()) {
+                    stopScanning({
+                        badgeTone: 'warning',
+                        badgeMessage: 'Camera closed. The dashboard is still running.',
+                        statusMessage: 'Status: Camera closed',
+                    });
+                }
             } finally {
+                if (scanFrameAbortController === requestController) {
+                    scanFrameAbortController = null;
+                }
                 scanFrameRequestInFlight = false;
             }
         }
@@ -3822,10 +4249,14 @@
                 clearInterval(frameProcessingTimer);
                 frameProcessingTimer = null;
             }
+            if (scanFrameAbortController) {
+                scanFrameAbortController.abort();
+                scanFrameAbortController = null;
+            }
             scanFrameRequestInFlight = false;
         }
 
-        function stopScanning() {
+        function stopScanning({ badgeTone = 'info', badgeMessage = 'Scan stopped.', statusMessage = 'Status: Idle' } = {}) {
             if (!isScanning) return;
 
             // Stop frame processing and camera
@@ -3852,12 +4283,22 @@
             if (video) video.classList.add('hidden');
             if (scanPlaceholder) scanPlaceholder.classList.remove('hidden');
             if (scanOverlay) scanOverlay.classList.add('hidden');
+            clearTrackedFaceOverlay({ hide: true });
 
-            setScanState('idle', 'Status: Idle');
-            showScanEventBadge('info', 'Scan stopped.');
+            setScanState('idle', statusMessage);
+            showScanEventBadge(badgeTone, badgeMessage);
 
             // Stop event polling
             stopPollingEvents();
+            scanModelStatus = 'idle';
+            if (scanStatusResetTimer) {
+                clearTimeout(scanStatusResetTimer);
+                scanStatusResetTimer = null;
+            }
+            if (dashboardContentRefreshTimer) {
+                clearTimeout(dashboardContentRefreshTimer);
+                dashboardContentRefreshTimer = null;
+            }
             applyGateStatusDefaults();
 
             // Notify server
@@ -3906,6 +4347,7 @@
                 scanPlaceholder.classList.remove('hidden');
                 video.classList.add('hidden');
                 scanOverlay.classList.add('hidden');
+                clearTrackedFaceOverlay({ hide: true });
                 applyGateStatusDefaults();
                 return;
             }
@@ -3930,6 +4372,11 @@
                 video.classList.remove('hidden');
                 scanOverlay.classList.add('hidden');
                 scanOverlay.textContent = '';
+                clearTrackedFaceOverlay();
+                if (scanFaceOverlayCanvas) {
+                    scanFaceOverlayCanvas.classList.remove('hidden');
+                }
+                resizeScanFaceOverlayCanvas();
                 if (data.scan_session_mode) {
                     applyScanSessionMode(data.scan_session_mode, data.effective_session || null);
                 } else {
@@ -3945,6 +4392,7 @@
             } else {
                 // Stop camera if scan failed
                 clientCamera.stop();
+                clearTrackedFaceOverlay({ hide: true });
                 setScanState('error', `Status: Failed to start scan${data.message ? ' - ' + data.message : ''}`);
                 showScanEventBadge('error', data.message || 'Failed to start scan.');
                 scanPlaceholder.classList.remove('hidden');
@@ -3955,48 +4403,7 @@
         });
 
         stopBtn.addEventListener('click', () => {
-            // Immediate UI feedback
-            isScanning = false;
-            scanStoppedAt = Date.now();
-            setScanButtons();
-
-            // Immediately cancel any ongoing speech
-            if ('speechSynthesis' in window) {
-                window.speechSynthesis.cancel();
-            }
-
-            // Stop frame processing and camera immediately
-            stopFrameProcessing();
-            clientCamera.stop();
-            resetVoiceFeedbackState();
-            lastEventId = 0;
-            processedScanEventIds.length = 0;
-
-            // Stop event polling immediately BEFORE UI cleanup so no stale events fire voice
-            stopPollingEvents();
-
-            // Cleanup UI elements
-            video.classList.add('hidden');
-            scanPlaceholder.classList.remove('hidden');
-            scanOverlay.classList.add('hidden');
-            setScanState('idle', 'Status: Idle');
-            showScanEventBadge('info', 'Scan stopped.');
-
-            // Reset scan model status
-            scanModelStatus = 'idle';
-            if (scanStatusResetTimer) {
-                clearTimeout(scanStatusResetTimer);
-                scanStatusResetTimer = null;
-            }
-            if (dashboardContentRefreshTimer) {
-                clearTimeout(dashboardContentRefreshTimer);
-                dashboardContentRefreshTimer = null;
-            }
-
-            // Fire and forget server notification
-            fetch('/stop_scan', { method: 'POST' }).catch(() => null);
-
-            applyGateStatusDefaults();
+            stopScanning();
         });
 
         scanFullscreenBtn?.addEventListener('click', (event) => {
@@ -4011,8 +4418,32 @@
         document.addEventListener('fullscreenchange', updateScanFullscreenButton);
         document.addEventListener('webkitfullscreenchange', updateScanFullscreenButton);
         document.addEventListener('msfullscreenchange', updateScanFullscreenButton);
+        window.addEventListener('resize', () => {
+            if ((!scanFaceOverlayCanvas || scanFaceOverlayCanvas.classList.contains('hidden')) && scanRenderedFaceTracks.size === 0) return;
+            resizeScanFaceOverlayCanvas();
+            startTrackedFaceOverlayLoop();
+        });
+        document.addEventListener('fullscreenchange', () => {
+            setTimeout(() => {
+                resizeScanFaceOverlayCanvas();
+                startTrackedFaceOverlayLoop();
+            }, 40);
+        });
+        document.addEventListener('webkitfullscreenchange', () => {
+            setTimeout(() => {
+                resizeScanFaceOverlayCanvas();
+                startTrackedFaceOverlayLoop();
+            }, 40);
+        });
+        document.addEventListener('msfullscreenchange', () => {
+            setTimeout(() => {
+                resizeScanFaceOverlayCanvas();
+                startTrackedFaceOverlayLoop();
+            }, 40);
+        });
 
         window.addEventListener('beforeunload', () => {
+            clearTrackedFaceOverlay({ hide: true });
             closeDashboardRealtime();
             const csrfToken = window.AppSecurity?.getCsrfToken?.() || '';
             fetch('/stop_scan', {
@@ -5304,7 +5735,6 @@
 
             usersRosterBody.innerHTML = users.map((user) => {
                 const displayName = escapeIdentityHtml(user?.displayName || user?.username || 'User');
-                const email = escapeIdentityHtml(user?.email || '');
                 const rawRole = String(user?.role || 'Staff');
                 const role = escapeIdentityHtml(rawRole);
                 const userId = escapeIdentityHtml(String(user?._id || ''));
@@ -5316,24 +5746,37 @@
                     : '';
                 const actionsMarkup = rawRole === 'Staff'
                     ? `
-                        <div class="flex flex-wrap items-center justify-end gap-2">
+                        <div class="dashboard-identity-actions">
                             <button
                                 type="button"
-                                class="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-[11px] font-semibold text-blue-700 transition hover:bg-blue-100"
+                                class="identity-action-btn"
                                 data-open-staff-password
                                 data-user-id="${userId}"
                                 data-display-name="${displayName}"
+                                data-tooltip="Reset Password"
+                                title="Reset Password"
+                                aria-label="Reset password for ${displayName}"
                             >
-                                Reset Password
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" aria-hidden="true">
+                                    <path fill-rule="evenodd" d="M7.5 6a2.5 2.5 0 115 0v1h.75A2.25 2.25 0 0115.5 9.25v5.5A2.25 2.25 0 0113.25 17h-6.5A2.25 2.25 0 014.5 14.75v-5.5A2.25 2.25 0 016.75 7H7.5V6Zm3.25 0v1h-1.5V6a1.75 1.75 0 113.5 0v1h-1.5V6ZM10 9a1.25 1.25 0 00-.75 2.25v1a.75.75 0 001.5 0v-1A1.25 1.25 0 0010 9Z" clip-rule="evenodd" />
+                                </svg>
+                                <span class="sr-only">Reset Password</span>
                             </button>
                             <button
                                 type="button"
-                                class="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-[11px] font-semibold text-rose-700 transition hover:bg-rose-100"
+                                class="identity-action-btn identity-action-btn--danger"
                                 data-open-staff-delete
                                 data-user-id="${userId}"
                                 data-display-name="${displayName}"
+                                data-tooltip="Delete Staff"
+                                title="Delete Staff"
+                                aria-label="Delete staff account for ${displayName}"
                             >
-                                Delete Staff
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" aria-hidden="true">
+                                    <path fill-rule="evenodd" d="M8.25 2.25A.75.75 0 019 1.5h2a.75.75 0 01.75.75V3H15a.75.75 0 010 1.5h-.443l-.63 11.338A2.25 2.25 0 0111.68 18H8.32a2.25 2.25 0 01-2.246-2.162L5.443 4.5H5a.75.75 0 010-1.5h3.25V2.25Zm1.5 0V3h.5v-.75h-.5Zm-1.954 2.25.618 11.124a.75.75 0 00.749.72h3.674a.75.75 0 00.749-.72L14.204 4.5H7.796Z" clip-rule="evenodd" />
+                                    <path d="M9 7.5a.75.75 0 01.75.75v4.5a.75.75 0 01-1.5 0v-4.5A.75.75 0 019 7.5Zm3 .75a.75.75 0 00-1.5 0v4.5a.75.75 0 001.5 0v-4.5Z" />
+                                </svg>
+                                <span class="sr-only">Delete Staff</span>
                             </button>
                         </div>
                     `
@@ -5346,7 +5789,6 @@
                                 ${renderIdentityAvatar(user)}
                                 <div class="min-w-0">
                                     <p class="truncate font-bold leading-tight tracking-tight text-slate-800">${displayName}</p>
-                                    <p class="mt-0.5 truncate text-[11px] text-slate-500">${email}</p>
                                 </div>
                             </div>
                         </td>
