@@ -7217,10 +7217,6 @@ def track_pending_live_recognition(student, confidence_pct, match_result, face_q
         for pending_student_id in stale_student_ids:
             pending.pop(pending_student_id, None)
 
-        for pending_student_id in list(pending.keys()):
-            if pending_student_id != student_id:
-                pending.pop(pending_student_id, None)
-
         existing = pending.get(student_id)
         if existing and current_ts - float(existing.get("last_seen_ts") or 0.0) <= confirmation_window_seconds:
             observed_frames = int(existing.get("observed_frames") or 0) + 1
@@ -7315,12 +7311,7 @@ def process_client_frame(frame_bytes):
             push_not_registered_event("face_too_small", 0.0)
             return True, "Face detected but too small for reliable recognition", payload
 
-        face_locations_small, multiple_prominent_faces = prioritize_live_face_locations(face_locations_small)
-
-        if multiple_prominent_faces:
-            clear_pending_live_recognition()
-            push_multi_face_event(len(face_locations_small))
-            return True, "Multiple faces detected", payload
+        face_locations_small, _ = prioritize_live_face_locations(face_locations_small)
 
         db_encoding_count = int(len(db_encodings)) if db_encodings is not None else 0
         legacy_flat_index = any("encodings" not in (student or {}) for student in db_students)
