@@ -40,20 +40,20 @@
     },
   };
   const FACE_GUIDE_RING_CLASSES = {
-    idle: "h-[72%] w-[48%] rounded-[999px] border-2 border-white/70 shadow-[0_0_0_999px_rgba(2,6,23,0.58)] transition-all duration-300",
-    detected: "h-[72%] w-[48%] rounded-[999px] border-2 border-sky-300/85 shadow-[0_0_0_999px_rgba(2,6,23,0.58)] transition-all duration-300",
-    aligned: "h-[72%] w-[48%] rounded-[999px] border-2 border-emerald-400 shadow-[0_0_0_999px_rgba(2,6,23,0.54),0_0_24px_rgba(52,211,153,0.3)] transition-all duration-300",
-    warning: "h-[72%] w-[48%] rounded-[999px] border-2 border-amber-300 shadow-[0_0_0_999px_rgba(2,6,23,0.6)] transition-all duration-300",
+    idle: "h-[82%] w-[42%] rounded-[999px] border-2 border-white/70 shadow-[0_0_0_999px_rgba(2,6,23,0.42)] transition-all duration-300",
+    detected: "h-[82%] w-[42%] rounded-[999px] border-2 border-sky-300/85 shadow-[0_0_0_999px_rgba(2,6,23,0.42)] transition-all duration-300",
+    aligned: "h-[82%] w-[42%] rounded-[999px] border-2 border-emerald-400 shadow-[0_0_0_999px_rgba(2,6,23,0.38),0_0_24px_rgba(52,211,153,0.28)] transition-all duration-300",
+    warning: "h-[82%] w-[42%] rounded-[999px] border-2 border-amber-300 shadow-[0_0_0_999px_rgba(2,6,23,0.46)] transition-all duration-300",
   };
-  const FACE_CAPTURE_BRIGHTNESS_MIN = 20;
-  const FACE_CAPTURE_BRIGHTNESS_MAX = 244;
-  const FACE_CAPTURE_CONTRAST_MIN = 8.5;
-  const FACE_CAPTURE_SHARPNESS_MIN = 5.5;
+  const FACE_CAPTURE_BRIGHTNESS_MIN = 18;
+  const FACE_CAPTURE_BRIGHTNESS_MAX = 246;
+  const FACE_CAPTURE_CONTRAST_MIN = 7.2;
+  const FACE_CAPTURE_SHARPNESS_MIN = 4.4;
   const FACE_CAPTURE_MIN_HAMMING_DISTANCE = 4;
   const FACE_CAPTURE_DETECTION_MAX_WIDTH = 640;
-  const FACE_CAPTURE_TRANSITION_POSE_DELTA = 0.022;
-  const FACE_CAPTURE_GUIDE_PADDING = 1.08;
-  const FACE_CAPTURE_GUIDE_CORE_PADDING = 1.01;
+  const FACE_CAPTURE_TRANSITION_POSE_DELTA = 0.02;
+  const FACE_CAPTURE_GUIDE_PADDING = 1.12;
+  const FACE_CAPTURE_GUIDE_CORE_PADDING = 1.04;
   const FACE_CAPTURE_GUIDE_MIN_POINTS = 4;
   const FACE_CAPTURE_GUIDE_MIN_BOUNDARY_POINTS = 2;
   const FACE_CAPTURE_GUIDE_MIN_FACE_HEIGHT_RATIO = 0.22;
@@ -63,13 +63,13 @@
   const FACE_CAPTURE_STABLE_FRAME_TARGET = 1;
   const FACE_CAPTURE_SOFT_FRAME_TARGET = 2;
   const FACE_CAPTURE_DUPLICATE_POSE_DELTA = 0.055;
-  const FACE_CAPTURE_SOFT_SCORE_DELTA = 0.28;
-  const FACE_CAPTURE_RETRY_COOLDOWN_MS = 70;
-  const FACE_CAPTURE_SUCCESS_COOLDOWN_MS = 120;
-  const FACE_CAPTURE_LOCKED_HOLD_MS = 35;
-  const FACE_CAPTURE_SOFT_HOLD_MS = 75;
+  const FACE_CAPTURE_SOFT_SCORE_DELTA = 0.33;
+  const FACE_CAPTURE_RETRY_COOLDOWN_MS = 55;
+  const FACE_CAPTURE_SUCCESS_COOLDOWN_MS = 90;
+  const FACE_CAPTURE_LOCKED_HOLD_MS = 25;
+  const FACE_CAPTURE_SOFT_HOLD_MS = 55;
   const FACE_CAPTURE_MISSED_FRAME_TOLERANCE = 2;
-  const FACE_CAPTURE_STATUS_HOLD_MS = 280;
+  const FACE_CAPTURE_STATUS_HOLD_MS = 360;
   const SECTION_STATS_EMPTY_NOTE = "Select a year level and section to view detailed gender statistics.";
   const REENROLL_ASSIGNMENT_NEW_SECTION_VALUE = "__new_section__";
 
@@ -177,6 +177,8 @@
   let sectionStatsRequestToken = 0;
   let centeredSuccessExitTimer = null;
   let centeredSuccessHideTimer = null;
+  let centeredErrorExitTimer = null;
+  let centeredErrorHideTimer = null;
   let toastHideTimer = null;
 
   const refs = {
@@ -287,6 +289,8 @@
     confirmDeleteBtn: document.getElementById("confirmDeleteBtn"),
     faceTitle: document.getElementById("faceTitle"),
     faceSubtitle: document.getElementById("faceSubtitle"),
+    faceSavingOverlay: document.getElementById("faceSavingOverlay"),
+    faceSavingText: document.getElementById("faceSavingText"),
     facePreviewCanvas: document.getElementById("facePreviewCanvas"),
     faceVideo: document.getElementById("faceVideo"),
     faceOverlay: document.getElementById("faceOverlay"),
@@ -300,6 +304,9 @@
     faceCaptureTarget: document.getElementById("faceCaptureTarget"),
     stepTags: document.getElementById("stepTags"),
     captureGrid: document.getElementById("captureGrid"),
+    openCaptureGalleryBtn: document.getElementById("openCaptureGalleryBtn"),
+    captureGalleryButtonText: document.getElementById("captureGalleryButtonText"),
+    captureGallerySubtitle: document.getElementById("captureGallerySubtitle"),
     resetCaptureBtn: document.getElementById("resetCaptureBtn"),
     submitFaceBtn: document.getElementById("submitFaceBtn"),
     faceUpdateSuccessOverlay: document.getElementById("faceUpdateSuccessOverlay"),
@@ -309,6 +316,10 @@
     centerSuccessPulse: document.getElementById("centerSuccessPulse"),
     centerSuccessBadge: document.getElementById("centerSuccessBadge"),
     centerSuccessText: document.getElementById("centerSuccessText"),
+    centerErrorOverlay: document.getElementById("centerErrorOverlay"),
+    centerErrorPulse: document.getElementById("centerErrorPulse"),
+    centerErrorBadge: document.getElementById("centerErrorBadge"),
+    centerErrorText: document.getElementById("centerErrorText"),
   };
 
   if (!refs.studentsTableBody) {
@@ -1248,6 +1259,15 @@
     const text = refs.centerSuccessText;
     if (!overlay || !badge || !text) return;
 
+    if (refs.centerErrorOverlay) {
+      refs.centerErrorOverlay.classList.remove("flex");
+      refs.centerErrorOverlay.classList.add("hidden");
+    }
+    if (centeredErrorExitTimer) clearTimeout(centeredErrorExitTimer);
+    if (centeredErrorHideTimer) clearTimeout(centeredErrorHideTimer);
+    centeredErrorExitTimer = null;
+    centeredErrorHideTimer = null;
+
     if (centeredSuccessExitTimer) clearTimeout(centeredSuccessExitTimer);
     if (centeredSuccessHideTimer) clearTimeout(centeredSuccessHideTimer);
 
@@ -1291,6 +1311,76 @@
       centeredSuccessExitTimer = null;
       centeredSuccessHideTimer = null;
     }, 1550);
+  };
+
+  const showCenteredError = (message) => {
+    const overlay = refs.centerErrorOverlay;
+    const pulse = refs.centerErrorPulse;
+    const badge = refs.centerErrorBadge;
+    const text = refs.centerErrorText;
+    if (!overlay || !badge || !text) return;
+
+    if (refs.centerSuccessOverlay) {
+      refs.centerSuccessOverlay.classList.remove("flex");
+      refs.centerSuccessOverlay.classList.add("hidden");
+    }
+    if (centeredSuccessExitTimer) clearTimeout(centeredSuccessExitTimer);
+    if (centeredSuccessHideTimer) clearTimeout(centeredSuccessHideTimer);
+    centeredSuccessExitTimer = null;
+    centeredSuccessHideTimer = null;
+
+    if (centeredErrorExitTimer) clearTimeout(centeredErrorExitTimer);
+    if (centeredErrorHideTimer) clearTimeout(centeredErrorHideTimer);
+
+    text.textContent = String(message || "Face registration failed.");
+    overlay.classList.remove("hidden");
+    overlay.classList.add("flex");
+    badge.classList.remove("opacity-100", "scale-100", "translate-y-0");
+    badge.classList.add("opacity-0", "scale-75", "translate-y-2");
+    text.classList.remove("opacity-100", "translate-y-0");
+    text.classList.add("opacity-0", "translate-y-1");
+    if (pulse) {
+      pulse.classList.remove("opacity-100", "scale-125");
+      pulse.classList.add("opacity-0", "scale-75");
+    }
+
+    requestAnimationFrame(() => {
+      badge.classList.remove("opacity-0", "scale-75", "translate-y-2");
+      badge.classList.add("opacity-100", "scale-100", "translate-y-0");
+      text.classList.remove("opacity-0", "translate-y-1");
+      text.classList.add("opacity-100", "translate-y-0");
+      if (pulse) {
+        pulse.classList.remove("opacity-0", "scale-75");
+        pulse.classList.add("opacity-100", "scale-125");
+      }
+    });
+
+    centeredErrorExitTimer = setTimeout(() => {
+      badge.classList.remove("opacity-100", "scale-100", "translate-y-0");
+      badge.classList.add("opacity-0", "scale-75", "translate-y-2");
+      text.classList.remove("opacity-100", "translate-y-0");
+      text.classList.add("opacity-0", "translate-y-1");
+      if (pulse) {
+        pulse.classList.remove("opacity-100", "scale-125");
+        pulse.classList.add("opacity-0", "scale-75");
+      }
+    }, 1700);
+
+    centeredErrorHideTimer = setTimeout(() => {
+      overlay.classList.remove("flex");
+      overlay.classList.add("hidden");
+      centeredErrorExitTimer = null;
+      centeredErrorHideTimer = null;
+    }, 2150);
+  };
+
+  const setFaceSavingOverlay = (isVisible, message = "") => {
+    if (!refs.faceSavingOverlay) return;
+    refs.faceSavingOverlay.classList.toggle("hidden", !isVisible);
+    refs.faceSavingOverlay.classList.toggle("flex", Boolean(isVisible));
+    if (refs.faceSavingText) {
+      refs.faceSavingText.textContent = String(message || "Validating captures and saving the registered face profile...");
+    }
   };
 
   const formatStatsUpdatedAt = (value) => {
@@ -1651,9 +1741,10 @@
     if (focusables.length) focusables[0].focus();
   };
 
-  const closeModal = (id) => {
+  const closeModal = (id, { force = false } = {}) => {
     const modal = document.getElementById(id);
     if (!modal) return;
+    if (id === "faceModal" && state.face.submitting && !force) return;
     modal.classList.add("hidden");
     const stackIndex = state.modalStack.findIndex((entry) => entry.id === id);
     const [closedEntry] = stackIndex >= 0 ? state.modalStack.splice(stackIndex, 1) : [];
@@ -2222,7 +2313,20 @@
   };
   const describeInvalidFaceCapture = (reason) => {
     if (reason === "duplicate") return "Too similar to another accepted angle.";
+    if (reason === "too_dark") return "Too dark. Add more front light and retake.";
+    if (reason === "too_bright") return "Too bright. Reduce glare or strong backlight.";
+    if (reason === "low_contrast") return "Lighting is too flat. Add more front light.";
+    if (reason === "blurry") return "Too blurry. Hold still and retake.";
+    if (reason === "face_not_found") return "Angle was hard to read. Keep the face more centered.";
+    if (reason === "multiple_faces") return "Keep only one face inside the camera frame.";
+    if (reason === "face_too_small") return "Move a little closer so the face fills the guide.";
+    if (reason === "encoding_failed") return "Use a slightly straighter angle with the full face visible.";
     return "This angle failed server validation. Retake it with a clearer face view.";
+  };
+
+  const getInvalidFaceCaptureMessage = (detail) => {
+    const hint = String(detail?.hint || "").trim();
+    return hint || describeInvalidFaceCapture(detail?.reason);
   };
 
   const setGuideRingState = (stateKey = "idle") => {
@@ -2296,8 +2400,8 @@
       && centerInside
       && insideCount >= FACE_CAPTURE_GUIDE_MIN_POINTS
       && boundaryInsideCount >= FACE_CAPTURE_GUIDE_MIN_BOUNDARY_POINTS
-      && visibleRatio >= 0.57
-      && boundaryRatio >= 0.5
+      && visibleRatio >= 0.52
+      && boundaryRatio >= 0.42
       && coreInsideCount >= 1;
 
     let reason = "Keep the face inside the oval guide.";
@@ -2366,7 +2470,7 @@
     const pitchScore = Math.max(0, 1 - (Math.abs(pose.pitch - targetPitch) / pitchTolerance));
     const rollScore = Math.max(0, 1 - (Math.abs(pose.roll) / 0.22));
     const score = (yawScore * 0.45) + (pitchScore * 0.4) + (rollScore * 0.15);
-    const aligned = score >= Number(step.minScore || 0.7) && rollScore >= 0.2;
+    const aligned = score >= Math.max(Number(step.minScore || 0.7) - 0.04, 0.56) && rollScore >= 0.14;
     return { aligned, score, yawScore, pitchScore, rollScore };
   };
 
@@ -2436,11 +2540,20 @@
     fingerprintContext.drawImage(canvas, 0, 0, 8, 8);
     const { data } = fingerprintContext.getImageData(0, 0, 8, 8);
     const grayscale = [];
+    const ellipse = getCanvasEllipse(8, 8);
     for (let index = 0; index < data.length; index += 4) {
+      const pixel = index / 4;
+      const x = pixel % 8;
+      const y = Math.floor(pixel / 8);
+      if (!isPointInsideEllipse(x + 0.5, y + 0.5, ellipse)) {
+        grayscale.push(null);
+        continue;
+      }
       grayscale.push((data[index] * 0.299) + (data[index + 1] * 0.587) + (data[index + 2] * 0.114));
     }
-    const average = grayscale.reduce((sum, value) => sum + value, 0) / Math.max(1, grayscale.length);
-    return grayscale.map((value) => (value >= average ? "1" : "0")).join("");
+    const sampledValues = grayscale.filter((value) => Number.isFinite(value));
+    const average = sampledValues.reduce((sum, value) => sum + value, 0) / Math.max(1, sampledValues.length);
+    return grayscale.map((value) => (Number.isFinite(value) && value >= average ? "1" : "0")).join("");
   };
 
   const getHammingDistance = (left, right) => {
@@ -2452,20 +2565,77 @@
     return distance;
   };
 
+  const isPointInsideEllipse = (x, y, ellipse) => {
+    const rx = Math.max(Number(ellipse?.rx || 0), 0.0001);
+    const ry = Math.max(Number(ellipse?.ry || 0), 0.0001);
+    const dx = (x - Number(ellipse?.cx || 0)) / rx;
+    const dy = (y - Number(ellipse?.cy || 0)) / ry;
+    return (dx * dx) + (dy * dy) <= 1;
+  };
+
+  const getCanvasEllipse = (width, height) => ({
+    cx: width / 2,
+    cy: height / 2,
+    rx: width / 2,
+    ry: height / 2,
+  });
+
+  const getGuideCaptureBounds = (width, height) => {
+    const guide = getGuideMetrics(width, height);
+    const sx = clampNumber(guide.cx - guide.rx, 0, Math.max(0, width - (guide.rx * 2)));
+    const sy = clampNumber(guide.cy - guide.ry, 0, Math.max(0, height - (guide.ry * 2)));
+    return {
+      sx,
+      sy,
+      sw: Math.max(1, Math.min(width - sx, guide.rx * 2)),
+      sh: Math.max(1, Math.min(height - sy, guide.ry * 2)),
+    };
+  };
+
+  const drawMaskedEllipseFrame = (context, source, sourceRect, destinationRect, maskEllipse, background = "#020617") => {
+    if (!context || !source || !sourceRect || !destinationRect || !maskEllipse) return;
+    context.save();
+    context.setTransform(1, 0, 0, 1, 0, 0);
+    context.clearRect(0, 0, destinationRect.width, destinationRect.height);
+    context.fillStyle = background;
+    context.fillRect(0, 0, destinationRect.width, destinationRect.height);
+    context.beginPath();
+    context.ellipse(maskEllipse.cx, maskEllipse.cy, maskEllipse.rx, maskEllipse.ry, 0, 0, Math.PI * 2);
+    context.clip();
+    context.drawImage(
+      source,
+      sourceRect.sx,
+      sourceRect.sy,
+      sourceRect.sw,
+      sourceRect.sh,
+      destinationRect.dx,
+      destinationRect.dy,
+      destinationRect.dw,
+      destinationRect.dh,
+    );
+    context.restore();
+  };
+
   const buildFaceCropCanvas = (video, landmarks, width, height) => {
-    const bounds = getFaceBounds(landmarks, width, height);
-    const baseSize = Math.max(bounds.width, bounds.height);
-    if (!baseSize) return null;
-    const cropSize = clampNumber(baseSize * 1.85, 220, Math.min(width, height));
-    const centerX = clampNumber(bounds.centerX, cropSize / 2, width - (cropSize / 2));
-    const centerY = clampNumber(bounds.centerY - (baseSize * 0.05), cropSize / 2, height - (cropSize / 2));
-    const sx = clampNumber(centerX - (cropSize / 2), 0, Math.max(0, width - cropSize));
-    const sy = clampNumber(centerY - (cropSize / 2), 0, Math.max(0, height - cropSize));
+    if (!video || !landmarks?.length || !width || !height) return null;
+    const guideBounds = getGuideCaptureBounds(width, height);
+    if (!guideBounds.sw || !guideBounds.sh) return null;
+    const outputHeight = 384;
+    const outputWidth = Math.max(1, Math.round((guideBounds.sw / guideBounds.sh) * outputHeight));
     const canvas = document.createElement("canvas");
-    canvas.width = 384;
-    canvas.height = 384;
+    canvas.width = outputWidth;
+    canvas.height = outputHeight;
     const context = canvas.getContext("2d");
-    context.drawImage(video, sx, sy, cropSize, cropSize, 0, 0, canvas.width, canvas.height);
+    if (!context) return null;
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = "high";
+    drawMaskedEllipseFrame(
+      context,
+      video,
+      guideBounds,
+      { dx: 0, dy: 0, dw: canvas.width, dh: canvas.height, width: canvas.width, height: canvas.height },
+      getCanvasEllipse(canvas.width, canvas.height),
+    );
     return canvas;
   };
 
@@ -2485,7 +2655,13 @@
     if (!context) {
       return video;
     }
-    context.drawImage(video, 0, 0, targetWidth, targetHeight);
+    drawMaskedEllipseFrame(
+      context,
+      video,
+      { sx: 0, sy: 0, sw: width, sh: height },
+      { dx: 0, dy: 0, dw: targetWidth, dh: targetHeight, width: targetWidth, height: targetHeight },
+      getGuideMetrics(targetWidth, targetHeight),
+    );
     return refs.faceCaptureCanvas;
   };
 
@@ -2495,40 +2671,52 @@
     const height = canvas.height;
     const { data } = context.getImageData(0, 0, width, height);
     const grayscale = new Float32Array(width * height);
+    const insideMask = new Uint8Array(width * height);
+    const ellipse = getCanvasEllipse(width, height);
     let total = 0;
     let totalSquared = 0;
+    let pixelCount = 0;
 
     for (let index = 0, pixel = 0; index < data.length; index += 4, pixel += 1) {
+      const x = pixel % width;
+      const y = Math.floor(pixel / width);
       const value = (data[index] * 0.299) + (data[index + 1] * 0.587) + (data[index + 2] * 0.114);
       grayscale[pixel] = value;
+      if (!isPointInsideEllipse(x + 0.5, y + 0.5, ellipse)) continue;
+      insideMask[pixel] = 1;
       total += value;
       totalSquared += value * value;
+      pixelCount += 1;
     }
 
-    const count = grayscale.length || 1;
+    const count = pixelCount || 1;
     const brightness = total / count;
     const variance = Math.max(0, (totalSquared / count) - (brightness * brightness));
     const contrast = Math.sqrt(variance);
+    const lowLight = brightness < 88;
+    const minContrast = lowLight ? FACE_CAPTURE_CONTRAST_MIN * 0.82 : FACE_CAPTURE_CONTRAST_MIN;
 
     let sharpnessTotal = 0;
     let sharpnessCount = 0;
     for (let y = 1; y < height - 1; y += 1) {
       for (let x = 1; x < width - 1; x += 1) {
         const index = (y * width) + x;
+        if (!insideMask[index] || !insideMask[index + 1] || !insideMask[index + width]) continue;
         sharpnessTotal += Math.abs(grayscale[index] - grayscale[index + 1]) + Math.abs(grayscale[index] - grayscale[index + width]);
         sharpnessCount += 1;
       }
     }
     const sharpness = sharpnessCount ? sharpnessTotal / sharpnessCount : 0;
+    const minSharpness = lowLight ? FACE_CAPTURE_SHARPNESS_MIN * 0.7 : FACE_CAPTURE_SHARPNESS_MIN;
 
     let reason = "";
-    if (brightness < FACE_CAPTURE_BRIGHTNESS_MIN && contrast < FACE_CAPTURE_CONTRAST_MIN * 1.6) {
+    if (brightness < FACE_CAPTURE_BRIGHTNESS_MIN && contrast < minContrast * 1.45) {
       reason = "Increase lighting before capturing the next angle.";
-    } else if (brightness > FACE_CAPTURE_BRIGHTNESS_MAX && contrast < FACE_CAPTURE_CONTRAST_MIN * 1.4) {
+    } else if (brightness > FACE_CAPTURE_BRIGHTNESS_MAX && contrast < minContrast * 1.3) {
       reason = "Reduce glare or strong backlight before capturing.";
-    } else if (contrast < FACE_CAPTURE_CONTRAST_MIN) {
+    } else if (contrast < minContrast && sharpness < Math.max(minSharpness * 1.08, FACE_CAPTURE_SHARPNESS_MIN * 0.86)) {
       reason = "Add more contrast so the face is easier to separate from the background.";
-    } else if (sharpness < FACE_CAPTURE_SHARPNESS_MIN) {
+    } else if (sharpness < minSharpness) {
       reason = "Hold still for a sharper capture.";
     }
 
@@ -2536,10 +2724,10 @@
       return { ok: true, blocking: false, brightness, contrast, sharpness };
     }
 
-    const blocking = brightness < FACE_CAPTURE_BRIGHTNESS_MIN * 0.5
+    const blocking = brightness < FACE_CAPTURE_BRIGHTNESS_MIN * 0.44
       || brightness > FACE_CAPTURE_BRIGHTNESS_MAX * 1.03
-      || contrast < FACE_CAPTURE_CONTRAST_MIN * 0.46
-      || sharpness < FACE_CAPTURE_SHARPNESS_MIN * 0.24;
+      || contrast < minContrast * 0.4
+      || sharpness < minSharpness * 0.24;
     return { ok: false, blocking, reason, brightness, contrast, sharpness };
   };
 
@@ -2549,6 +2737,22 @@
     const completedCount = getCompletedFaceCaptureCount();
     const currentStepIndex = getCurrentFaceStepIndex();
     const registrationComplete = completedCount >= steps.length;
+    const acceptedCaptures = steps.reduce((items, step, index) => {
+      const image = state.face.captures[index];
+      if (!image) return items;
+      items.push({
+        image,
+        step,
+        index,
+        meta: state.face.captureMeta[index],
+      });
+      return items;
+    }, []);
+    const invalidCount = state.face.invalidIndices.length;
+    setFaceSavingOverlay(
+      state.face.submitting,
+      state.face.submitting ? "Validating captures and saving the registered face profile..." : "",
+    );
 
     if (refs.captureProgressText) refs.captureProgressText.textContent = `${completedCount} / ${steps.length} captures`;
     if (refs.submitFaceBtn) {
@@ -2556,6 +2760,11 @@
       refs.submitFaceBtn.textContent = state.face.submitting ? "Saving..." : "Save Face Registration";
     }
     if (refs.faceCaptureTarget) refs.faceCaptureTarget.textContent = profile.badgeText;
+    if (refs.captureGallerySubtitle) {
+      refs.captureGallerySubtitle.textContent = acceptedCaptures.length
+        ? `${acceptedCaptures.length} accepted image${acceptedCaptures.length === 1 ? "" : "s"} captured from inside the oval guide.`
+        : "Captured images from the oval guide appear here.";
+    }
 
     if (refs.startCaptureBtn) {
       refs.startCaptureBtn.disabled = state.face.started || registrationComplete || state.face.submitting;
@@ -2564,6 +2773,21 @@
 
     if (refs.resetCaptureBtn) {
       refs.resetCaptureBtn.disabled = state.face.submitting || (!state.face.started && completedCount === 0);
+    }
+
+    if (refs.openCaptureGalleryBtn) {
+      refs.openCaptureGalleryBtn.disabled = state.face.submitting;
+    }
+    if (refs.captureGalleryButtonText) {
+      if (acceptedCaptures.length && invalidCount) {
+        refs.captureGalleryButtonText.textContent = `${acceptedCaptures.length} image${acceptedCaptures.length === 1 ? "" : "s"} saved. ${invalidCount} retake${invalidCount === 1 ? "" : "s"} needed.`;
+      } else if (acceptedCaptures.length) {
+        refs.captureGalleryButtonText.textContent = `${acceptedCaptures.length} image${acceptedCaptures.length === 1 ? "" : "s"} ready to review.`;
+      } else if (invalidCount) {
+        refs.captureGalleryButtonText.textContent = `${invalidCount} retake${invalidCount === 1 ? "" : "s"} needed before saving.`;
+      } else {
+        refs.captureGalleryButtonText.textContent = "Open the gallery to review captured images.";
+      }
     }
 
     if (refs.faceCaptureProfileStandard) {
@@ -2585,30 +2809,33 @@
         return `<div class="rounded-2xl border ${toneClass} px-3 py-2">
             <p class="text-[10px] font-semibold uppercase tracking-[0.24em]">${index + 1}</p>
             <p class="mt-1 text-sm font-semibold text-slate-900">${esc(step.label)}</p>
-            <p class="mt-1 text-[11px] ${invalid ? "text-rose-600" : "text-slate-500"}">${esc(invalid ? describeInvalidFaceCapture(state.face.invalidCaptureDetails[index]?.reason) : step.instruction)}</p>
+            <p class="mt-1 text-[11px] ${invalid ? "text-rose-600" : "text-slate-500"}">${esc(invalid ? getInvalidFaceCaptureMessage(state.face.invalidCaptureDetails[index]) : step.instruction)}</p>
           </div>`;
       }).join("");
     }
 
     if (refs.captureGrid) {
-      refs.captureGrid.innerHTML = steps.map((step, index) => {
-        const image = state.face.captures[index];
-        const meta = state.face.captureMeta[index];
-        const invalid = state.face.invalidIndices.includes(index);
-        const invalidReason = describeInvalidFaceCapture(state.face.invalidCaptureDetails[index]?.reason);
-        return image
-          ? `<div class="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-              <img src="${image}" alt="${esc(step.label)}" class="h-24 w-full object-cover">
-              <div class="px-2 py-2">
-                <p class="text-[11px] font-semibold uppercase tracking-[0.22em] text-emerald-600">${index + 1}</p>
-                <p class="mt-1 text-xs font-semibold text-slate-900">${esc(meta?.label || step.label)}</p>
-              </div>
-            </div>`
-          : `<div class="flex h-24 flex-col items-center justify-center rounded-2xl border ${invalid ? "border-dashed border-rose-200 bg-rose-50 text-rose-600" : "border-dashed border-slate-200 bg-slate-50 text-slate-400"} px-2 text-center">
-              <p class="text-[11px] font-semibold">${esc(step.label)}</p>
-              <p class="mt-1 text-[10px] font-medium">${esc(invalid ? invalidReason : "Waiting for capture")}</p>
-            </div>`;
-      }).join("");
+      const invalidCards = state.face.invalidIndices.map((index) => {
+        const step = steps[index];
+        const invalidReason = getInvalidFaceCaptureMessage(state.face.invalidCaptureDetails[index]);
+        return `<div class="rounded-2xl border border-dashed border-rose-200 bg-rose-50 p-3">
+            <p class="text-[10px] font-semibold uppercase tracking-[0.22em] text-rose-600">Retake Needed</p>
+            <p class="mt-2 text-sm font-semibold text-slate-900">${esc(step?.label || `Angle ${index + 1}`)}</p>
+            <p class="mt-1 text-xs text-rose-700">${esc(invalidReason)}</p>
+          </div>`;
+      });
+      const acceptedCards = acceptedCaptures.map(({ image, step, index, meta }) => `<div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <img src="${image}" alt="${esc(step.label)}" class="aspect-[4/3] w-full object-cover">
+            <div class="px-3 py-3">
+              <p class="text-[10px] font-semibold uppercase tracking-[0.22em] text-emerald-600">${index + 1}</p>
+              <p class="mt-1 text-sm font-semibold text-slate-900">${esc(meta?.label || step.label)}</p>
+            </div>
+          </div>`);
+      refs.captureGrid.innerHTML = [...acceptedCards, ...invalidCards].join("") || `
+        <div class="col-span-full rounded-[24px] border border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-center">
+          <p class="text-sm font-semibold text-slate-900">No captured images yet</p>
+          <p class="mt-2 text-xs text-slate-500">Start registration and accepted images from inside the oval guide will appear here.</p>
+        </div>`;
     }
   };
 
@@ -2627,6 +2854,7 @@
         invalidCaptureDetails[index] = {
           reason: String(row?.reason || "validation_failed").trim(),
           label: String(row?.label || steps[index]?.label || "").trim(),
+          hint: String(row?.hint || "").trim(),
         };
       });
     }
@@ -2646,6 +2874,10 @@
 
     const currentStep = getCurrentFaceStep();
     const invalidLabels = invalidIndices.map((index) => steps[index]?.label || `Angle ${index + 1}`);
+    const invalidMessages = invalidIndices.map((index) => {
+      const label = steps[index]?.label || `Angle ${index + 1}`;
+      return `${label}: ${getInvalidFaceCaptureMessage(invalidCaptureDetails[index])}`;
+    });
     refs.guideText.textContent = currentStep?.instruction || "Retake the highlighted angles.";
     setFaceStatus(
       `Retake ${invalidIndices.length} rejected angle${invalidIndices.length > 1 ? "s" : ""}. Next: ${currentStep?.label || invalidLabels[0] || "Continue"}.`,
@@ -2654,7 +2886,7 @@
     showToast(
       `Only the rejected angle${invalidIndices.length > 1 ? "s need" : " needs"} to be captured again.`,
       true,
-      { title: "Retake Required", details: invalidLabels, duration: 7000 },
+      { title: "Retake Required", details: invalidMessages, duration: 8000 },
     );
 
     try {
@@ -2740,7 +2972,7 @@
       state.face.captureProfile = "standard";
     }
     if (refs.guideText) refs.guideText.textContent = "Press Start Registration to begin.";
-    setFaceStatus("Choose a capture profile, then start. Capture happens automatically once a clear face is inside the oval.");
+    setFaceStatus("Choose a capture profile, then start. Only the face area inside the oval is captured and processed, and small angle shifts are okay.");
     renderFaceState();
   };
 
@@ -2901,9 +3133,9 @@
       const softThreshold = Math.max((step.minScore || 0.7) - FACE_CAPTURE_SOFT_SCORE_DELTA, 0.36);
       const stableEnough = movedEnoughFromLastCapture
         && alignment.score >= softThreshold
-        && alignment.yawScore >= 0.12
-        && alignment.pitchScore >= 0.12
-        && alignment.rollScore >= 0.04;
+        && alignment.yawScore >= 0.08
+        && alignment.pitchScore >= 0.08
+        && alignment.rollScore >= 0.03;
       const nowMs = Date.now();
       const cooldownActive = nowMs < state.face.cooldownUntil;
 
@@ -3020,14 +3252,14 @@
       state.face.mesh.setOptions({
         maxNumFaces: 1,
         refineLandmarks: false,
-        minDetectionConfidence: 0.4,
-        minTrackingConfidence: 0.4,
+        minDetectionConfidence: 0.35,
+        minTrackingConfidence: 0.35,
       });
       state.face.mesh.onResults((results) => {
         state.face.lastResults = results || null;
       });
 
-      setFaceStatus("Camera ready. Keep one clear face inside the oval guide for auto-capture.");
+      setFaceStatus("Camera ready. Keep one clear face inside the oval guide. Only the oval area will be captured and processed.");
       setGuideRingState("idle");
       scheduleFaceFrameProcessing();
     } catch (_error) {
@@ -3058,7 +3290,7 @@
       refs.faceTitle.textContent = state.face.mode === "update" ? "Update Face Registration" : "Register Face";
       refs.faceSubtitle.textContent = `${student.name || ""} (${student.lrn || student.student_id || ""})`;
       refs.guideText.textContent = "Press Start Registration to begin.";
-      setFaceStatus("Choose a capture profile, then start. Capture happens automatically once a clear face is inside the oval.");
+      setFaceStatus("Choose a capture profile, then start. Only the face area inside the oval is captured and processed, and small angle shifts are okay.");
 
       showModal("faceModal");
       renderFaceState();
@@ -3082,9 +3314,9 @@
 
     try {
       state.face.submitting = true;
-      setFaceStatus("Saving face registration. Please wait...");
+      setFaceStatus("Validating captures and saving face registration. Please wait...");
       renderFaceState();
-      await api(url, {
+      const response = await api(url, {
         method: updateMode ? "PUT" : "POST",
         body: {
           faces: state.face.captures,
@@ -3093,12 +3325,20 @@
           capture_meta: state.face.captureMeta.map(({ fingerprint, ...meta }) => meta),
         },
       });
-      closeModal("faceModal");
-      if (updateMode) showFaceUpdateSuccessAnimation();
-      showToast(updateMode ? "Face updated successfully." : "Face registered successfully.");
+      closeModal("faceModal", { force: true });
+      const successMessage = updateMode
+        ? "Face registration updated successfully."
+        : "Face registered successfully.";
+      showCenteredSuccess(successMessage);
+      showToast(response.message || successMessage);
       void loadStudents();
     } catch (error) {
       const handled = await applyFaceValidationFailure(error.data);
+      showCenteredError(
+        handled
+          ? "Some face captures need to be retaken."
+          : (error.message || "Face registration failed."),
+      );
       if (!handled) {
         showToast(error.message, true);
       }
@@ -3829,6 +4069,7 @@
     });
 
     refs.submitFaceBtn?.addEventListener("click", submitFaceRegistration);
+    refs.openCaptureGalleryBtn?.addEventListener("click", () => showModal("captureGalleryModal"));
 
     document.querySelectorAll("[data-close]").forEach((button) => {
       button.addEventListener("click", () => closeModal(button.dataset.close));

@@ -200,6 +200,8 @@ SCAN_JPEG_QUALITY = env_int("SCAN_JPEG_QUALITY", 80, minimum=40, maximum=95)
 SCAN_CAPTURE_FLUSH_GRABS = env_int("SCAN_CAPTURE_FLUSH_GRABS", 2, minimum=0, maximum=10)
 SCAN_FORCE_RESIZE = env_bool("SCAN_FORCE_RESIZE", True)
 SCAN_FACE_INDEX_ALLOW_LEGACY_IMAGE_FALLBACK = env_bool("SCAN_FACE_INDEX_ALLOW_LEGACY_IMAGE_FALLBACK", False)
+SCAN_LIVE_IN_COOLDOWN_SECONDS = env_int("SCAN_LIVE_IN_COOLDOWN_SECONDS", SCAN_COOLDOWN_SECONDS, minimum=5, maximum=300)
+SCAN_LIVE_OUT_COOLDOWN_MINUTES = env_int("SCAN_LIVE_OUT_COOLDOWN_MINUTES", 5, minimum=5, maximum=60)
 SCAN_OUT_MINUTES = env_int("SCAN_OUT_MINUTES", 30, minimum=1, maximum=240)
 SCAN_REPEAT_SUPPRESSION_SECONDS = env_int("SCAN_REPEAT_SUPPRESSION_SECONDS", 20, minimum=5, maximum=120)
 SCAN_FACE_PRESENCE_RESET_SECONDS = env_int("SCAN_FACE_PRESENCE_RESET_SECONDS", 1, minimum=1, maximum=5)
@@ -211,6 +213,13 @@ FACE_REGISTRATION_CONFLICT_DISTANCE = env_float("FACE_REGISTRATION_CONFLICT_DIST
 FACE_REGISTRATION_CONFLICT_MEAN_DISTANCE = env_float("FACE_REGISTRATION_CONFLICT_MEAN_DISTANCE", 0.36, minimum=0.0, maximum=0.8)
 FACE_REGISTRATION_CONFLICT_SUPPORT_DISTANCE = env_float("FACE_REGISTRATION_CONFLICT_SUPPORT_DISTANCE", 0.40, minimum=0.0, maximum=0.8)
 FACE_REGISTRATION_CONFLICT_SUPPORT_COUNT = env_int("FACE_REGISTRATION_CONFLICT_SUPPORT_COUNT", 3, minimum=1, maximum=10)
+FACE_REGISTRATION_BRIGHTNESS_MIN = env_float("FACE_REGISTRATION_BRIGHTNESS_MIN", 12.0, minimum=0.0, maximum=255.0)
+FACE_REGISTRATION_BRIGHTNESS_MAX = env_float("FACE_REGISTRATION_BRIGHTNESS_MAX", 250.0, minimum=0.0, maximum=255.0)
+FACE_REGISTRATION_CONTRAST_MIN = env_float("FACE_REGISTRATION_CONTRAST_MIN", 4.5, minimum=0.0, maximum=100.0)
+FACE_REGISTRATION_SHARPNESS_MIN = env_float("FACE_REGISTRATION_SHARPNESS_MIN", 3.8, minimum=0.0, maximum=200.0)
+FACE_REGISTRATION_LOW_LIGHT_BRIGHTNESS = env_float("FACE_REGISTRATION_LOW_LIGHT_BRIGHTNESS", 80.0, minimum=0.0, maximum=255.0)
+FACE_REGISTRATION_LOW_LIGHT_SHARPNESS_MIN = env_float("FACE_REGISTRATION_LOW_LIGHT_SHARPNESS_MIN", 2.2, minimum=0.0, maximum=200.0)
+FACE_REGISTRATION_ENCODING_JITTERS = env_int("FACE_REGISTRATION_ENCODING_JITTERS", 1, minimum=1, maximum=4)
 RECOGNITION_TOLERANCE = env_float("RECOGNITION_TOLERANCE", 0.45, minimum=0.2, maximum=0.75)
 RECOGNITION_SCORE_TOLERANCE = env_float("RECOGNITION_SCORE_TOLERANCE", 0.47, minimum=0.2, maximum=0.8)
 RECOGNITION_SUPPORT_TOLERANCE = env_float("RECOGNITION_SUPPORT_TOLERANCE", 0.50, minimum=0.2, maximum=0.8)
@@ -2587,6 +2596,12 @@ def normalize_attendance_schedule(raw_schedule=None):
         minimum=1,
         maximum=240,
     )
+    scan_in_cooldown_seconds = clamp_int_value(
+        schedule.get("scan_in_cooldown_seconds"),
+        SCAN_LIVE_IN_COOLDOWN_SECONDS,
+        minimum=5,
+        maximum=300,
+    )
     return {
         "morning_start": morning_start,
         "morning_late": morning_late,
@@ -2596,6 +2611,7 @@ def normalize_attendance_schedule(raw_schedule=None):
         "afternoon_end": afternoon_end,
         "late_threshold_minutes": late_threshold_minutes,
         "scan_cooldown_minutes": scan_cooldown_minutes,
+        "scan_in_cooldown_seconds": scan_in_cooldown_seconds,
     }
 
 
@@ -2709,6 +2725,15 @@ def normalize_scan_session_mode(value, default="auto"):
     if mode not in VALID_SCAN_SESSION_MODES:
         raise ValueError("Invalid session mode. Allowed values: auto, manual_in, manual_out.")
     return mode
+
+
+def scan_mode_forced_gate_action(mode=None):
+    normalized_mode = normalize_scan_session_mode(mode or get_scan_session_mode(), default="auto")
+    if normalized_mode == "manual_in":
+        return "IN"
+    if normalized_mode == "manual_out":
+        return "OUT"
+    return ""
 
 
 def scan_session_mode_label(mode):
@@ -2977,12 +3002,13 @@ def build_scan_activity_entry(student_id, student_name, gate_action, status, ver
     }
 
 
-def should_suppress_persistent_face_scan(student_id, now_ts=None):
+def should_suppress_persistent_face_scan(student_id, now_ts=None, mode=None):
     normalized_student_id = str(student_id or "").strip()
     if not normalized_student_id:
         return False
 
     current_ts = float(now_ts if now_ts is not None else time.time())
+    requested_action = scan_mode_forced_gate_action(mode)
     with scan_lock:
         lock_entry = scan_presence_locks.get(normalized_student_id)
         if not lock_entry:
@@ -2991,25 +3017,37 @@ def should_suppress_persistent_face_scan(student_id, now_ts=None):
         if current_ts - last_seen_ts > float(SCAN_FACE_PRESENCE_RESET_SECONDS):
             scan_presence_locks.pop(normalized_student_id, None)
             return False
+        locked_action = normalize_gate_action_value((lock_entry or {}).get("gate_action"))
+        if requested_action and locked_action and requested_action != locked_action:
+            scan_presence_locks.pop(normalized_student_id, None)
+            return False
         lock_entry["last_seen_ts"] = current_ts
         return True
 
 
-def should_suppress_recent_live_scan(student_id, now_ts=None):
+def should_suppress_recent_live_scan(student_id, now_ts=None, mode=None):
     normalized_student_id = str(student_id or "").strip()
     if not normalized_student_id:
         return False
 
     current_ts = float(now_ts if now_ts is not None else time.time())
+    requested_action = scan_mode_forced_gate_action(mode)
     with scan_lock:
-        cooldown_until = float(last_scanned.get(normalized_student_id, 0) or 0.0)
+        cooldown_entry = last_scanned.get(normalized_student_id)
+        if isinstance(cooldown_entry, dict):
+            cooldown_until = float(cooldown_entry.get("until_ts") or 0.0)
+            cooldown_action = normalize_gate_action_value(cooldown_entry.get("gate_action"))
+        else:
+            cooldown_until = float(cooldown_entry or 0.0)
+            cooldown_action = ""
         if current_ts < cooldown_until:
-            return True
+            if not (requested_action and cooldown_action and requested_action != cooldown_action):
+                return True
 
-    return should_suppress_persistent_face_scan(normalized_student_id, current_ts)
+    return should_suppress_persistent_face_scan(normalized_student_id, current_ts, mode=mode)
 
 
-def mark_persistent_face_scan(student_id, now_ts=None):
+def mark_persistent_face_scan(student_id, now_ts=None, gate_action=None):
     normalized_student_id = str(student_id or "").strip()
     if not normalized_student_id:
         return
@@ -3018,6 +3056,7 @@ def mark_persistent_face_scan(student_id, now_ts=None):
     with scan_lock:
         scan_presence_locks[normalized_student_id] = {
             "last_seen_ts": current_ts,
+            "gate_action": normalize_gate_action_value(gate_action),
         }
 
 
@@ -3040,6 +3079,19 @@ def build_gate_scan_result(attendance_collection, school_year_label, student, no
         maximum=240,
     )
     scan_cooldown_seconds = scan_cooldown_minutes * 60
+    scan_in_cooldown_seconds = clamp_int_value(
+        runtime_schedule.get("scan_in_cooldown_seconds"),
+        SCAN_LIVE_IN_COOLDOWN_SECONDS,
+        minimum=5,
+        maximum=300,
+    )
+    scan_out_cooldown_minutes = clamp_int_value(
+        SCAN_LIVE_OUT_COOLDOWN_MINUTES,
+        5,
+        minimum=5,
+        maximum=60,
+    )
+    scan_out_cooldown_seconds = scan_out_cooldown_minutes * 60
     timestamp = now.isoformat(timespec="seconds")
     now_ts = float(now.timestamp())
     date_str = now.strftime("%Y-%m-%d")
@@ -3058,17 +3110,21 @@ def build_gate_scan_result(attendance_collection, school_year_label, student, no
     last_record_dt = parse_gate_record_datetime(last_record)
     last_status = str((last_record or {}).get("status") or "Present").strip().title() or "Present"
     elapsed_since_last = None
+    last_record_ts = None
     if last_record_dt is not None:
         elapsed_since_last = max((now - last_record_dt).total_seconds(), 0.0)
-    next_allowed_scan_ts = now_ts + scan_cooldown_seconds
-    if last_record_dt is not None:
-        next_allowed_scan_ts = max(float(last_record_dt.timestamp()) + scan_cooldown_seconds, now_ts)
+        last_record_ts = float(last_record_dt.timestamp())
+    in_transition_allowed_scan_ts = now_ts + scan_cooldown_seconds
+    out_reentry_allowed_scan_ts = now_ts + scan_out_cooldown_seconds
+    if last_record_ts is not None:
+        in_transition_allowed_scan_ts = max(last_record_ts + scan_cooldown_seconds, now_ts)
+        out_reentry_allowed_scan_ts = max(last_record_ts + scan_out_cooldown_seconds, now_ts)
 
     status_hint = session_info_for_time(now)
     in_status = str(status_hint.get("status") or "Present").strip().title() or "Present"
     out_status = "Holiday" if in_status == "Holiday" else "Present"
 
-    def duplicate_result(message, voice_message, action=None, status=None, reason="duplicate"):
+    def duplicate_result(message, voice_message, action=None, status=None, reason="duplicate", cooldown_until_ts=None):
         resolved_action = normalize_gate_action_value(action or last_action or "IN")
         resolved_status = str(status or last_status or "Present").strip().title() or "Present"
         return {
@@ -3092,13 +3148,30 @@ def build_gate_scan_result(attendance_collection, school_year_label, student, no
             "activity_entry": None,
             "tracking_mode": normalized_mode,
             "scan_cooldown_minutes": scan_cooldown_minutes,
-            "next_allowed_scan_ts": next_allowed_scan_ts,
+            "scan_in_cooldown_seconds": scan_in_cooldown_seconds,
+            "scan_out_cooldown_minutes": scan_out_cooldown_minutes,
+            "next_allowed_scan_ts": float(cooldown_until_ts if cooldown_until_ts is not None else now_ts),
         }
 
-    allow_immediate_reentry = last_action == "OUT" and normalized_mode in {"auto", "manual_in"}
+    manual_override_enabled = normalized_mode in {"manual_in", "manual_out"}
+    allow_immediate_reentry = last_action == "OUT" and normalized_mode == "auto"
+
+    if not manual_override_enabled and last_action == "OUT" and last_record_dt is not None:
+        elapsed_since_out = max((now - last_record_dt).total_seconds(), 0.0)
+        if elapsed_since_out < scan_out_cooldown_seconds:
+            remaining_seconds = max(scan_out_cooldown_seconds - elapsed_since_out, 0.0)
+            return duplicate_result(
+                f"Already OUT - wait {format_wait_time_short(remaining_seconds)} before scanning again.",
+                "Please wait before scanning again",
+                action="OUT",
+                status=last_status,
+                reason="out_cooldown",
+                cooldown_until_ts=out_reentry_allowed_scan_ts,
+            )
 
     if (
-        elapsed_since_last is not None
+        not manual_override_enabled
+        and elapsed_since_last is not None
         and elapsed_since_last < SCAN_REPEAT_SUPPRESSION_SECONDS
         and not allow_immediate_reentry
     ):
@@ -3108,27 +3181,12 @@ def build_gate_scan_result(attendance_collection, school_year_label, student, no
             action=last_action or "IN",
             status=last_status,
             reason="repeat_suppressed",
+            cooldown_until_ts=max((last_record_ts or now_ts) + float(SCAN_REPEAT_SUPPRESSION_SECONDS), now_ts),
         )
 
     if normalized_mode == "manual_in":
-        if last_action == "IN":
-            return duplicate_result(
-                "Already marked IN.",
-                "Already checked in",
-                action="IN",
-                status=last_status,
-                reason="already_in",
-            )
         next_action = "IN"
     elif normalized_mode == "manual_out":
-        if last_action != "IN" or last_record_dt is None:
-            return duplicate_result(
-                "IN is required before OUT.",
-                "Check in first",
-                action=last_action or "IN",
-                status=last_status,
-                reason="out_requires_in",
-            )
         next_action = "OUT"
     else:
         if last_action == "IN" and last_record_dt is not None:
@@ -3140,12 +3198,13 @@ def build_gate_scan_result(attendance_collection, school_year_label, student, no
                     action="IN",
                     status=last_status,
                     reason="out_wait_period",
+                    cooldown_until_ts=in_transition_allowed_scan_ts,
                 )
             next_action = "OUT"
         else:
             next_action = "IN"
 
-    if next_action == "IN" and last_action == "IN":
+    if not manual_override_enabled and next_action == "IN" and last_action == "IN":
         return duplicate_result(
             "Already marked IN.",
             "Already checked in",
@@ -3154,7 +3213,7 @@ def build_gate_scan_result(attendance_collection, school_year_label, student, no
             reason="already_in",
         )
 
-    if next_action == "OUT" and last_action == "OUT":
+    if not manual_override_enabled and next_action == "OUT" and last_action == "OUT":
         return duplicate_result(
             "Already marked OUT.",
             "Already checked out",
@@ -3196,7 +3255,9 @@ def build_gate_scan_result(attendance_collection, school_year_label, student, no
         "activity_entry": activity_entry,
         "tracking_mode": normalized_mode,
         "scan_cooldown_minutes": scan_cooldown_minutes,
-        "next_allowed_scan_ts": now_ts if next_action == "OUT" else now_ts + scan_cooldown_seconds,
+        "scan_in_cooldown_seconds": scan_in_cooldown_seconds,
+        "scan_out_cooldown_minutes": scan_out_cooldown_minutes,
+        "next_allowed_scan_ts": now_ts + (scan_out_cooldown_seconds if next_action == "OUT" else scan_in_cooldown_seconds),
     }
 
 
@@ -5412,6 +5473,24 @@ def log_attendance_and_sms(student, source="gate_scan", send_notifications=True,
     }
 
 
+def resolve_live_scan_repeat_hold_seconds(result, now_ts=None):
+    if not isinstance(result, dict):
+        return 0.0
+
+    current_ts = float(now_ts if now_ts is not None else time.time())
+    duplicate_reason = str(result.get("duplicate_reason") or "").strip().lower()
+    next_allowed_scan_ts = float(result.get("next_allowed_scan_ts") or 0.0)
+    remaining_seconds = max(next_allowed_scan_ts - current_ts, 0.0)
+
+    if not result.get("duplicate"):
+        return remaining_seconds
+    if duplicate_reason == "out_cooldown":
+        return remaining_seconds
+    if duplicate_reason in {"already_out", "out_requires_in"}:
+        return 2.0
+    return float(SCAN_COOLDOWN_SECONDS)
+
+
 def handle_verified_student(student, confidence=0.0):
     now_ts = time.time()
     student_id = (student.get("student_id") or "").strip()
@@ -5420,29 +5499,27 @@ def handle_verified_student(student, confidence=0.0):
         return None
 
     current_mode = get_scan_session_mode()
-    if should_suppress_recent_live_scan(student_id, now_ts):
+    if should_suppress_recent_live_scan(student_id, now_ts, mode=current_mode):
         return None
 
     result = log_attendance_and_sms(student, mode=current_mode)
     if not result:
         return None
 
-    gate_action = normalize_gate_action_value(result.get("gate_action"))
-    duplicate_reason = str(result.get("duplicate_reason") or "").strip().lower()
-    if gate_action == "OUT":
-        repeat_hold_seconds = 1.0
-    elif duplicate_reason in {"already_out", "out_requires_in"}:
-        repeat_hold_seconds = 2.0
-    else:
-        repeat_hold_seconds = float(SCAN_COOLDOWN_SECONDS)
+    repeat_hold_seconds = resolve_live_scan_repeat_hold_seconds(result, now_ts=now_ts)
+    result_gate_action = normalize_gate_action_value(result.get("gate_action"))
 
     with scan_lock:
-        last_scanned[student_id] = now_ts + max(repeat_hold_seconds, 0.0)
+        last_scanned[student_id] = {
+            "until_ts": now_ts + max(repeat_hold_seconds, 0.0),
+            "gate_action": result_gate_action,
+            "mode": normalize_scan_session_mode(current_mode, default="auto"),
+        }
 
     if result["duplicate"]:
         return None
 
-    mark_persistent_face_scan(student_id, now_ts)
+    mark_persistent_face_scan(student_id, now_ts, gate_action=result_gate_action)
 
     result_session = str(result.get("session") or "")
     push_scan_event("verified", {
@@ -7265,6 +7342,7 @@ def process_client_frame(frame_bytes):
             db_encodings = scan_state.get("known_encodings", np.empty((0, 128), dtype=np.float64))
             db_students = scan_state.get("known_students", [])
             model_status = scan_state.get("model_status", "idle")
+            session_mode = normalize_scan_session_mode(scan_state.get("session_mode", "auto"), default="auto")
         
         if not active:
             return False, "Scan not active", payload
@@ -7400,7 +7478,7 @@ def process_client_frame(frame_bytes):
                     continue
 
                 candidate_student_id = str(candidate.get("student_id") or "").strip()
-                if candidate_student_id and should_suppress_recent_live_scan(candidate_student_id, frame_now_ts):
+                if candidate_student_id and should_suppress_recent_live_scan(candidate_student_id, frame_now_ts, mode=session_mode):
                     clear_pending_live_recognition(candidate_student_id)
                     continue
                 face_quality = measure_live_face_quality(frame, face_location_small, scale_back=scale_back)
@@ -8769,6 +8847,56 @@ def parse_face_capture_meta(raw_meta):
     return parsed
 
 
+def measure_face_capture_quality(img_np):
+    gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
+    brightness = float(np.mean(gray))
+    contrast = float(np.std(gray))
+    sharpness = float(cv2.Laplacian(gray, cv2.CV_64F).var())
+    low_light = brightness < FACE_REGISTRATION_LOW_LIGHT_BRIGHTNESS
+    min_sharpness = FACE_REGISTRATION_LOW_LIGHT_SHARPNESS_MIN if low_light else FACE_REGISTRATION_SHARPNESS_MIN
+
+    reason = ""
+    hint = ""
+    if brightness < FACE_REGISTRATION_BRIGHTNESS_MIN:
+        reason = "too_dark"
+        hint = "Increase front lighting or face the screen light before saving."
+    elif brightness > FACE_REGISTRATION_BRIGHTNESS_MAX and contrast < FACE_REGISTRATION_CONTRAST_MIN * 1.35:
+        reason = "too_bright"
+        hint = "Reduce glare or step away from strong backlight."
+    elif contrast < FACE_REGISTRATION_CONTRAST_MIN and sharpness < max(min_sharpness * 1.1, FACE_REGISTRATION_SHARPNESS_MIN):
+        reason = "low_contrast"
+        hint = "Use steadier lighting so the face stands out from the background."
+    elif sharpness < min_sharpness:
+        reason = "blurry"
+        hint = "Hold still for a slightly sharper face image."
+
+    return {
+        "ok": not reason,
+        "reason": reason,
+        "hint": hint,
+        "brightness": round(brightness, 2),
+        "contrast": round(contrast, 2),
+        "sharpness": round(sharpness, 2),
+    }
+
+
+def build_face_capture_variants(img_np):
+    variants = [img_np]
+    try:
+        lab = cv2.cvtColor(img_np, cv2.COLOR_RGB2LAB)
+        l_channel, a_channel, b_channel = cv2.split(lab)
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        balanced = cv2.cvtColor(cv2.merge((clahe.apply(l_channel), a_channel, b_channel)), cv2.COLOR_LAB2RGB)
+        variants.append(balanced)
+
+        softened = cv2.GaussianBlur(balanced, (0, 0), 1.15)
+        sharpened = cv2.addWeighted(balanced, 1.32, softened, -0.32, 0)
+        variants.append(sharpened)
+    except Exception:
+        pass
+    return variants
+
+
 def validate_face_capture_image(raw_face):
     try:
         img_b64 = raw_face.split(",", 1)[1]
@@ -8788,47 +8916,89 @@ def validate_face_capture_image(raw_face):
             resized_height = max(1, int(round(height * scale)))
             img_np = cv2.resize(img_np, (resized_width, resized_height), interpolation=cv2.INTER_AREA)
 
+        quality = measure_face_capture_quality(img_np)
         face_locations = []
-        for upsample in (1, 2):
-            face_locations = face_recognition.face_locations(
-                img_np,
-                number_of_times_to_upsample=upsample,
-                model="hog",
-            )
+        multiple_faces_detected = False
+        for candidate_img in build_face_capture_variants(img_np):
+            for upsample in (0, 1, 2):
+                face_locations = face_recognition.face_locations(
+                    candidate_img,
+                    number_of_times_to_upsample=upsample,
+                    model="hog",
+                )
+                if len(face_locations) > 1:
+                    multiple_faces_detected = True
+                if len(face_locations) == 1:
+                    break
             if len(face_locations) == 1:
                 break
         if len(face_locations) != 1:
-            return None
+            reason = "multiple_faces" if multiple_faces_detected else (quality.get("reason") or "face_not_found")
+            hint = (
+                "Keep only one face inside the guide while registering."
+                if reason == "multiple_faces"
+                else quality.get("hint") or "Keep the face centered and use a slightly straighter angle."
+            )
+            return {
+                "ok": False,
+                "reason": reason,
+                "hint": hint,
+                "brightness": quality["brightness"],
+                "contrast": quality["contrast"],
+                "sharpness": quality["sharpness"],
+            }
 
         top, right, bottom, left = face_locations[0]
         face_height = max(0, bottom - top)
         face_width = max(0, right - left)
-        if face_height < img_np.shape[0] * 0.16 or face_width < img_np.shape[1] * 0.13:
-            return None
+        if face_height < img_np.shape[0] * 0.13 or face_width < img_np.shape[1] * 0.11:
+            return {
+                "ok": False,
+                "reason": "face_too_small",
+                "hint": "Move a little closer so the face fills more of the guide.",
+                "brightness": quality["brightness"],
+                "contrast": quality["contrast"],
+                "sharpness": quality["sharpness"],
+            }
 
-        gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
-        brightness = float(np.mean(gray))
-        contrast = float(np.std(gray))
-        sharpness = float(cv2.Laplacian(gray, cv2.CV_64F).var())
-        if brightness < 16 or brightness > 248 or contrast < 6 or sharpness < 5:
-            return None
+        if not quality["ok"]:
+            return {
+                "ok": False,
+                "reason": quality["reason"],
+                "hint": quality["hint"],
+                "brightness": quality["brightness"],
+                "contrast": quality["contrast"],
+                "sharpness": quality["sharpness"],
+            }
 
         enc_rows = face_recognition.face_encodings(
             img_np,
             known_face_locations=face_locations,
-            num_jitters=2,
+            num_jitters=FACE_REGISTRATION_ENCODING_JITTERS,
         )
         if not enc_rows:
-            return None
+            return {
+                "ok": False,
+                "reason": "encoding_failed",
+                "hint": "Use a slightly straighter angle with the full face visible.",
+                "brightness": quality["brightness"],
+                "contrast": quality["contrast"],
+                "sharpness": quality["sharpness"],
+            }
         return {
+            "ok": True,
             "encoding": enc_rows[0],
-            "brightness": round(brightness, 2),
-            "contrast": round(contrast, 2),
-            "sharpness": round(sharpness, 2),
+            "brightness": quality["brightness"],
+            "contrast": quality["contrast"],
+            "sharpness": quality["sharpness"],
         }
     except Exception as exc:
         print(f"[WARNING] Face encoding skipped: {exc}")
-        return None
+        return {
+            "ok": False,
+            "reason": "validation_failed",
+            "hint": "Retake this angle with the full face visible and steady.",
+        }
 
 
 def parse_faces_payload(data):
@@ -8883,10 +9053,16 @@ def parse_faces_payload(data):
             "instruction": meta_row.get("instruction") or "",
         }
         validated = validate_face_capture_image(raw_face)
-        if not validated:
+        if not validated or not validated.get("ok"):
             invalid_captures.append({
                 **row_detail,
-                "reason": "validation_failed",
+                "reason": (validated or {}).get("reason") or "validation_failed",
+                "hint": (validated or {}).get("hint") or "",
+                "quality": {
+                    "brightness": (validated or {}).get("brightness"),
+                    "contrast": (validated or {}).get("contrast"),
+                    "sharpness": (validated or {}).get("sharpness"),
+                },
             })
             continue
 
@@ -8898,6 +9074,7 @@ def parse_faces_payload(data):
                     invalid_captures.append({
                         **row_detail,
                         "reason": "duplicate",
+                        "hint": "Shift to the next guided angle so this capture is more distinct.",
                     })
                     continue
             except Exception:
@@ -13010,7 +13187,8 @@ def early_timeout_page():
     sy = resolve_selected_school_year(request.args.get("school_year", ""))
     pending_count = 0
     try:
-        pending_count = int(early_timeout_requests.count_documents({"status": "pending"}))
+        eto_collection, _, _ = get_early_timeout_requests_storage(sy)
+        pending_count = int(eto_collection.count_documents({"status": "pending"}))
     except Exception:
         pass
     return render_template(
@@ -13026,7 +13204,9 @@ def api_eto_count():
     if not login_required():
         return jsonify({"status": "error", "message": "Unauthorized"}), 401
     try:
-        count = int(early_timeout_requests.count_documents({"status": "pending"}))
+        school_year = resolve_selected_school_year(request.args.get("school_year", ""))
+        eto_collection, _, _ = get_early_timeout_requests_storage(school_year)
+        count = int(eto_collection.count_documents({"status": "pending"}))
         return jsonify({"status": "ok", "pending_count": count})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -13041,6 +13221,7 @@ def api_eto_submit():
     reason = str(data.get("reason") or "").strip()
     urgency = str(data.get("urgency") or "normal").strip().lower()
     notes = str(data.get("notes") or "").strip()
+    requested_by = str(data.get("requested_by") or "").strip()
     if not student_id:
         return jsonify({"status": "error", "message": "Student ID is required."}), 400
     if len(reason) < 5:
@@ -13063,7 +13244,7 @@ def api_eto_submit():
     now = now_local()
     now_str = now.isoformat()
     date_str = now.strftime("%Y-%m-%d")
-    submitted_by = session.get("admin", "staff")
+    submitted_by = requested_by[:120] or str(session.get("admin", "staff") or "staff").strip()
 
     doc = {
         "student_id": student_id,
@@ -13260,7 +13441,9 @@ def api_eto_delete(request_id):
         oid = ObjectId(request_id)
     except Exception:
         return jsonify({"status": "error", "message": "Invalid request ID."}), 400
-    result = early_timeout_requests.delete_one({"_id": oid})
+    school_year = resolve_selected_school_year(request.args.get("school_year", ""))
+    eto_collection, _, _ = get_early_timeout_requests_storage(school_year)
+    result = eto_collection.delete_one({"_id": oid})
     if result.deleted_count == 0:
         return jsonify({"status": "error", "message": "Request not found."}), 404
     return jsonify({"status": "ok", "message": "Request deleted."})
@@ -13300,6 +13483,7 @@ def api_update_default_schedule():
         "afternoon_end": payload.get("afternoon_end", "17:00"),
         "late_threshold_minutes": payload.get("late_threshold_minutes", 15),
         "scan_cooldown_minutes": payload.get("scan_cooldown_minutes", 30),
+        "scan_in_cooldown_seconds": payload.get("scan_in_cooldown_seconds", SCAN_LIVE_IN_COOLDOWN_SECONDS),
     }
     schedule_data = normalize_attendance_schedule(raw_schedule)
 

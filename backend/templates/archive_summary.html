@@ -22,25 +22,23 @@
 
     <div class="flex-1 flex min-w-0 flex-col overflow-hidden">
       <header class="app-page-header shrink-0">
-        <div class="flex h-full min-w-0 items-center justify-between gap-4">
-          <div class="app-header-leading">
-            <button @click="mobileMenuOpen = true" class="app-header-icon-btn md:hidden">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-            </button>
-            <div class="hidden sm:block">
-              <h1 class="app-header-title">Archive Summary</h1>
-              <p class="app-header-subtitle">Active versus archived record counts by school year.</p>
-            </div>
+        <div class="app-header-leading min-w-0 flex-1">
+          <button @click="mobileMenuOpen = true" class="app-header-icon-btn md:hidden">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+          <div class="hidden min-w-0 sm:block">
+            <h1 class="app-header-title">Archive Summary</h1>
+            <p class="app-header-subtitle">Active versus archived record counts by school year.</p>
           </div>
-          <div class="app-header-actions">
-            <span class="hidden rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-600 sm:inline-flex">
-              Generated {{ generated_at_label }}
-            </span>
-            {% set theme_toggle_classes = 'app-header-icon-btn' %}
-            {% include 'partials/theme_toggle_button.html' %}
-          </div>
+        </div>
+        <div class="app-header-actions shrink-0">
+          <span class="hidden rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-600 md:inline-flex">
+            Generated {{ generated_at_label }}
+          </span>
+          {% set theme_toggle_classes = 'app-header-icon-btn' %}
+          {% include 'partials/theme_toggle_button.html' %}
         </div>
       </header>
 

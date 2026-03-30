@@ -1045,35 +1045,6 @@
             color: var(--app-text);
         }
 
-        .dashboard-eto-card {
-            display: flex;
-            min-height: 100%;
-            flex-direction: column;
-            gap: 1rem;
-            padding: 1.35rem;
-            text-decoration: none;
-        }
-
-        .dashboard-eto-icon {
-            display: inline-flex;
-            height: 2.5rem;
-            width: 2.5rem;
-            align-items: center;
-            justify-content: center;
-            border-radius: 1rem;
-            border: 1px solid rgba(var(--section-accent), 0.16);
-            background:
-                linear-gradient(180deg, rgba(255, 255, 255, 0.97), rgba(248, 250, 252, 0.92)),
-                linear-gradient(135deg, rgba(var(--section-accent), 0.05), rgba(var(--section-accent), 0.012));
-            color: rgba(var(--section-accent), 0.96);
-        }
-
-        .dashboard-eto-card:hover {
-            background:
-                linear-gradient(180deg, rgba(255, 255, 255, 1), rgba(248, 250, 252, 0.96)),
-                linear-gradient(135deg, rgba(var(--section-accent), 0.08), rgba(var(--section-accent), 0.02));
-        }
-
         .gate-console-shell.dashboard-section-card {
             background:
                 linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.94)),
@@ -1251,12 +1222,6 @@
                 justify-content: center;
             }
 
-            .dashboard-eto-card {
-                padding: 1.1rem;
-            }
-        }
-
-        @media (max-width: 640px) {
             .dashboard-main {
                 padding: 1rem;
             }
@@ -1296,18 +1261,13 @@
             margin: auto;
         }
 
-        body.staff-dashboard #gateConsoleColumn {
+        #gateConsoleColumn {
             width: 100%;
         }
 
-        body.staff-dashboard #gateSecondaryColumn {
-            display: none !important;
-        }
-
-        body.staff-dashboard #gateConsoleCard {
+        #gateConsoleCard {
             margin: auto;
             width: 100%;
-            padding: 1.25rem;
             display: flex;
             flex-direction: column;
             border-radius: 1.5rem;
@@ -1362,11 +1322,11 @@
             color: rgb(253 164 175);
         }
 
-        body.staff-dashboard #gateConsoleCard .gate-console-divider {
+        #gateConsoleCard .gate-console-divider {
             padding-bottom: 1rem;
         }
 
-        body.staff-dashboard #gateConsoleLayout {
+        #gateConsoleLayout {
             display: grid;
             grid-template-columns: minmax(0, 1fr) 18rem;
             gap: 1.5rem;
@@ -1376,18 +1336,18 @@
             align-items: stretch;
         }
 
-        body.staff-dashboard #gateCameraColumn {
+        #gateCameraColumn {
             order: 1;
             min-width: 0;
         }
 
-        body.staff-dashboard #gateControlsColumn {
+        #gateControlsColumn {
             order: 2;
             min-width: 0;
             align-self: stretch;
         }
 
-        body.staff-dashboard #gateControlsColumn .gate-console-panel {
+        #gateControlsColumn .gate-console-panel {
             display: flex;
             height: 100%;
             min-height: 0;
@@ -1395,17 +1355,17 @@
             justify-content: center;
         }
 
-        body.staff-dashboard #gateControlsColumn .gate-console-control-actions {
+        #gateControlsColumn .gate-console-control-actions {
             flex-direction: column;
             align-items: stretch;
         }
 
-        body.staff-dashboard #gateControlsColumn .gate-console-control-actions > button {
+        #gateControlsColumn .gate-console-control-actions > button {
             justify-content: center;
             width: 100%;
         }
 
-        body.staff-dashboard #gateCameraColumn .gate-console-panel {
+        #gateCameraColumn .gate-console-panel {
             height: 100%;
         }
 
@@ -1420,11 +1380,7 @@
                 padding: 1rem 0.5rem;
             }
 
-            body.staff-dashboard #gateConsoleCard {
-                padding: 1rem;
-            }
-
-            body.staff-dashboard #gateConsoleLayout {
+            #gateConsoleLayout {
                 grid-template-columns: 1fr;
                 gap: 1.25rem;
             }
@@ -1727,8 +1683,8 @@
                 </section>
 
                 <!-- GATE + SEARCH -->
-                <section id="gate-scanning" class="grid w-full grid-cols-1 gap-5 xl:grid-cols-12 items-stretch">
-                    <div id="gateConsoleColumn" class="xl:col-span-10">
+                <section id="gate-scanning" class="grid w-full grid-cols-1 gap-5 items-stretch">
+                    <div id="gateConsoleColumn" class="w-full">
                         <div id="gateConsoleCard"
                             class="gate-console-shell dashboard-section-card dashboard-section-card--emerald p-5 lg:p-6">
                             <div class="gate-console-divider flex flex-wrap items-start justify-between gap-4 border-b pb-5">
@@ -1869,29 +1825,6 @@
                                 </div>
                             </div>
                         </div>
-                    </div>
-
-                    <div id="gateSecondaryColumn" class="xl:col-span-2 flex min-h-0 w-full">
-                        <a href="/early-timeout" class="dashboard-card dashboard-section-card dashboard-section-card--emerald dashboard-eto-card h-full w-full group">
-                            <div class="flex items-start justify-between gap-3">
-                                <span class="dashboard-eto-icon">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-6 0v-1m6 0H9" />
-                                    </svg>
-                                </span>
-                                <span id="dashboardETOBadge" class="inline-flex items-center rounded-full bg-amber-500 px-2 py-0.5 text-[11px] font-bold text-white {% if pending_eto_count|default(0) == 0 %}hidden{% endif %}">
-                                    {{ pending_eto_count|default(0) }}
-                                </span>
-                            </div>
-                            <div>
-                                <p class="dashboard-section-kicker">Early Time-Out</p>
-                                <h3 class="dashboard-section-title">Pending Requests</h3>
-                                <p class="dashboard-section-note">Review and process early dismissal requests without leaving the dashboard.</p>
-                            </div>
-                            <div class="mt-auto flex items-center text-[11px] font-semibold text-emerald-700 transition group-hover:translate-x-1">
-                                View Requests &rarr;
-                            </div>
-                        </a>
                     </div>
                 </section>
 
@@ -4417,7 +4350,7 @@
         });
         document.addEventListener('fullscreenchange', updateScanFullscreenButton);
         document.addEventListener('webkitfullscreenchange', updateScanFullscreenButton);
-        document.addEventListener('msfullscreenchange', updateScanFullscreenButton);
+       document.addEventListener('msfullscreenchange', updateScanFullscreenButton);
         window.addEventListener('resize', () => {
             if ((!scanFaceOverlayCanvas || scanFaceOverlayCanvas.classList.contains('hidden')) && scanRenderedFaceTracks.size === 0) return;
             resizeScanFaceOverlayCanvas();

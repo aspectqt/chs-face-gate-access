@@ -89,6 +89,10 @@
                             <label class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Scan Cooldown (Minutes)</label>
                             <input type="number" id="sch_scan_cooldown_minutes" min="1" max="240" class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300">
                         </div>
+                        <div>
+                            <label class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">IN Repeat Cooldown (Seconds)</label>
+                            <input type="number" id="sch_scan_in_cooldown_seconds" min="5" max="300" class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300">
+                        </div>
                     </div>
                 </section>
 
@@ -231,6 +235,7 @@
                     document.getElementById('sch_afternoon_end').value = s.afternoon_end || '17:00';
                     document.getElementById('sch_late_threshold_minutes').value = s.late_threshold_minutes || 15;
                     document.getElementById('sch_scan_cooldown_minutes').value = s.scan_cooldown_minutes || 30;
+                    document.getElementById('sch_scan_in_cooldown_seconds').value = s.scan_in_cooldown_seconds || 8;
                 }
             } catch(e) { console.error('Schedule load error', e); }
         }
@@ -243,7 +248,8 @@
                 afternoon_start: document.getElementById('sch_afternoon_start').value,
                 afternoon_end: document.getElementById('sch_afternoon_end').value,
                 late_threshold_minutes: document.getElementById('sch_late_threshold_minutes').value,
-                scan_cooldown_minutes: document.getElementById('sch_scan_cooldown_minutes').value
+                scan_cooldown_minutes: document.getElementById('sch_scan_cooldown_minutes').value,
+                scan_in_cooldown_seconds: document.getElementById('sch_scan_in_cooldown_seconds').value
             };
             try {
                 const r = await fetch('/api/schedule/default', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });

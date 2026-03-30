@@ -9,6 +9,38 @@
 <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 {% include 'partials/theme_assets.html' %}
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
+<style>
+  #faceModalShell {
+    max-height: min(94vh, 760px);
+  }
+
+  #faceModalBody {
+    max-height: calc(min(94vh, 760px) - 76px);
+  }
+
+  #captureGrid.capture-grid-gallery {
+    display: grid;
+    gap: 0.9rem;
+    grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+    align-items: start;
+  }
+
+  @media (min-width: 640px) {
+    #captureGrid.capture-grid-gallery {
+      grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+    }
+  }
+
+  @media (max-height: 860px) {
+    #faceModalShell {
+      max-height: 95vh;
+    }
+
+    #faceModalBody {
+      max-height: calc(95vh - 72px);
+    }
+  }
+</style>
 </head>
 <body class="bg-slate-100 h-screen overflow-hidden text-slate-800" data-authenticated="1" data-user-theme="{{ current_theme|default('') }}" data-selected-school-year="{{ selected_school_year }}" data-current-school-year="{{ current_school_year }}" data-archived-view="{% if archived_view %}1{% else %}0{% endif %}" data-can-manage-students="{% if can_manage_students %}1{% else %}0{% endif %}" data-can-register-faces="{% if can_register_faces %}1{% else %}0{% endif %}" x-data="{ mobileMenuOpen: false }">
 <div class="flex h-full">
@@ -229,14 +261,14 @@
       </section>
 
       <div class="app-content-card mb-4 flex flex-col gap-3 p-4 sm:p-5 lg:flex-row lg:items-center lg:justify-between">
-        <div class="grid w-full min-w-0 grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] lg:flex-1 lg:max-w-3xl">
+        <div class="grid w-full min-w-0 grid-cols-1 gap-3 sm:w-auto sm:grid-cols-[auto_auto]">
           <div class="relative min-w-0">
             <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                 <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-4.35-4.35M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Z" />
               </svg>
             </span>
-            <input id="searchInput" type="search" aria-label="Search students" placeholder="Search name, LRN, section, or year level" class="h-[46px] w-full min-w-0 rounded-xl border border-slate-300 bg-white pl-10 pr-3 text-sm text-slate-700 transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100">
+            <input id="searchInput" type="search" aria-label="Search students" placeholder="Search name, LRN, section, or year level" class="h-[46px] w-full min-w-0 max-w-full rounded-xl border border-slate-300 bg-white pl-10 pr-3 text-sm text-slate-700 transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 sm:w-[42ch]">
           </div>
           <select id="faceRegistrationFilter" aria-label="Filter by face status" class="h-[46px] w-full rounded-xl border border-slate-300 bg-white px-3 pr-8 text-sm text-slate-700 transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 sm:w-auto sm:min-w-[8.75rem]">
             <option value="">All Students</option>
@@ -868,8 +900,8 @@
   </div>
 </div>
 
-<div id="faceModal" class="modal modal-backdrop-blur hidden fixed inset-0 z-[95] bg-black/60 p-4 flex items-center justify-center" data-overlay>
-  <div class="bg-white w-full max-w-4xl rounded-2xl max-h-[85vh] overflow-y-auto">
+<div id="faceModal" class="modal modal-backdrop-blur hidden fixed inset-0 z-[95] bg-black/60 p-3 sm:p-4 flex items-center justify-center" data-overlay>
+  <div id="faceModalShell" class="relative flex w-full max-w-5xl flex-col overflow-hidden rounded-[28px] bg-white shadow-[0_28px_90px_rgba(15,23,42,0.22)]">
     <div class="sticky top-0 bg-white border-b px-5 py-4 flex justify-between items-center">
       <div>
         <h3 id="faceTitle" class="text-lg font-semibold">Register Face</h3>
@@ -877,14 +909,25 @@
       </div>
       <button data-close="faceModal" class="text-slate-500 hover:text-slate-700 text-2xl leading-none">&times;</button>
     </div>
-    <div class="p-5 space-y-5">
-      <div class="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.95fr)]">
-        <div class="space-y-4">
-          <div class="relative overflow-hidden rounded-[28px] bg-slate-950 aspect-[4/3] shadow-[0_20px_60px_rgba(15,23,42,0.28)]">
+    <div id="faceSavingOverlay" class="hidden fixed inset-0 z-[140] items-center justify-center bg-slate-950/28 px-4 backdrop-blur-sm">
+      <div class="flex w-full max-w-sm flex-col items-center gap-3 rounded-3xl bg-white px-6 py-5 text-center shadow-2xl shadow-slate-900/20 ring-1 ring-slate-200">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 animate-spin text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v4m0 10v4m9-9h-4M7 12H3m15.364 6.364-2.829-2.828M9.465 9.464 6.636 6.636m11.728 0-2.829 2.828M9.465 14.536l-2.829 2.828" />
+        </svg>
+        <div>
+          <p class="text-sm font-semibold text-slate-900">Saving face registration</p>
+          <p id="faceSavingText" class="mt-1 text-xs text-slate-500" role="status" aria-live="polite">Validating captures and saving the registered face profile...</p>
+        </div>
+      </div>
+    </div>
+    <div id="faceModalBody" class="overflow-y-auto px-4 py-4 sm:px-5 sm:py-5">
+      <div class="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.55fr)_minmax(290px,0.88fr)]">
+        <div class="space-y-3">
+          <div class="relative overflow-hidden rounded-[26px] bg-slate-950 aspect-[16/10] min-h-[220px] shadow-[0_20px_60px_rgba(15,23,42,0.24)] sm:min-h-[280px] lg:min-h-[320px]">
             <canvas id="facePreviewCanvas" class="absolute inset-0 h-full w-full object-cover"></canvas>
             <video id="faceVideo" autoplay muted playsinline class="absolute inset-0 h-full w-full object-cover opacity-0 pointer-events-none" aria-hidden="true"></video>
             <div class="pointer-events-none absolute inset-0 flex items-center justify-center">
-              <div id="faceGuideRing" class="h-[72%] w-[48%] rounded-[999px] border-2 border-white/70 shadow-[0_0_0_999px_rgba(2,6,23,0.58)] transition-all duration-300"></div>
+              <div id="faceGuideRing" class="h-[82%] w-[42%] rounded-[999px] border-2 border-white/70 shadow-[0_0_0_999px_rgba(2,6,23,0.42)] transition-all duration-300"></div>
             </div>
             <canvas id="faceOverlay" class="absolute inset-0 w-full h-full"></canvas>
             <canvas id="faceCaptureCanvas" class="hidden"></canvas>
@@ -895,15 +938,11 @@
                 <p class="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-400">Guided Capture</p>
                 <p id="guideText" class="mt-1 text-sm font-semibold text-slate-900">Press Start Registration to begin.</p>
               </div>
-              <div class="text-left sm:text-right">
-                <p class="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-400">Progress</p>
-                <p id="captureProgressText" class="mt-1 text-sm font-semibold text-slate-900">0 / 10 captures</p>
-              </div>
             </div>
-            <p id="faceStatus" class="mt-3 text-xs text-slate-500">Choose a capture profile, then start. Capture happens automatically once a clear face is inside the oval.</p>
+            <p id="faceStatus" class="mt-2 text-xs text-slate-500"></p>
           </div>
         </div>
-        <div class="space-y-4">
+        <div class="space-y-3">
           <div class="rounded-2xl border border-slate-200 bg-white p-4">
             <div class="flex items-start justify-between gap-3">
               <div>
@@ -912,7 +951,7 @@
               </div>
               <span id="faceCaptureTarget" class="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-semibold text-emerald-700">10 guided angles</span>
             </div>
-            <div class="mt-4 space-y-2">
+            <div class="mt-3 space-y-2">
               <label class="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 px-3 py-3 hover:border-slate-300">
                 <input id="faceCaptureProfileStandard" type="radio" name="faceCaptureProfile" value="standard" class="mt-1 h-4 w-4 border-slate-300 text-emerald-600" checked>
                 <span class="space-y-1">
@@ -933,22 +972,50 @@
               <button id="resetCaptureBtn" type="button" class="rounded-xl border px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Reset</button>
             </div>
           </div>
-          <div class="rounded-2xl border border-slate-200 bg-white p-4">
-            <p class="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-400">Capture Plan</p>
-            <p class="mt-1 text-xs text-slate-500">Keep one clear face inside the oval. Capture advances automatically when the next angle is ready.</p>
-            <div id="stepTags" class="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2"></div>
-          </div>
-          <div class="rounded-2xl border border-slate-200 bg-white p-4">
-            <p class="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-400">Captured Frames</p>
-            <p class="mt-1 text-xs text-slate-500">Validated shots appear here as the sequence progresses.</p>
-            <div id="captureGrid" class="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-2"></div>
+          <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+            <div class="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <p class="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-400">Captured Frames</p>
+              </div>
+              <div class="rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-left sm:text-right">
+                <p class="text-[10px] font-semibold uppercase tracking-[0.22em] text-emerald-600">Progress</p>
+                <p id="captureProgressText" class="mt-0.5 text-sm font-semibold text-emerald-700">0 / 10 captures</p>
+              </div>
+            </div>
+            <button id="openCaptureGalleryBtn" type="button" class="mt-3 inline-flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-2.5 text-left transition hover:border-emerald-200 hover:bg-emerald-50/40 disabled:cursor-not-allowed disabled:opacity-60">
+                <span class="min-w-0">
+                  <span class="block text-sm font-semibold text-slate-900">View Captured Images</span>
+                  <span id="captureGalleryButtonText" class="mt-0.5 block text-[11px] leading-4 text-slate-500">Open the gallery to review captured images.</span>
+                </span>
+                <span class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 text-slate-500">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 7.5h15m-15 4.5h15m-15 4.5h9" />
+                  </svg>
+                </span>
+              </button>
           </div>
         </div>
       </div>
-      <div class="flex justify-end gap-2">
+      <div class="mt-4 flex justify-end gap-2">
         <button type="button" data-close="faceModal" class="rounded-xl border px-4 py-2 text-sm">Cancel</button>
         <button id="submitFaceBtn" type="button" class="rounded-xl bg-emerald-600 px-4 py-2 text-sm text-white disabled:opacity-50" disabled>Save Face Registration</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<div id="captureGalleryModal" class="modal modal-backdrop-blur hidden fixed inset-0 z-[96] bg-black/60 p-3 sm:p-4 flex items-center justify-center" data-overlay>
+  <div class="relative flex w-full max-w-4xl flex-col overflow-hidden rounded-[26px] bg-white shadow-[0_28px_90px_rgba(15,23,42,0.22)]">
+    <div class="border-b border-slate-200 px-5 py-4 flex items-center justify-between gap-3">
+      <div>
+        <p class="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-400">Captured Frames</p>
+        <h3 class="mt-1 text-lg font-semibold text-slate-900">Accepted Face Images</h3>
+        <p id="captureGallerySubtitle" class="mt-1 text-xs text-slate-500">Captured images from the oval guide appear here.</p>
+      </div>
+      <button data-close="captureGalleryModal" class="text-slate-500 hover:text-slate-700 text-2xl leading-none">&times;</button>
+    </div>
+    <div class="max-h-[72vh] overflow-y-auto px-4 py-4 sm:px-5 sm:py-5">
+      <div id="captureGrid" class="capture-grid-gallery"></div>
     </div>
   </div>
 </div>
@@ -978,6 +1045,22 @@
     </div>
     <p id="centerSuccessText" class="rounded-lg bg-slate-900/90 px-3 py-1.5 text-xs font-semibold text-white opacity-0 translate-y-1 transition-all duration-300">
       Success
+    </p>
+  </div>
+</div>
+
+<div id="centerErrorOverlay" class="hidden fixed inset-0 z-[131] pointer-events-none items-center justify-center bg-slate-950/14 px-4">
+  <div class="flex flex-col items-center gap-3">
+    <div class="relative">
+      <div id="centerErrorPulse" class="absolute inset-0 rounded-full bg-rose-400/35 opacity-0 scale-75 transition-all duration-500"></div>
+      <div id="centerErrorBadge" class="relative h-24 w-24 rounded-full bg-rose-600 text-white shadow-2xl shadow-rose-600/35 flex items-center justify-center opacity-0 scale-75 translate-y-2 transition-all duration-300">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 6l12 12M18 6L6 18" />
+        </svg>
+      </div>
+    </div>
+    <p id="centerErrorText" class="max-w-sm rounded-lg bg-slate-900/92 px-4 py-2 text-center text-xs font-semibold text-white opacity-0 translate-y-1 transition-all duration-300">
+      Face registration failed.
     </p>
   </div>
 </div>

@@ -31,6 +31,49 @@
     </header>
 
     <main class="app-main-content flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+      <section class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <article class="stat-overview-card stat-overview-card--emerald p-5">
+          <div class="stat-overview-kicker">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h10" />
+            </svg>
+            <span>Total Gate Entries</span>
+          </div>
+          <p class="stat-overview-value">{{ stats.total_gate_entries }}</p>
+          <p class="stat-overview-note">Within selected range</p>
+        </article>
+        <article class="stat-overview-card stat-overview-card--blue p-5">
+          <div class="stat-overview-kicker">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M7 10h10M7 14h6m-8 6h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+            <span>Total SMS Sent</span>
+          </div>
+          <p class="stat-overview-value">{{ stats.total_sms_sent }}</p>
+          <p class="stat-overview-note">Within selected range</p>
+        </article>
+        <article class="stat-overview-card stat-overview-card--emerald p-5">
+          <div class="stat-overview-kicker">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+            <span>Present On End Date</span>
+          </div>
+          <p class="stat-overview-value">{{ stats.present_on_reference }}</p>
+          <p class="stat-overview-note">{{ chart_meta.attendance_reference_label }}</p>
+        </article>
+        <article class="stat-overview-card stat-overview-card--amber p-5">
+          <div class="stat-overview-kicker">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span>Late On End Date</span>
+          </div>
+          <p class="stat-overview-value">{{ stats.late_on_reference }}</p>
+          <p class="stat-overview-note">{{ chart_meta.attendance_reference_label }}</p>
+        </article>
+      </section>
+
       <section class="app-content-card p-4 lg:p-5">
         <div class="flex flex-col gap-4">
           <div class="flex flex-wrap items-start justify-between gap-4">
@@ -98,49 +141,6 @@
             </form>
           </div>
         </div>
-      </section>
-
-      <section class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <article class="stat-overview-card stat-overview-card--emerald p-5">
-          <div class="stat-overview-kicker">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h10" />
-            </svg>
-            <span>Total Gate Entries</span>
-          </div>
-          <p class="stat-overview-value">{{ stats.total_gate_entries }}</p>
-          <p class="stat-overview-note">Within selected range</p>
-        </article>
-        <article class="stat-overview-card stat-overview-card--blue p-5">
-          <div class="stat-overview-kicker">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M7 10h10M7 14h6m-8 6h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-            </svg>
-            <span>Total SMS Sent</span>
-          </div>
-          <p class="stat-overview-value">{{ stats.total_sms_sent }}</p>
-          <p class="stat-overview-note">Within selected range</p>
-        </article>
-        <article class="stat-overview-card stat-overview-card--emerald p-5">
-          <div class="stat-overview-kicker">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-            </svg>
-            <span>Present On End Date</span>
-          </div>
-          <p class="stat-overview-value">{{ stats.present_on_reference }}</p>
-          <p class="stat-overview-note">{{ chart_meta.attendance_reference_label }}</p>
-        </article>
-        <article class="stat-overview-card stat-overview-card--amber p-5">
-          <div class="stat-overview-kicker">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <span>Late On End Date</span>
-          </div>
-          <p class="stat-overview-value">{{ stats.late_on_reference }}</p>
-          <p class="stat-overview-note">{{ chart_meta.attendance_reference_label }}</p>
-        </article>
       </section>
 
       <section class="space-y-5">

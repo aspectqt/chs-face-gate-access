@@ -102,6 +102,7 @@
                                         <td class="px-6 py-4">
                                             <p class="font-bold text-slate-800" x-text="req.student_name"></p>
                                             <p class="text-xs text-slate-500" x-text="req.student_id"></p>
+                                            <p class="mt-1 text-[11px] text-slate-400">Requested by <span class="font-semibold text-slate-500" x-text="req.requested_by || '-'"></span></p>
                                         </td>
                                         <td class="px-6 py-4">
                                             <div class="flex items-center gap-2">
@@ -125,8 +126,8 @@
                                             <div class="flex justify-end gap-2">
                                                 <template x-if="req.status === 'pending'">
                                                     <div class="flex gap-2">
-                                                        <button @click="approveRequest(req)" class="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 transition">Approve</button>
-                                                        <button @click="denyRequest(req)" class="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-100 transition">Deny</button>
+                                                        <button @click="openActionModal(req, 'approve')" class="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 transition">Approve</button>
+                                                        <button @click="openActionModal(req, 'deny')" class="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-100 transition">Deny</button>
                                                     </div>
                                                 </template>
                                                 <button @click="viewRequest(req)" class="rounded-lg border border-slate-200 p-1.5 text-slate-500 hover:bg-slate-100 transition">
@@ -154,6 +155,10 @@
                         <div>
                             <label class="block text-[10px] uppercase font-bold text-slate-400 mb-1 ml-1">Student ID</label>
                             <input type="text" x-model="form.student_id" required placeholder="Enter student ID..." class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:ring-2 focus:ring-emerald-500 outline-none transition">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] uppercase font-bold text-slate-400 mb-1 ml-1">Requested By</label>
+                            <input type="text" x-model="form.requested_by" required placeholder="Enter requester name..." class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:ring-2 focus:ring-emerald-500 outline-none transition">
                         </div>
                         <div>
                             <label class="block text-[10px] uppercase font-bold text-slate-400 mb-1 ml-1">Reason for early exit</label>
@@ -236,14 +241,43 @@
                         </template>
 
                         <div class="pt-4 flex gap-2" x-show="selectedRequest?.status === 'pending'">
-                            <button @click="approveRequest(selectedRequest); modals.view = false" class="flex-1 rounded-xl bg-emerald-600 py-2.5 text-sm font-bold text-white hover:bg-emerald-700 transition">Approve Exit</button>
-                            <button @click="denyRequest(selectedRequest); modals.view = false" class="flex-1 rounded-xl border border-rose-200 bg-rose-50 py-2.5 text-sm font-bold text-rose-700 hover:bg-rose-100 transition">Deny Request</button>
+                            <button @click="openActionModal(selectedRequest, 'approve')" class="flex-1 rounded-xl bg-emerald-600 py-2.5 text-sm font-bold text-white hover:bg-emerald-700 transition">Approve Exit</button>
+                            <button @click="openActionModal(selectedRequest, 'deny')" class="flex-1 rounded-xl border border-rose-200 bg-rose-50 py-2.5 text-sm font-bold text-rose-700 hover:bg-rose-100 transition">Deny Request</button>
                         </div>
                         <template x-if="isFullAdmin">
                              <button @click="deleteRequest(selectedRequest); modals.view = false" class="w-full mt-2 rounded-xl text-[11px] font-bold text-rose-400 hover:text-rose-600 py-1 transition">Delete Request Forever</button>
                         </template>
                         </div>
                     </template>
+                </div>
+            </div>
+
+            <!-- Approve / Deny Confirmation Modal -->
+            <div x-cloak x-show="modals.confirm" class="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/55 backdrop-blur-sm" @click.self="closeActionModal()">
+                <div class="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl" x-transition.scale>
+                    <div class="border-b border-slate-200 px-5 py-4 flex items-center justify-between gap-3">
+                        <div>
+                            <h3 class="text-lg font-bold text-slate-900" x-text="confirmAction.type === 'approve' ? 'Approve Early Time-Out' : 'Deny Early Time-Out'"></h3>
+                            <p class="mt-1 text-xs text-slate-500" x-text="confirmAction.student_name ? `Request for ${confirmAction.student_name}` : 'Review this early time-out request.'"></p>
+                        </div>
+                        <button @click="closeActionModal()" class="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
+                    </div>
+                    <div class="px-5 py-5 space-y-4">
+                        <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                            <p class="text-sm text-slate-700" x-text="confirmAction.type === 'approve' ? 'This will approve the request and record the student as an Early Time-Out exit.' : 'This will deny the request and keep it out of the gate logs as an early exit.'"></p>
+                        </div>
+                        <div>
+                            <label class="block text-[10px] uppercase font-bold text-slate-400 mb-1 ml-1" x-text="confirmAction.type === 'approve' ? 'Approval Note (Optional)' : 'Reason for Denial'"></label>
+                            <textarea x-model="confirmAction.note" rows="3" :placeholder="confirmAction.type === 'approve' ? 'Optional note, e.g. parent picked up the student...' : 'Enter the reason for denial...'" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:ring-2 focus:ring-emerald-500 outline-none transition"></textarea>
+                        </div>
+                        <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                            <button type="button" @click="closeActionModal()" class="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-50 transition">Cancel</button>
+                            <button type="button" @click="submitActionModal()" :disabled="confirmAction.submitting" class="rounded-xl px-4 py-2.5 text-sm font-bold text-white transition disabled:opacity-50" :class="confirmAction.type === 'approve' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-rose-600 hover:bg-rose-700'">
+                                <span x-show="!confirmAction.submitting" x-text="confirmAction.type === 'approve' ? 'Confirm Approval' : 'Confirm Denial'"></span>
+                                <span x-show="confirmAction.submitting">Processing...</span>
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -262,6 +296,7 @@
                 approvedCount: 0,
                 totalCount: 0,
                 isFullAdmin: {{ 'true' if current_role == 'Full Admin' else 'false' }},
+                defaultRequestedBy: {{ (session.get('admin') or 'Admin') | tojson }},
                 filters: {
                     status: 'pending',
                     date: '',
@@ -269,13 +304,22 @@
                 },
                 form: {
                     student_id: '',
+                    requested_by: {{ (session.get('admin') or 'Admin') | tojson }},
                     reason: '',
                     urgency: 'normal'
+                },
+                confirmAction: {
+                    type: '',
+                    requestId: '',
+                    student_name: '',
+                    note: '',
+                    submitting: false
                 },
                 selectedRequest: null,
                 modals: {
                     newRequest: false,
-                    view: false
+                    view: false,
+                    confirm: false
                 },
                 init() {
                     this.fetchRequests();
@@ -314,7 +358,7 @@
                     this.approvedCount = this.requests.filter(r => r.status === 'approved').length;
                 },
                 openNewRequest() {
-                    this.form = { student_id: '', reason: '', urgency: 'normal' };
+                    this.form = { student_id: '', requested_by: this.defaultRequestedBy, reason: '', urgency: 'normal' };
                     this.modals.newRequest = true;
                 },
                 async submitRequest() {
@@ -344,41 +388,69 @@
                     this.selectedRequest = req;
                     this.modals.view = true;
                 },
-                async approveRequest(req) {
-                    const note = prompt('Optional approval note (e.g. parent picked up):');
-                    if (note === null) return;
+                openActionModal(req, type) {
+                    this.confirmAction = {
+                        type,
+                        requestId: req?._id || '',
+                        student_name: req?.student_name || req?.student_id || 'this student',
+                        note: '',
+                        submitting: false
+                    };
+                    this.modals.confirm = true;
+                },
+                closeActionModal() {
+                    if (this.confirmAction.submitting) return;
+                    this.modals.confirm = false;
+                    this.confirmAction = {
+                        type: '',
+                        requestId: '',
+                        student_name: '',
+                        note: '',
+                        submitting: false
+                    };
+                },
+                async submitActionModal() {
+                    if (this.confirmAction.submitting || !this.confirmAction.requestId) return;
+                    if (this.confirmAction.type === 'deny' && !this.confirmAction.note.trim()) {
+                        this.showToast('Reason for denial is required.', 'error');
+                        return;
+                    }
+                    const pendingAction = {
+                        type: this.confirmAction.type,
+                        requestId: this.confirmAction.requestId,
+                        note: this.confirmAction.note.trim()
+                    };
+                    const req = this.requests.find(row => row._id === pendingAction.requestId) || this.selectedRequest;
+                    if (!req) {
+                        this.showToast('Request not found.', 'error');
+                        return;
+                    }
+                    this.modals.confirm = false;
+                    this.confirmAction = {
+                        type: '',
+                        requestId: '',
+                        student_name: '',
+                        note: '',
+                        submitting: false
+                    };
                     try {
-                        const res = await fetch(`/api/early-timeout/requests/${req._id}/approve`, {
+                        const action = pendingAction.type === 'approve' ? 'approve' : 'deny';
+                        const res = await fetch(`/api/early-timeout/requests/${req._id}/${action}`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ review_note: note })
+                            body: JSON.stringify({ review_note: pendingAction.note })
                         });
                         const data = await res.json();
                         if (data.status === 'ok') {
                             this.showToast(data.message);
+                            this.modals.view = false;
                             this.fetchRequests();
                         } else {
                             this.showToast(data.message, 'error');
                         }
                     } catch (e) {
-                        this.showToast('Approval failed', 'error');
+                        this.showToast(pendingAction.type === 'approve' ? 'Approval failed' : 'Denial failed', 'error');
                     }
-                },
-                async denyRequest(req) {
-                    const note = prompt('Reason for denial:');
-                    if (!note) return;
-                    try {
-                        const res = await fetch(`/api/early-timeout/requests/${req._id}/deny`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ review_note: note })
-                        });
-                        const data = await res.json();
-                        if (data.status === 'ok') {
-                            this.showToast(data.message);
-                            this.fetchRequests();
-                        }
-                    } catch (e) {}
                 },
                 async deleteRequest(req) {
                     if (!confirm('Delete this request permanent?')) return;

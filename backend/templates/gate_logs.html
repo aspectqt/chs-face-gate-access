@@ -102,18 +102,10 @@
 
         <section class="app-content-card p-4 lg:p-5">
           <form method="GET" action="{{ url_for('gate_logs_page') }}" class="space-y-4">
-            <div class="flex flex-wrap items-center justify-between gap-3">
+            <div class="flex flex-wrap items-center gap-3">
               <div>
                 <h2 class="text-base font-semibold text-slate-800">Quick Search & Filters</h2>
                 <p class="text-xs text-slate-500 mt-1"></p>
-              </div>
-              <div class="flex items-center gap-2">
-                <input type="text" id="simulateStudentId" placeholder="Simulate Student ID"
-                  class="rounded-xl border border-slate-300 px-3 py-1.5 text-xs focus:ring-2 focus:ring-blue-500 outline-none">
-                <button type="button" @click="simulateGate()"
-                  class="rounded-xl bg-blue-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 transition flex items-center gap-1">
-                  Simulate Scan
-                </button>
               </div>
             </div>
 
@@ -166,8 +158,6 @@
                 </a>
               </div>
             </div>
-            <p x-cloak x-show="simulateMessage" class="text-[11px] font-semibold"
-              :class="simulateType === 'error' ? 'text-rose-600' : 'text-emerald-600'" x-text="simulateMessage"></p>
           </form>
         </section>
 
