@@ -9,6 +9,8 @@ class EnhancedClientCamera {
         this.videoElement = null;
         this.canvas = null;
         this.canvasContext = null;
+        this.uploadCanvas = null;
+        this.uploadCanvasContext = null;
         this.isStreaming = false;
         this.onError = null;
         this.onSuccess = null;
@@ -855,13 +857,42 @@ class EnhancedClientCamera {
     /**
      * Get current frame as Blob for sending to server
      */
-    async getFrameAsBlob(format = 'image/jpeg', quality = 0.95) {
+    async getFrameAsBlob(format = 'image/jpeg', quality = 0.95, options = {}) {
         try {
-            const canvas = this.captureFrame();
-            if (!canvas) return null;
+            const sourceCanvas = this.captureFrame();
+            if (!sourceCanvas) return null;
+            let exportCanvas = sourceCanvas;
+
+            const maxWidth = Number(options?.maxWidth || 0) || 0;
+            const maxHeight = Number(options?.maxHeight || 0) || 0;
+            if (maxWidth > 0 || maxHeight > 0) {
+                const sourceWidth = Number(sourceCanvas.width || 0) || 0;
+                const sourceHeight = Number(sourceCanvas.height || 0) || 0;
+                if (sourceWidth > 0 && sourceHeight > 0) {
+                    const widthScale = maxWidth > 0 ? maxWidth / sourceWidth : 1;
+                    const heightScale = maxHeight > 0 ? maxHeight / sourceHeight : 1;
+                    const scale = Math.min(widthScale, heightScale, 1);
+                    if (scale < 0.999) {
+                        const targetWidth = Math.max(1, Math.round(sourceWidth * scale));
+                        const targetHeight = Math.max(1, Math.round(sourceHeight * scale));
+                        if (!this.uploadCanvas) {
+                            this.uploadCanvas = document.createElement('canvas');
+                        }
+                        if (this.uploadCanvas.width !== targetWidth || this.uploadCanvas.height !== targetHeight) {
+                            this.uploadCanvas.width = targetWidth;
+                            this.uploadCanvas.height = targetHeight;
+                        }
+                        if (!this.uploadCanvasContext) {
+                            this.uploadCanvasContext = this.uploadCanvas.getContext('2d');
+                        }
+                        this.uploadCanvasContext.drawImage(sourceCanvas, 0, 0, targetWidth, targetHeight);
+                        exportCanvas = this.uploadCanvas;
+                    }
+                }
+            }
 
             return new Promise((resolve, reject) => {
-                canvas.toBlob(
+                exportCanvas.toBlob(
                     (blob) => {
                         if (blob) {
                             resolve(blob);
@@ -898,6 +929,8 @@ class EnhancedClientCamera {
             
             // Clear tracked faces
             this.trackedFaces.clear();
+            this.uploadCanvas = null;
+            this.uploadCanvasContext = null;
             
             // Clear voice queue
             this.voiceQueue = [];

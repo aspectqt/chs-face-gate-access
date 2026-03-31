@@ -243,6 +243,96 @@ LIVE_RECOGNITION_IMMEDIATE_MATCH_DISTANCE = env_float("LIVE_RECOGNITION_IMMEDIAT
 LIVE_RECOGNITION_IMMEDIATE_CONFIDENCE = env_float("LIVE_RECOGNITION_IMMEDIATE_CONFIDENCE", 66.0, minimum=0.0, maximum=100.0)
 LIVE_RECOGNITION_ENCODING_MAX_WIDTH = env_int("LIVE_RECOGNITION_ENCODING_MAX_WIDTH", 960, minimum=480, maximum=1920)
 LIVE_RECOGNITION_ENCODING_JITTERS = env_int("LIVE_RECOGNITION_ENCODING_JITTERS", 1, minimum=1, maximum=4)
+LIVE_RECOGNITION_MAX_TRACKED_FACES = env_int("LIVE_RECOGNITION_MAX_TRACKED_FACES", 12, minimum=2, maximum=40)
+LIVE_RECOGNITION_MAX_RECOGNITIONS_PER_FRAME = env_int("LIVE_RECOGNITION_MAX_RECOGNITIONS_PER_FRAME", 5, minimum=1, maximum=20)
+LIVE_RECOGNITION_TRACK_TIMEOUT_SECONDS = env_float("LIVE_RECOGNITION_TRACK_TIMEOUT_SECONDS", 1.4, minimum=0.5, maximum=5.0)
+LIVE_RECOGNITION_TRACK_STABILITY_FRAMES = env_int("LIVE_RECOGNITION_TRACK_STABILITY_FRAMES", 2, minimum=1, maximum=8)
+LIVE_RECOGNITION_TRACK_RETRY_SECONDS = env_float("LIVE_RECOGNITION_TRACK_RETRY_SECONDS", 0.45, minimum=0.1, maximum=3.0)
+LIVE_RECOGNITION_TRACK_UNKNOWN_RETRY_SECONDS = env_float("LIVE_RECOGNITION_TRACK_UNKNOWN_RETRY_SECONDS", 0.75, minimum=0.1, maximum=5.0)
+LIVE_RECOGNITION_CONFIRMATION_RETRY_SECONDS = env_float("LIVE_RECOGNITION_CONFIRMATION_RETRY_SECONDS", 0.18, minimum=0.05, maximum=1.0)
+LIVE_RECOGNITION_LIVENESS_RETRY_SECONDS = env_float("LIVE_RECOGNITION_LIVENESS_RETRY_SECONDS", 0.2, minimum=0.05, maximum=1.0)
+LIVE_RECOGNITION_TRACK_MATCH_DISTANCE_RATIO = env_float("LIVE_RECOGNITION_TRACK_MATCH_DISTANCE_RATIO", 0.32, minimum=0.05, maximum=1.0)
+LIVE_LIVENESS_ENABLED = env_bool("LIVE_LIVENESS_ENABLED", True)
+LIVE_LIVENESS_MIN_TRACK_FRAMES = env_int("LIVE_LIVENESS_MIN_TRACK_FRAMES", 3, minimum=1, maximum=12)
+LIVE_LIVENESS_MIN_MOTION_SCORE = env_float("LIVE_LIVENESS_MIN_MOTION_SCORE", 0.16, minimum=0.0, maximum=3.0)
+LIVE_LIVENESS_MIN_POSE_SCORE = env_float("LIVE_LIVENESS_MIN_POSE_SCORE", 0.02, minimum=0.0, maximum=1.0)
+LIVE_LIVENESS_POSE_GRACE_SECONDS = env_float("LIVE_LIVENESS_POSE_GRACE_SECONDS", 1.6, minimum=0.2, maximum=8.0)
+LIVE_LIVENESS_SCORE_DECAY = env_float("LIVE_LIVENESS_SCORE_DECAY", 0.88, minimum=0.5, maximum=0.99)
+LIVE_LIVENESS_TEXTURE_CHECK_ENABLED = env_bool("LIVE_LIVENESS_TEXTURE_CHECK_ENABLED", True)
+LIVE_LIVENESS_MIN_TEXTURE = env_float("LIVE_LIVENESS_MIN_TEXTURE", 7.5, minimum=0.0, maximum=80.0)
+LIVE_LIVENESS_MIN_CONTRAST = env_float("LIVE_LIVENESS_MIN_CONTRAST", 16.0, minimum=0.0, maximum=100.0)
+LIVE_LIVENESS_MAX_HIGHLIGHT_RATIO = env_float("LIVE_LIVENESS_MAX_HIGHLIGHT_RATIO", 0.28, minimum=0.0, maximum=1.0)
+LIVE_LIVENESS_PATCH_PARALLAX_ENABLED = env_bool("LIVE_LIVENESS_PATCH_PARALLAX_ENABLED", True)
+LIVE_LIVENESS_PATCH_SIZE = env_int("LIVE_LIVENESS_PATCH_SIZE", 24, minimum=12, maximum=48)
+LIVE_LIVENESS_MIN_PARALLAX_SCORE = env_float("LIVE_LIVENESS_MIN_PARALLAX_SCORE", 0.045, minimum=0.0, maximum=2.0)
+LIVE_LIVENESS_PLANAR_STREAK_FRAMES = env_int("LIVE_LIVENESS_PLANAR_STREAK_FRAMES", 4, minimum=2, maximum=16)
+LIVE_LIVENESS_MOTION_COMPONENT_THRESHOLD = env_float("LIVE_LIVENESS_MOTION_COMPONENT_THRESHOLD", 0.09, minimum=0.0, maximum=2.0)
+LIVE_LIVENESS_MAX_PLANAR_POSE_COMPONENT = env_float("LIVE_LIVENESS_MAX_PLANAR_POSE_COMPONENT", 0.03, minimum=0.0, maximum=1.0)
+LIVE_LIVENESS_MAX_PLANAR_PATCH_DELTA = env_float("LIVE_LIVENESS_MAX_PLANAR_PATCH_DELTA", 0.022, minimum=0.0, maximum=0.2)
+LIVE_LIVENESS_MAX_PLANAR_GRAD_DELTA = env_float("LIVE_LIVENESS_MAX_PLANAR_GRAD_DELTA", 0.03, minimum=0.0, maximum=0.2)
+LIVE_LIVENESS_BLINK_ENABLED = env_bool("LIVE_LIVENESS_BLINK_ENABLED", True)
+LIVE_LIVENESS_BLINK_REQUIRED = env_bool("LIVE_LIVENESS_BLINK_REQUIRED", True)
+LIVE_LIVENESS_BLINK_EAR_CLOSED = env_float("LIVE_LIVENESS_BLINK_EAR_CLOSED", 0.20, minimum=0.08, maximum=0.4)
+LIVE_LIVENESS_BLINK_EAR_OPEN = env_float("LIVE_LIVENESS_BLINK_EAR_OPEN", 0.245, minimum=0.1, maximum=0.5)
+LIVE_LIVENESS_BLINK_MIN_CLOSED_FRAMES = env_int("LIVE_LIVENESS_BLINK_MIN_CLOSED_FRAMES", 1, minimum=1, maximum=8)
+LIVE_LIVENESS_BLINK_INTERVAL_SECONDS = env_float("LIVE_LIVENESS_BLINK_INTERVAL_SECONDS", 0.22, minimum=0.05, maximum=2.0)
+LIVE_LIVENESS_BLINK_RECENT_SECONDS = env_float("LIVE_LIVENESS_BLINK_RECENT_SECONDS", 5.0, minimum=0.5, maximum=20.0)
+LIVE_LIVENESS_AI_MODEL_ENABLED = env_bool("LIVE_LIVENESS_AI_MODEL_ENABLED", False)
+LIVE_LIVENESS_AI_MODEL_PATH = os.getenv("LIVE_LIVENESS_AI_MODEL_PATH", "").strip()
+LIVE_LIVENESS_AI_MIN_LIVE_SCORE = env_float("LIVE_LIVENESS_AI_MIN_LIVE_SCORE", 0.72, minimum=0.0, maximum=1.0)
+LIVE_LIVENESS_PROFILE = (os.getenv("LIVE_LIVENESS_PROFILE", "strict").strip().lower() or "strict")
+if LIVE_LIVENESS_PROFILE not in {"strict", "balanced", "lenient"}:
+    LIVE_LIVENESS_PROFILE = "strict"
+
+LIVE_LIVENESS_BASE_MIN_TRACK_FRAMES = int(LIVE_LIVENESS_MIN_TRACK_FRAMES)
+LIVE_LIVENESS_BASE_MIN_MOTION_SCORE = float(LIVE_LIVENESS_MIN_MOTION_SCORE)
+LIVE_LIVENESS_BASE_MIN_POSE_SCORE = float(LIVE_LIVENESS_MIN_POSE_SCORE)
+LIVE_LIVENESS_BASE_POSE_GRACE_SECONDS = float(LIVE_LIVENESS_POSE_GRACE_SECONDS)
+LIVE_LIVENESS_BASE_MIN_TEXTURE = float(LIVE_LIVENESS_MIN_TEXTURE)
+LIVE_LIVENESS_BASE_MIN_CONTRAST = float(LIVE_LIVENESS_MIN_CONTRAST)
+LIVE_LIVENESS_BASE_MAX_HIGHLIGHT_RATIO = float(LIVE_LIVENESS_MAX_HIGHLIGHT_RATIO)
+LIVE_LIVENESS_BASE_MIN_PARALLAX_SCORE = float(LIVE_LIVENESS_MIN_PARALLAX_SCORE)
+LIVE_LIVENESS_BASE_PLANAR_STREAK_FRAMES = int(LIVE_LIVENESS_PLANAR_STREAK_FRAMES)
+LIVE_LIVENESS_BASE_MAX_PLANAR_POSE_COMPONENT = float(LIVE_LIVENESS_MAX_PLANAR_POSE_COMPONENT)
+LIVE_LIVENESS_BASE_MAX_PLANAR_PATCH_DELTA = float(LIVE_LIVENESS_MAX_PLANAR_PATCH_DELTA)
+LIVE_LIVENESS_BASE_MAX_PLANAR_GRAD_DELTA = float(LIVE_LIVENESS_MAX_PLANAR_GRAD_DELTA)
+LIVE_LIVENESS_BASE_BLINK_REQUIRED = bool(LIVE_LIVENESS_BLINK_REQUIRED)
+LIVE_LIVENESS_LENIENT_BLINK_REQUIRED = bool(env_bool("LIVE_LIVENESS_BLINK_REQUIRED", False))
+LIVE_LIVENESS_BASE_BLINK_INTERVAL_SECONDS = float(LIVE_LIVENESS_BLINK_INTERVAL_SECONDS)
+LIVE_LIVENESS_BASE_BLINK_RECENT_SECONDS = float(LIVE_LIVENESS_BLINK_RECENT_SECONDS)
+
+if LIVE_LIVENESS_PROFILE == "strict":
+    LIVE_LIVENESS_MIN_TRACK_FRAMES = max(int(LIVE_LIVENESS_MIN_TRACK_FRAMES), 4)
+    LIVE_LIVENESS_MIN_MOTION_SCORE = max(float(LIVE_LIVENESS_MIN_MOTION_SCORE), 0.24)
+    LIVE_LIVENESS_MIN_POSE_SCORE = max(float(LIVE_LIVENESS_MIN_POSE_SCORE), 0.032)
+    LIVE_LIVENESS_POSE_GRACE_SECONDS = min(float(LIVE_LIVENESS_POSE_GRACE_SECONDS), 1.25)
+    LIVE_LIVENESS_MIN_TEXTURE = max(float(LIVE_LIVENESS_MIN_TEXTURE), 9.2)
+    LIVE_LIVENESS_MIN_CONTRAST = max(float(LIVE_LIVENESS_MIN_CONTRAST), 18.0)
+    LIVE_LIVENESS_MAX_HIGHLIGHT_RATIO = min(float(LIVE_LIVENESS_MAX_HIGHLIGHT_RATIO), 0.22)
+    LIVE_LIVENESS_MIN_PARALLAX_SCORE = max(float(LIVE_LIVENESS_MIN_PARALLAX_SCORE), 0.058)
+    LIVE_LIVENESS_PLANAR_STREAK_FRAMES = min(int(LIVE_LIVENESS_PLANAR_STREAK_FRAMES), 3)
+    LIVE_LIVENESS_MAX_PLANAR_PATCH_DELTA = min(float(LIVE_LIVENESS_MAX_PLANAR_PATCH_DELTA), 0.018)
+    LIVE_LIVENESS_MAX_PLANAR_GRAD_DELTA = min(float(LIVE_LIVENESS_MAX_PLANAR_GRAD_DELTA), 0.024)
+    LIVE_LIVENESS_MAX_PLANAR_POSE_COMPONENT = min(float(LIVE_LIVENESS_MAX_PLANAR_POSE_COMPONENT), 0.026)
+    LIVE_LIVENESS_BLINK_RECENT_SECONDS = min(float(LIVE_LIVENESS_BLINK_RECENT_SECONDS), 4.0)
+    LIVE_LIVENESS_BLINK_INTERVAL_SECONDS = min(float(LIVE_LIVENESS_BLINK_INTERVAL_SECONDS), 0.16)
+elif LIVE_LIVENESS_PROFILE == "lenient":
+    LIVE_LIVENESS_MIN_TRACK_FRAMES = min(int(LIVE_LIVENESS_MIN_TRACK_FRAMES), 2)
+    LIVE_LIVENESS_MIN_MOTION_SCORE = min(float(LIVE_LIVENESS_MIN_MOTION_SCORE), 0.11)
+    LIVE_LIVENESS_MIN_POSE_SCORE = min(float(LIVE_LIVENESS_MIN_POSE_SCORE), 0.012)
+    LIVE_LIVENESS_POSE_GRACE_SECONDS = max(float(LIVE_LIVENESS_POSE_GRACE_SECONDS), 2.2)
+    LIVE_LIVENESS_MIN_TEXTURE = min(float(LIVE_LIVENESS_MIN_TEXTURE), 6.0)
+    LIVE_LIVENESS_MIN_CONTRAST = min(float(LIVE_LIVENESS_MIN_CONTRAST), 13.0)
+    LIVE_LIVENESS_MAX_HIGHLIGHT_RATIO = max(float(LIVE_LIVENESS_MAX_HIGHLIGHT_RATIO), 0.34)
+    LIVE_LIVENESS_MIN_PARALLAX_SCORE = min(float(LIVE_LIVENESS_MIN_PARALLAX_SCORE), 0.032)
+    LIVE_LIVENESS_PLANAR_STREAK_FRAMES = max(int(LIVE_LIVENESS_PLANAR_STREAK_FRAMES), 5)
+    LIVE_LIVENESS_MAX_PLANAR_PATCH_DELTA = max(float(LIVE_LIVENESS_MAX_PLANAR_PATCH_DELTA), 0.028)
+    LIVE_LIVENESS_MAX_PLANAR_GRAD_DELTA = max(float(LIVE_LIVENESS_MAX_PLANAR_GRAD_DELTA), 0.038)
+    LIVE_LIVENESS_MAX_PLANAR_POSE_COMPONENT = max(float(LIVE_LIVENESS_MAX_PLANAR_POSE_COMPONENT), 0.04)
+    LIVE_LIVENESS_BLINK_REQUIRED = bool(LIVE_LIVENESS_LENIENT_BLINK_REQUIRED)
+    LIVE_LIVENESS_BLINK_RECENT_SECONDS = max(float(LIVE_LIVENESS_BLINK_RECENT_SECONDS), 6.5)
+    LIVE_LIVENESS_BLINK_INTERVAL_SECONDS = max(float(LIVE_LIVENESS_BLINK_INTERVAL_SECONDS), 0.25)
+
 PASSWORD_HASH_METHOD = "pbkdf2:sha256:600000"
 ALLOWED_AVATAR_EXTENSIONS = {"jpg", "jpeg", "png", "webp"}
 MAX_AVATAR_SIZE_BYTES = 5 * 1024 * 1024
@@ -325,6 +415,7 @@ OTP_MAX_PER_HOUR = env_int("OTP_MAX_PER_HOUR", 5, minimum=1, maximum=100)
 ENABLE_SECURITY_HEADERS = env_bool("ENABLE_SECURITY_HEADERS", True)
 CSP_ENFORCE = env_bool("CSP_ENFORCE", False)
 VALID_SCAN_SESSION_MODES = {"auto", "manual_in", "manual_out"}
+VALID_SCAN_LIVENESS_PROFILES = {"strict", "balanced", "lenient"}
 CSRF_SESSION_KEY = "_csrf_token"
 CSRF_HEADER_NAME = "X-CSRF-Token"
 CSRF_ALLOWED_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
@@ -379,6 +470,7 @@ dev_reload_cache = {
 }
 
 scan_lock = threading.Lock()
+frame_processing_lock = threading.Lock()
 scan_state = {
     "active": False,
     "capture": None,
@@ -392,8 +484,17 @@ scan_state = {
     "known_students": [],
     "face_index_loading": False,
     "session_mode": "auto",
+    "liveness_profile": "strict",
     "pending_recognition": {},
+    "face_tracks": {},
+    "next_face_track_id": 1,
+    "face_track_cursor": 0,
+    "last_faces_payload": [],
 }
+liveness_ai_model = None
+liveness_ai_model_loaded = False
+liveness_ai_model_lock = threading.Lock()
+liveness_ai_model_error = ""
 
 alert_lock = threading.Lock()
 alert_revision = 0
@@ -1944,10 +2045,21 @@ def purge_student_runtime_face_references(student_id):
             if scan_state.get("active") and not filtered_students:
                 scan_state["model_status"] = "no_registered_students"
 
+        face_tracks = scan_state.get("face_tracks")
+        if isinstance(face_tracks, dict) and face_tracks:
+            stale_track_ids = [
+                track_id
+                for track_id, row in face_tracks.items()
+                if normalize_lrn_value((row or {}).get("student_id")) == normalized_student_id
+            ]
+            for track_id in stale_track_ids:
+                face_tracks.pop(track_id, None)
+
         runtime_remaining = (
             any(normalize_lrn_value((row or {}).get("student_id") or (row or {}).get("lrn")) == normalized_student_id for row in scan_state.get("known_students", []))
             or normalized_student_id in last_scanned
             or normalized_student_id in scan_presence_locks
+            or any(normalize_lrn_value((row or {}).get("student_id")) == normalized_student_id for row in (scan_state.get("face_tracks") or {}).values())
         )
 
     return {
@@ -2755,6 +2867,105 @@ def set_scan_session_mode(mode):
     normalized = normalize_scan_session_mode(mode)
     with scan_lock:
         scan_state["session_mode"] = normalized
+    return normalized
+
+
+def normalize_scan_liveness_profile(value, default=None):
+    # Strict mode is enforced internally to keep anti-spoofing hardened.
+    # Any external/requested profile value is normalized to strict.
+    return "strict"
+
+
+def scan_liveness_profile_label(profile):
+    normalized = normalize_scan_liveness_profile(profile)
+    labels = {
+        "strict": "Strict Liveness",
+        "balanced": "Balanced Liveness",
+        "lenient": "Lenient Liveness",
+    }
+    return labels.get(normalized, "Strict Liveness")
+
+
+def resolve_live_liveness_profile_thresholds(profile=None):
+    normalized = normalize_scan_liveness_profile(profile if profile is not None else get_scan_liveness_profile())
+    thresholds = {
+        "profile": normalized,
+        "min_track_frames": max(int(LIVE_LIVENESS_BASE_MIN_TRACK_FRAMES or 1), 1),
+        "min_motion_score": max(float(LIVE_LIVENESS_BASE_MIN_MOTION_SCORE or 0.0), 0.0),
+        "min_pose_score": max(float(LIVE_LIVENESS_BASE_MIN_POSE_SCORE or 0.0), 0.0),
+        "pose_grace_seconds": max(float(LIVE_LIVENESS_BASE_POSE_GRACE_SECONDS or 0.0), 0.0),
+        "min_texture": max(float(LIVE_LIVENESS_BASE_MIN_TEXTURE or 0.0), 0.0),
+        "min_contrast": max(float(LIVE_LIVENESS_BASE_MIN_CONTRAST or 0.0), 0.0),
+        "max_highlight_ratio": max(float(LIVE_LIVENESS_BASE_MAX_HIGHLIGHT_RATIO or 0.0), 0.0),
+        "min_parallax_score": max(float(LIVE_LIVENESS_BASE_MIN_PARALLAX_SCORE or 0.0), 0.0),
+        "planar_streak_frames": max(int(LIVE_LIVENESS_BASE_PLANAR_STREAK_FRAMES or 2), 2),
+        "max_planar_pose_component": max(float(LIVE_LIVENESS_BASE_MAX_PLANAR_POSE_COMPONENT or 0.0), 0.0),
+        "max_planar_patch_delta": max(float(LIVE_LIVENESS_BASE_MAX_PLANAR_PATCH_DELTA or 0.0), 0.0),
+        "max_planar_grad_delta": max(float(LIVE_LIVENESS_BASE_MAX_PLANAR_GRAD_DELTA or 0.0), 0.0),
+        "blink_required": bool(LIVE_LIVENESS_BASE_BLINK_REQUIRED),
+        "blink_interval_seconds": max(float(LIVE_LIVENESS_BASE_BLINK_INTERVAL_SECONDS or 0.0), 0.05),
+        "blink_recent_seconds": max(float(LIVE_LIVENESS_BASE_BLINK_RECENT_SECONDS or 0.0), 0.5),
+    }
+
+    if normalized == "strict":
+        # Tuned strict defaults: still hardened against spoofing, but less likely
+        # to reject real users under normal motion/lighting.
+        thresholds["min_track_frames"] = max(int(thresholds["min_track_frames"]), 3)
+        thresholds["min_motion_score"] = max(float(thresholds["min_motion_score"]), 0.16)
+        thresholds["min_pose_score"] = max(float(thresholds["min_pose_score"]), 0.018)
+        thresholds["pose_grace_seconds"] = min(float(thresholds["pose_grace_seconds"]), 2.0)
+        thresholds["min_texture"] = max(float(thresholds["min_texture"]), 7.8)
+        thresholds["min_contrast"] = max(float(thresholds["min_contrast"]), 15.0)
+        thresholds["max_highlight_ratio"] = min(float(thresholds["max_highlight_ratio"]), 0.26)
+        thresholds["min_parallax_score"] = max(float(thresholds["min_parallax_score"]), 0.036)
+        thresholds["planar_streak_frames"] = max(int(thresholds["planar_streak_frames"]), 5)
+        thresholds["max_planar_patch_delta"] = min(float(thresholds["max_planar_patch_delta"]), 0.02)
+        thresholds["max_planar_grad_delta"] = min(float(thresholds["max_planar_grad_delta"]), 0.027)
+        thresholds["max_planar_pose_component"] = min(float(thresholds["max_planar_pose_component"]), 0.03)
+        thresholds["blink_required"] = True
+        thresholds["blink_recent_seconds"] = min(float(thresholds["blink_recent_seconds"]), 5.5)
+        thresholds["blink_interval_seconds"] = min(float(thresholds["blink_interval_seconds"]), 0.2)
+
+    thresholds["max_highlight_ratio"] = min(max(float(thresholds["max_highlight_ratio"]), 0.0), 1.0)
+    return thresholds
+
+
+def get_scan_liveness_profile():
+    return "strict"
+
+
+def set_scan_liveness_profile(profile):
+    _ = profile
+    normalized = "strict"
+    with scan_lock:
+        previous = normalize_scan_liveness_profile(scan_state.get("liveness_profile", LIVE_LIVENESS_PROFILE))
+        scan_state["liveness_profile"] = normalized
+        if previous != normalized:
+            tracks = scan_state.get("face_tracks") or {}
+            if isinstance(tracks, dict):
+                for row in tracks.values():
+                    if not isinstance(row, dict):
+                        continue
+                    row["liveness_frames"] = 0
+                    row["liveness_motion_score"] = 0.0
+                    row["liveness_pose_score"] = 0.0
+                    row["liveness_motion_component"] = 0.0
+                    row["liveness_area_component"] = 0.0
+                    row["liveness_pose_component"] = 0.0
+                    row["liveness_parallax_score"] = 0.0
+                    row["liveness_planar_streak"] = 0
+                    row["liveness_patch_delta"] = 0.0
+                    row["liveness_patch_grad_delta"] = 0.0
+                    row["liveness_prev_patch"] = None
+                    row["liveness_prev_grad_patch"] = None
+                    row["liveness_patch_ts"] = 0.0
+                    row["liveness_blink_count"] = 0
+                    row["liveness_last_blink_ts"] = 0.0
+                    row["liveness_last_ear"] = 0.0
+                    row["liveness_last_ear_ts"] = 0.0
+                    row["liveness_eye_closed_frames"] = 0
+                    row["liveness_ready"] = bool(not LIVE_LIVENESS_ENABLED)
+                    row["liveness_message"] = "" if not LIVE_LIVENESS_ENABLED else "Liveness Check Required"
     return normalized
 
 
@@ -4044,6 +4255,12 @@ def build_system_health_snapshot():
     enabled_reports = scheduled_reports.count_documents({"enabled": True})
     enabled_anomaly_rules = anomaly_rules.count_documents({"enabled": True})
     uptime_seconds = max(0, int(time.time() - APP_START_TS))
+    with scan_lock:
+        scan_active = bool(scan_state.get("active"))
+        model_status = str(scan_state.get("model_status") or "idle")
+        known_faces = len(scan_state.get("known_students") or [])
+        active_tracks = len(scan_state.get("face_tracks") or {})
+        pending_recognition = len(scan_state.get("pending_recognition") or {})
 
     return {
         "generated_at": now_iso(),
@@ -4059,9 +4276,13 @@ def build_system_health_snapshot():
             "message": "Configured" if email_status == "ok" else smtp_error,
         },
         "scanner": {
-            "status": "active" if scan_state.get("active") else "idle",
-            "model_status": str(scan_state.get("model_status") or "idle"),
-            "known_faces": len(scan_state.get("known_students") or []),
+            "status": "active" if scan_active else "idle",
+            "model_status": model_status,
+            "known_faces": known_faces,
+            "active_tracks": int(active_tracks),
+            "pending_recognition": int(pending_recognition),
+            "liveness_enabled": bool(LIVE_LIVENESS_ENABLED),
+            "liveness_profile": str(get_scan_liveness_profile()),
         },
         "queues": {
             "queued_sms": int(queued_sms),
@@ -5373,15 +5594,27 @@ def log_attendance_and_sms(student, source="gate_scan", send_notifications=True,
         "verification_label": result["verification_label"],
         "tracking_mode": result["tracking_mode"],
     }
+    attendance_unique_filter = {
+        "student_id": result["student_id"],
+        "date": result["date"],
+        "session": result["session"],
+    }
+
     try:
-        attendance_collection.insert_one(attendance_doc)
-        signal_data_change("gate_logs")
+        upsert_result = attendance_collection.update_one(
+            attendance_unique_filter,
+            {"$setOnInsert": attendance_doc},
+            upsert=True,
+        )
+        inserted_new_record = bool(upsert_result.upserted_id)
     except DuplicateKeyError:
-        existing_record = attendance_collection.find_one({
-            "student_id": result["student_id"],
-            "date": result["date"],
-            "session": result["session"],
-        }) or attendance_doc
+        inserted_new_record = False
+    except Exception as exc:
+        print(f"[ERROR] Failed to sync attendance log: {exc}")
+        return None
+
+    if not inserted_new_record:
+        existing_record = attendance_collection.find_one(attendance_unique_filter) or attendance_doc
         return {
             **result,
             "status": existing_record.get("status", result["status"]),
@@ -5396,6 +5629,7 @@ def log_attendance_and_sms(student, source="gate_scan", send_notifications=True,
             "feed_update": False,
             "activity_entry": None,
         }
+    signal_data_change("gate_logs")
 
     sms_status = "skipped"
     sms_error = ""
@@ -5695,6 +5929,10 @@ def start_scan_capture():
         scan_state["last_not_registered_ts"] = 0.0
         scan_state["last_multi_face_ts"] = 0.0
         scan_state["pending_recognition"] = {}
+        scan_state["face_tracks"] = {}
+        scan_state["next_face_track_id"] = 1
+        scan_state["face_track_cursor"] = 0
+        scan_state["last_faces_payload"] = []
 
     refresh_face_index_async()
     return True, "Scan started (waiting for client frames)"
@@ -5711,6 +5949,10 @@ def stop_scan_capture():
         scan_state["model_status"] = "idle"
         scan_state["face_index_loading"] = False
         scan_state["pending_recognition"] = {}
+        scan_state["face_tracks"] = {}
+        scan_state["next_face_track_id"] = 1
+        scan_state["face_track_cursor"] = 0
+        scan_state["last_faces_payload"] = []
 
     if capture is not None:
         try:
@@ -6978,12 +7220,19 @@ def api_otp_verify():
 @require_permission("scan", api=True)
 def start_scan():
     requested_mode = None
+    requested_liveness_profile = None
     if request.method == "POST":
         payload = request_payload()
         requested_mode = payload.get("session_mode") or payload.get("mode")
+        requested_liveness_profile = payload.get("liveness_profile") or payload.get("profile")
     if requested_mode is not None:
         try:
             set_scan_session_mode(requested_mode)
+        except ValueError as exc:
+            return jsonify({"status": "error", "message": str(exc)}), 400
+    if requested_liveness_profile is not None:
+        try:
+            set_scan_liveness_profile(requested_liveness_profile)
         except ValueError as exc:
             return jsonify({"status": "error", "message": str(exc)}), 400
 
@@ -7009,6 +7258,7 @@ def start_scan():
         model_status = scan_state.get("model_status", "idle")
         registered_faces = len(scan_state.get("known_students", []))
         session_mode = normalize_scan_session_mode(scan_state.get("session_mode", "auto"), default="auto")
+        liveness_profile = normalize_scan_liveness_profile(scan_state.get("liveness_profile", LIVE_LIVENESS_PROFILE))
         face_index_loading = bool(scan_state.get("face_index_loading"))
     effective_session = resolve_gate_session(now_local())
     payload = {
@@ -7020,6 +7270,8 @@ def start_scan():
         "sms_auth": sms_status,
         "scan_session_mode": session_mode,
         "session_mode_label": scan_session_mode_label(session_mode),
+        "scan_liveness_profile": liveness_profile,
+        "liveness_profile_label": scan_liveness_profile_label(liveness_profile),
         "effective_session": {
             "session": effective_session.get("session", ""),
             "gate_action": effective_session.get("gate_action", ""),
@@ -7047,8 +7299,8 @@ def filter_live_face_locations(face_locations, frame_shape):
 
     frame_height = max(int((frame_shape or [0, 0])[0] or 0), 1)
     frame_width = max(int((frame_shape or [0, 0])[1] or 0), 1)
-    min_face_height = frame_height * 0.12
-    min_face_width = frame_width * 0.10
+    min_face_height = max(frame_height * 0.08, 20.0)
+    min_face_width = max(frame_width * 0.07, 20.0)
     filtered = []
 
     for location in face_locations:
@@ -7109,6 +7361,8 @@ def measure_live_face_quality(frame, face_location, scale_back=1.0):
         "brightness": 0.0,
         "contrast": 0.0,
         "sharpness": 0.0,
+        "texture": 0.0,
+        "highlights": 0.0,
         "area_ratio": 0.0,
     }
 
@@ -7134,6 +7388,11 @@ def measure_live_face_quality(frame, face_location, scale_back=1.0):
         metrics["brightness"] = round(float(np.mean(gray)), 2)
         metrics["contrast"] = round(float(np.std(gray)), 2)
         metrics["sharpness"] = round(float(cv2.Laplacian(gray, cv2.CV_64F).var()), 2)
+        sobel_x = cv2.Sobel(gray, cv2.CV_32F, 1, 0, ksize=3)
+        sobel_y = cv2.Sobel(gray, cv2.CV_32F, 0, 1, ksize=3)
+        texture_strength = float(np.mean(cv2.magnitude(sobel_x, sobel_y)))
+        metrics["texture"] = round(texture_strength, 2)
+        metrics["highlights"] = round(float(np.mean(gray >= 245)), 4)
         metrics["area_ratio"] = round(float(((bottom - top) * (right - left)) / max(frame_height * frame_width, 1)), 6)
         return metrics
     except Exception:
@@ -7158,6 +7417,775 @@ def upscale_face_locations(face_locations, scale_back, frame_shape):
         scaled_locations.append((scaled_top, scaled_right, scaled_bottom, scaled_left))
 
     return scaled_locations
+
+
+def _normalized_face_location(location):
+    if not isinstance(location, (list, tuple)) or len(location) != 4:
+        return None
+    try:
+        top = int(round(float(location[0])))
+        right = int(round(float(location[1])))
+        bottom = int(round(float(location[2])))
+        left = int(round(float(location[3])))
+    except (TypeError, ValueError):
+        return None
+    if bottom <= top or right <= left:
+        return None
+    return (top, right, bottom, left)
+
+
+def _face_location_center(location):
+    top, right, bottom, left = location
+    return ((float(left) + float(right)) / 2.0, (float(top) + float(bottom)) / 2.0)
+
+
+def _face_location_area(location):
+    top, right, bottom, left = location
+    return max(float(bottom) - float(top), 0.0) * max(float(right) - float(left), 0.0)
+
+
+def _face_location_dimensions(location):
+    top, right, bottom, left = location
+    width = max(float(right) - float(left), 0.0)
+    height = max(float(bottom) - float(top), 0.0)
+    return width, height
+
+
+def _face_track_match_limit(location):
+    top, right, bottom, left = location
+    face_width = max(float(right) - float(left), 1.0)
+    face_height = max(float(bottom) - float(top), 1.0)
+    longest_edge = max(face_width, face_height)
+    return max(20.0, longest_edge * float(LIVE_RECOGNITION_TRACK_MATCH_DISTANCE_RATIO))
+
+
+def build_live_face_payload_from_tracks(face_tracks, frame_shape):
+    frame_height = max(int((frame_shape or [0, 0])[0] or 0), 1)
+    frame_width = max(int((frame_shape or [0, 0])[1] or 0), 1)
+    payload_faces = []
+
+    for track in list(face_tracks or []):
+        location = _normalized_face_location(track.get("full_location"))
+        if not location:
+            continue
+        top, right, bottom, left = location
+        payload_faces.append({
+            "id": f"scan-face-{int(track.get('track_id') or 0)}",
+            "track_id": int(track.get("track_id") or 0),
+            "x": int(left),
+            "y": int(top),
+            "width": int(max(right - left, 0)),
+            "height": int(max(bottom - top, 0)),
+            "frame_width": int(frame_width),
+            "frame_height": int(frame_height),
+            "stability": int(track.get("stability") or 0),
+            "student_id": str(track.get("student_id") or "").strip(),
+            "liveness_ready": bool(track.get("liveness_ready", not LIVE_LIVENESS_ENABLED)),
+            "liveness_motion_score": round(float(track.get("liveness_motion_score") or 0.0), 3),
+            "liveness_pose_score": round(float(track.get("liveness_pose_score") or 0.0), 3),
+            "liveness_parallax_score": round(float(track.get("liveness_parallax_score") or 0.0), 3),
+        })
+
+    payload_faces.sort(
+        key=lambda row: float(row.get("width", 0) * row.get("height", 0)),
+        reverse=True,
+    )
+    return payload_faces[: max(int(LIVE_RECOGNITION_MAX_TRACKED_FACES or 1), 1)]
+
+
+def get_latest_live_faces_payload():
+    with scan_lock:
+        faces = scan_state.get("last_faces_payload", [])
+        if not isinstance(faces, list):
+            return []
+        return [dict(row) for row in faces if isinstance(row, dict)]
+
+
+def update_live_face_tracks(face_locations_small, scale_back, frame_shape, now_ts=None):
+    current_ts = float(now_ts if now_ts is not None else time.time())
+    normalized_locations = []
+    for location in list(face_locations_small or []):
+        normalized = _normalized_face_location(location)
+        if normalized:
+            normalized_locations.append(normalized)
+
+    normalized_locations.sort(key=_face_location_area, reverse=True)
+    if len(normalized_locations) > max(int(LIVE_RECOGNITION_MAX_TRACKED_FACES or 1), 1):
+        normalized_locations = normalized_locations[: max(int(LIVE_RECOGNITION_MAX_TRACKED_FACES or 1), 1)]
+
+    liveness_config = resolve_live_liveness_profile_thresholds()
+    liveness_decay = min(max(float(LIVE_LIVENESS_SCORE_DECAY or 0.88), 0.5), 0.99)
+    min_liveness_frames = max(int(liveness_config.get("min_track_frames") or 1), 1)
+    min_motion_score = max(float(liveness_config.get("min_motion_score") or 0.0), 0.0)
+    min_pose_score = max(float(liveness_config.get("min_pose_score") or 0.0), 0.0)
+    pose_grace_seconds = max(float(liveness_config.get("pose_grace_seconds") or 0.0), 0.0)
+
+    with scan_lock:
+        tracks = scan_state.setdefault("face_tracks", {})
+        if not isinstance(tracks, dict):
+            tracks = {}
+            scan_state["face_tracks"] = tracks
+
+        timeout_seconds = max(float(LIVE_RECOGNITION_TRACK_TIMEOUT_SECONDS), 0.1)
+        stale_track_ids = [
+            track_id
+            for track_id, row in tracks.items()
+            if current_ts - float((row or {}).get("last_seen_ts") or 0.0) > timeout_seconds
+        ]
+        for track_id in stale_track_ids:
+            tracks.pop(track_id, None)
+
+        try:
+            next_track_id = max(int(scan_state.get("next_face_track_id") or 1), 1)
+        except (TypeError, ValueError):
+            next_track_id = 1
+
+        matched_track_ids = set()
+        active_tracks = []
+
+        for location in normalized_locations:
+            center_x, center_y = _face_location_center(location)
+            match_limit = _face_track_match_limit(location)
+            best_track_id = None
+            best_distance = float("inf")
+
+            for track_id, existing in tracks.items():
+                if track_id in matched_track_ids:
+                    continue
+                track_center = existing.get("center")
+                if not isinstance(track_center, (list, tuple)) or len(track_center) != 2:
+                    continue
+                distance = float(np.hypot(center_x - float(track_center[0]), center_y - float(track_center[1])))
+                existing_limit = max(float(existing.get("match_limit") or 0.0), 20.0)
+                allowed_distance = max(match_limit, existing_limit)
+                if distance <= allowed_distance and distance < best_distance:
+                    best_distance = distance
+                    best_track_id = track_id
+
+            scaled_location = upscale_face_locations([location], scale_back, frame_shape)
+            if not scaled_location:
+                continue
+            full_location = scaled_location[0]
+
+            if best_track_id is None:
+                best_track_id = next_track_id
+                next_track_id += 1
+                previous = {}
+                stability = 1
+                center_distance = 0.0
+            else:
+                previous = tracks.get(best_track_id) or {}
+                stability = int(previous.get("stability") or 0) + 1
+                center_distance = float(best_distance if np.isfinite(best_distance) else 0.0)
+
+            area = float(_face_location_area(location))
+            face_width, face_height = _face_location_dimensions(location)
+            aspect_ratio = float(face_width / max(face_height, 1.0))
+            face_diagonal = max(float(np.hypot(face_width, face_height)), 1.0)
+
+            previous_area = max(float(previous.get("area") or area or 1.0), 1.0)
+            previous_aspect_ratio = max(float(previous.get("aspect_ratio") or aspect_ratio or 1.0), 0.01)
+            motion_component = min(center_distance / face_diagonal, 1.5)
+            area_component = min(abs(float(np.log(max(area, 1.0) / previous_area))), 1.2)
+            pose_component = min(abs(aspect_ratio - previous_aspect_ratio) / previous_aspect_ratio, 0.6)
+
+            motion_signal = min(motion_component + (area_component * 0.45), 1.5)
+            liveness_motion_score = max(float(previous.get("liveness_motion_score") or 0.0) * liveness_decay + motion_signal, 0.0)
+            liveness_pose_score = max(float(previous.get("liveness_pose_score") or 0.0) * liveness_decay + pose_component, 0.0)
+            liveness_frames = int(previous.get("liveness_frames") or 0) + 1
+            first_seen_ts = float(previous.get("first_seen_ts") or current_ts)
+            track_age_seconds = max(current_ts - first_seen_ts, 0.0)
+
+            liveness_ready = (
+                (not LIVE_LIVENESS_ENABLED)
+                or (
+                    liveness_frames >= min_liveness_frames
+                    and liveness_motion_score >= min_motion_score
+                    and (
+                        liveness_pose_score >= min_pose_score
+                        or track_age_seconds >= pose_grace_seconds
+                    )
+                )
+            )
+            if not LIVE_LIVENESS_ENABLED:
+                liveness_message = ""
+            elif liveness_frames < min_liveness_frames:
+                liveness_message = "Liveness check required"
+            elif liveness_motion_score < min_motion_score:
+                liveness_message = "Liveness check required: move slightly"
+            elif liveness_pose_score < min_pose_score and track_age_seconds < pose_grace_seconds:
+                liveness_message = "Liveness check required: turn head slightly"
+            else:
+                liveness_message = ""
+
+            updated_track = {
+                "track_id": int(best_track_id),
+                "first_seen_ts": first_seen_ts,
+                "last_seen_ts": current_ts,
+                "stability": int(stability),
+                "small_location": location,
+                "full_location": full_location,
+                "center": (center_x, center_y),
+                "area": area,
+                "aspect_ratio": aspect_ratio,
+                "match_limit": float(match_limit),
+                "next_attempt_ts": float(previous.get("next_attempt_ts") or 0.0),
+                "student_id": str(previous.get("student_id") or "").strip(),
+                "last_result": str(previous.get("last_result") or ""),
+                "last_confidence": float(previous.get("last_confidence") or 0.0),
+                "liveness_frames": int(liveness_frames),
+                "liveness_motion_score": float(round(liveness_motion_score, 6)),
+                "liveness_pose_score": float(round(liveness_pose_score, 6)),
+                "liveness_motion_component": float(round(motion_component, 6)),
+                "liveness_area_component": float(round(area_component, 6)),
+                "liveness_pose_component": float(round(pose_component, 6)),
+                "liveness_parallax_score": float(previous.get("liveness_parallax_score") or 0.0),
+                "liveness_planar_streak": int(previous.get("liveness_planar_streak") or 0),
+                "liveness_patch_delta": float(previous.get("liveness_patch_delta") or 0.0),
+                "liveness_patch_grad_delta": float(previous.get("liveness_patch_grad_delta") or 0.0),
+                "liveness_prev_patch": previous.get("liveness_prev_patch"),
+                "liveness_prev_grad_patch": previous.get("liveness_prev_grad_patch"),
+                "liveness_patch_ts": float(previous.get("liveness_patch_ts") or 0.0),
+                "liveness_ready": bool(liveness_ready),
+                "liveness_message": str(liveness_message or ""),
+            }
+            tracks[best_track_id] = updated_track
+            matched_track_ids.add(best_track_id)
+            active_tracks.append(updated_track)
+
+        scan_state["face_tracks"] = tracks
+        scan_state["next_face_track_id"] = next_track_id
+
+    active_tracks.sort(key=lambda row: float(row.get("area") or 0.0), reverse=True)
+    return active_tracks
+
+
+def evaluate_live_texture_liveness(face_quality):
+    if not LIVE_LIVENESS_TEXTURE_CHECK_ENABLED:
+        return {"accepted": True, "reason": "texture_check_disabled", "message": ""}
+
+    liveness_config = resolve_live_liveness_profile_thresholds()
+    min_texture = max(float(liveness_config.get("min_texture") or 0.0), 0.0)
+    min_contrast = max(float(liveness_config.get("min_contrast") or 0.0), 0.0)
+    max_highlight_ratio = min(max(float(liveness_config.get("max_highlight_ratio") or 0.0), 0.0), 1.0)
+
+    quality = face_quality if isinstance(face_quality, dict) else {}
+    brightness = float(quality.get("brightness") or 0.0)
+    contrast = float(quality.get("contrast") or 0.0)
+    sharpness = float(quality.get("sharpness") or 0.0)
+    texture = float(quality.get("texture") or 0.0)
+    highlights = float(quality.get("highlights") or 0.0)
+    area_ratio = float(quality.get("area_ratio") or 0.0)
+
+    if area_ratio <= 0.0:
+        return {"accepted": True, "reason": "texture_unavailable", "message": ""}
+
+    # Avoid penalizing low-light scenes where texture extraction is less reliable.
+    if brightness > 0.0 and brightness < float(LIVE_RECOGNITION_LOW_LIGHT_BRIGHTNESS) * 0.85:
+        return {"accepted": True, "reason": "texture_low_light", "message": ""}
+
+    # Strong detail is typically enough evidence against flat replay media.
+    if sharpness >= float(LIVE_RECOGNITION_MIN_SHARPNESS) * 1.2 and texture >= min_texture:
+        return {"accepted": True, "reason": "texture_strong_detail", "message": ""}
+
+    low_texture_contrast = (
+        texture < min_texture
+        and contrast < min_contrast
+    )
+    heavy_glare = (
+        highlights > max_highlight_ratio
+        and contrast < min_contrast * 1.2
+    )
+
+    if low_texture_contrast or heavy_glare:
+        return {
+            "accepted": False,
+            "reason": "liveness_texture_check",
+            "message": "Verification Failed",
+        }
+
+    return {"accepted": True, "reason": "texture_ok", "message": ""}
+
+
+def _compute_eye_aspect_ratio(eye_points):
+    if not isinstance(eye_points, (list, tuple)) or len(eye_points) < 6:
+        return 0.0
+    try:
+        pts = np.array(eye_points[:6], dtype=np.float32)
+        vertical_a = float(np.linalg.norm(pts[1] - pts[5]))
+        vertical_b = float(np.linalg.norm(pts[2] - pts[4]))
+        horizontal = float(np.linalg.norm(pts[0] - pts[3]))
+    except Exception:
+        return 0.0
+    if horizontal <= 1e-6:
+        return 0.0
+    return max((vertical_a + vertical_b) / (2.0 * horizontal), 0.0)
+
+
+def extract_live_blink_ear(rgb_small, face_location):
+    if rgb_small is None or getattr(rgb_small, "size", 0) == 0:
+        return None
+    location = _normalized_face_location(face_location)
+    if not location:
+        return None
+    try:
+        landmarks = face_recognition.face_landmarks(
+            rgb_small,
+            [location],
+            model="small",
+        )
+    except Exception:
+        landmarks = []
+    if not landmarks:
+        return None
+
+    eyes = landmarks[0] if isinstance(landmarks[0], dict) else {}
+    left_eye = eyes.get("left_eye") or []
+    right_eye = eyes.get("right_eye") or []
+    left_ear = _compute_eye_aspect_ratio(left_eye)
+    right_ear = _compute_eye_aspect_ratio(right_eye)
+    if left_ear <= 0.0 and right_ear <= 0.0:
+        return None
+    if left_ear <= 0.0:
+        return right_ear
+    if right_ear <= 0.0:
+        return left_ear
+    return (left_ear + right_ear) / 2.0
+
+
+def evaluate_live_blink_liveness(
+    track,
+    rgb_small=None,
+    face_location=None,
+    now_ts=None,
+    rgb_full=None,
+    face_location_full=None,
+):
+    if not LIVE_LIVENESS_ENABLED or not LIVE_LIVENESS_BLINK_ENABLED:
+        return {"accepted": True, "reason": "blink_disabled", "message": "", "updates": {}, "blink_detected": False}
+
+    liveness_config = resolve_live_liveness_profile_thresholds()
+    blink_required = bool(liveness_config.get("blink_required"))
+    current_ts = float(now_ts if now_ts is not None else time.time())
+    row = track if isinstance(track, dict) else {}
+    updates = {}
+
+    blink_count = int(row.get("liveness_blink_count") or 0)
+    eye_closed_frames = int(row.get("liveness_eye_closed_frames") or 0)
+    last_blink_ts = float(row.get("liveness_last_blink_ts") or 0.0)
+    last_ear_ts = float(row.get("liveness_last_ear_ts") or 0.0)
+    blink_detected = False
+    ear_value = None
+
+    min_interval = max(float(liveness_config.get("blink_interval_seconds") or 0.0), 0.05)
+    required_recent_seconds = max(float(liveness_config.get("blink_recent_seconds") or 0.0), 0.5)
+    has_recent_blink = (current_ts - last_blink_ts) <= required_recent_seconds
+    effective_interval = min_interval
+    if has_recent_blink:
+        effective_interval = max(min_interval, min(required_recent_seconds * 0.25, 0.55))
+
+    if (current_ts - last_ear_ts) >= effective_interval and rgb_small is not None and face_location is not None:
+        ear_value = extract_live_blink_ear(rgb_small, face_location)
+        if ear_value is None and rgb_full is not None and face_location_full is not None:
+            normalized_full_location = _normalized_face_location(face_location_full)
+            if normalized_full_location:
+                full_top, full_right, full_bottom, full_left = normalized_full_location
+                full_height = max(full_bottom - full_top, 0)
+                full_width = max(full_right - full_left, 0)
+                # Full-frame landmark fallback improves blink detection reliability
+                # when eye landmarks are too small on the reduced processing frame.
+                if full_height >= 56 and full_width >= 56:
+                    ear_value = extract_live_blink_ear(rgb_full, normalized_full_location)
+        if ear_value is not None:
+            closed_threshold = float(LIVE_LIVENESS_BLINK_EAR_CLOSED)
+            open_threshold = max(float(LIVE_LIVENESS_BLINK_EAR_OPEN), closed_threshold + 0.01)
+            min_closed_frames = max(int(LIVE_LIVENESS_BLINK_MIN_CLOSED_FRAMES or 1), 1)
+
+            if ear_value <= closed_threshold:
+                eye_closed_frames += 1
+            elif ear_value >= open_threshold:
+                if eye_closed_frames >= min_closed_frames and (current_ts - last_blink_ts) >= 0.18:
+                    blink_count += 1
+                    blink_detected = True
+                    last_blink_ts = current_ts
+                eye_closed_frames = 0
+            else:
+                eye_closed_frames = max(eye_closed_frames - 1, 0)
+
+            updates["liveness_last_ear"] = float(round(float(ear_value), 6))
+            updates["liveness_last_ear_ts"] = float(current_ts)
+            updates["liveness_eye_closed_frames"] = int(eye_closed_frames)
+            updates["liveness_blink_count"] = int(blink_count)
+            updates["liveness_last_blink_ts"] = float(last_blink_ts)
+
+    has_recent_blink = (current_ts - last_blink_ts) <= required_recent_seconds
+
+    if blink_required and not has_recent_blink:
+        return {
+            "accepted": True,
+            "reason": "liveness_blink_pending",
+            "message": "",
+            "updates": updates,
+            "blink_detected": blink_detected,
+        }
+
+    if blink_detected:
+        return {
+            "accepted": True,
+            "reason": "blink_detected",
+            "message": "Blink Detected",
+            "updates": updates,
+            "blink_detected": True,
+        }
+
+    return {
+        "accepted": True,
+        "reason": "blink_ok",
+        "message": "",
+        "updates": updates,
+        "blink_detected": False,
+    }
+
+
+def extract_live_liveness_patch(frame, face_location, scale_back=1.0):
+    if frame is None or frame.size == 0:
+        return None
+    if not isinstance(face_location, (list, tuple)) or len(face_location) != 4:
+        return None
+
+    try:
+        frame_height, frame_width = frame.shape[:2]
+        top, right, bottom, left = face_location
+        top = max(0, min(frame_height, int(round(float(top) * scale_back))))
+        right = max(0, min(frame_width, int(round(float(right) * scale_back))))
+        bottom = max(0, min(frame_height, int(round(float(bottom) * scale_back))))
+        left = max(0, min(frame_width, int(round(float(left) * scale_back))))
+    except Exception:
+        return None
+
+    if bottom <= top or right <= left:
+        return None
+
+    pad_y = int(round((bottom - top) * 0.12))
+    pad_x = int(round((right - left) * 0.12))
+    top = max(0, top - pad_y)
+    left = max(0, left - pad_x)
+    bottom = min(frame_height, bottom + pad_y)
+    right = min(frame_width, right + pad_x)
+    if bottom <= top or right <= left:
+        return None
+
+    roi = frame[top:bottom, left:right]
+    if roi is None or roi.size == 0:
+        return None
+
+    gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+    if gray.size == 0:
+        return None
+    gray = cv2.equalizeHist(gray)
+    patch_size = max(int(LIVE_LIVENESS_PATCH_SIZE or 24), 12)
+    patch = cv2.resize(gray, (patch_size, patch_size), interpolation=cv2.INTER_AREA)
+    grad_patch = cv2.Laplacian(patch, cv2.CV_32F)
+    return patch, grad_patch
+
+
+def evaluate_live_patch_parallax_liveness(track, frame, face_location, scale_back=1.0, now_ts=None):
+    if not LIVE_LIVENESS_ENABLED or not LIVE_LIVENESS_PATCH_PARALLAX_ENABLED:
+        return {"accepted": True, "reason": "patch_parallax_disabled", "message": "", "updates": {}}
+
+    liveness_config = resolve_live_liveness_profile_thresholds()
+    patch_bundle = extract_live_liveness_patch(frame, face_location, scale_back=scale_back)
+    if not patch_bundle:
+        return {"accepted": True, "reason": "patch_unavailable", "message": "", "updates": {}}
+
+    patch, grad_patch = patch_bundle
+    previous_patch = track.get("liveness_prev_patch")
+    previous_grad_patch = track.get("liveness_prev_grad_patch")
+    patch_delta = 0.0
+    grad_delta = 0.0
+
+    if isinstance(previous_patch, np.ndarray) and previous_patch.shape == patch.shape:
+        patch_delta = float(np.mean(cv2.absdiff(patch, previous_patch)) / 255.0)
+    if isinstance(previous_grad_patch, np.ndarray) and previous_grad_patch.shape == grad_patch.shape:
+        grad_delta = float(np.mean(np.abs(grad_patch - previous_grad_patch)) / 255.0)
+
+    motion_component = float(track.get("liveness_motion_component") or 0.0)
+    pose_component = float(track.get("liveness_pose_component") or 0.0)
+    planar_streak = int(track.get("liveness_planar_streak") or 0)
+    previous_parallax_score = float(track.get("liveness_parallax_score") or 0.0)
+    decay = min(max(float(LIVE_LIVENESS_SCORE_DECAY or 0.88), 0.5), 0.99)
+
+    parallax_step = max(
+        (patch_delta * 1.18)
+        + (grad_delta * 0.82)
+        + (pose_component * 0.35)
+        - 0.018,
+        0.0,
+    )
+    parallax_score = max((previous_parallax_score * decay) + parallax_step, 0.0)
+
+    planar_motion_detected = (
+        motion_component >= float(LIVE_LIVENESS_MOTION_COMPONENT_THRESHOLD)
+        and pose_component <= float(liveness_config.get("max_planar_pose_component") or 0.0)
+        and patch_delta <= float(liveness_config.get("max_planar_patch_delta") or 0.0)
+        and grad_delta <= float(liveness_config.get("max_planar_grad_delta") or 0.0)
+    )
+    if planar_motion_detected:
+        planar_streak += 1
+    else:
+        planar_streak = max(planar_streak - 1, 0)
+
+    updates = {
+        "liveness_prev_patch": patch,
+        "liveness_prev_grad_patch": grad_patch,
+        "liveness_patch_delta": float(round(patch_delta, 6)),
+        "liveness_patch_grad_delta": float(round(grad_delta, 6)),
+        "liveness_parallax_score": float(round(parallax_score, 6)),
+        "liveness_planar_streak": int(planar_streak),
+        "liveness_patch_ts": float(now_ts if now_ts is not None else time.time()),
+    }
+
+    required_streak = max(int(liveness_config.get("planar_streak_frames") or 4), 2)
+    min_parallax = max(float(liveness_config.get("min_parallax_score") or 0.0), 0.0)
+    last_blink_ts = float(track.get("liveness_last_blink_ts") or 0.0)
+    blink_recent_window = max(float(liveness_config.get("blink_recent_seconds") or 0.0), 0.5)
+    has_recent_blink = (float(now_ts if now_ts is not None else time.time()) - last_blink_ts) <= blink_recent_window
+    near_parallax_threshold = parallax_score >= (min_parallax * 0.74)
+    blink_backed_motion = (
+        has_recent_blink
+        and motion_component >= max(float(LIVE_LIVENESS_MOTION_COMPONENT_THRESHOLD) * 0.82, 0.02)
+        and pose_component >= max(float(liveness_config.get("max_planar_pose_component") or 0.0) * 0.4, 0.004)
+        and near_parallax_threshold
+    )
+    if planar_streak >= required_streak and parallax_score < min_parallax and not blink_backed_motion:
+        return {
+            "accepted": False,
+            "reason": "liveness_flat_motion_pattern",
+            "message": "Liveness check failed: verification required",
+            "updates": updates,
+        }
+
+    return {
+        "accepted": True,
+        "reason": "patch_parallax_ok",
+        "message": "",
+        "updates": updates,
+    }
+
+
+def get_liveness_ai_model():
+    global liveness_ai_model, liveness_ai_model_loaded, liveness_ai_model_error
+    if not LIVE_LIVENESS_AI_MODEL_ENABLED:
+        return None
+    if liveness_ai_model_loaded:
+        return liveness_ai_model
+
+    with liveness_ai_model_lock:
+        if liveness_ai_model_loaded:
+            return liveness_ai_model
+        liveness_ai_model_loaded = True
+        liveness_ai_model = None
+        liveness_ai_model_error = ""
+
+        model_path = str(LIVE_LIVENESS_AI_MODEL_PATH or "").strip()
+        if not model_path:
+            liveness_ai_model_error = "AI model path missing"
+            return None
+        if not os.path.exists(model_path):
+            liveness_ai_model_error = f"AI model not found: {model_path}"
+            return None
+        try:
+            if model_path.lower().endswith(".onnx"):
+                liveness_ai_model = cv2.dnn.readNetFromONNX(model_path)
+            else:
+                liveness_ai_model_error = "Unsupported AI model format (use .onnx)"
+        except Exception as exc:
+            liveness_ai_model_error = f"AI model load failed: {exc}"
+            liveness_ai_model = None
+    return liveness_ai_model
+
+
+def evaluate_live_ai_liveness(frame, face_location, scale_back=1.0):
+    if not LIVE_LIVENESS_ENABLED or not LIVE_LIVENESS_AI_MODEL_ENABLED:
+        return {"accepted": True, "reason": "ai_disabled", "message": ""}
+
+    model = get_liveness_ai_model()
+    if model is None:
+        return {"accepted": True, "reason": "ai_unavailable", "message": ""}
+
+    if frame is None or getattr(frame, "size", 0) == 0:
+        return {"accepted": True, "reason": "ai_frame_missing", "message": ""}
+    location = _normalized_face_location(face_location)
+    if not location:
+        return {"accepted": True, "reason": "ai_location_missing", "message": ""}
+
+    frame_height, frame_width = frame.shape[:2]
+    top, right, bottom, left = location
+    top = max(0, min(frame_height, int(round(float(top) * scale_back))))
+    right = max(0, min(frame_width, int(round(float(right) * scale_back))))
+    bottom = max(0, min(frame_height, int(round(float(bottom) * scale_back))))
+    left = max(0, min(frame_width, int(round(float(left) * scale_back))))
+    if bottom <= top or right <= left:
+        return {"accepted": True, "reason": "ai_crop_invalid", "message": ""}
+
+    crop = frame[top:bottom, left:right]
+    if crop is None or crop.size == 0:
+        return {"accepted": True, "reason": "ai_crop_missing", "message": ""}
+
+    try:
+        resized = cv2.resize(crop, (128, 128), interpolation=cv2.INTER_LINEAR)
+        blob = cv2.dnn.blobFromImage(
+            resized,
+            scalefactor=1.0 / 255.0,
+            size=(128, 128),
+            mean=(0.0, 0.0, 0.0),
+            swapRB=True,
+            crop=False,
+        )
+        model.setInput(blob)
+        output = model.forward()
+        vector = np.array(output).reshape(-1)
+        if vector.size == 0:
+            return {"accepted": True, "reason": "ai_output_empty", "message": ""}
+        if vector.size == 1:
+            live_score = float(vector[0])
+        else:
+            # Common binary heads: [spoof, live] or logits; use second index when available.
+            live_score = float(vector[1] if vector.size > 1 else vector[-1])
+        if live_score < float(LIVE_LIVENESS_AI_MIN_LIVE_SCORE):
+            return {"accepted": False, "reason": "liveness_ai_spoof", "message": "Verification Failed"}
+        return {"accepted": True, "reason": "ai_live_ok", "message": ""}
+    except Exception:
+        return {"accepted": True, "reason": "ai_inference_error", "message": ""}
+
+
+def evaluate_live_track_liveness(track, face_quality=None, now_ts=None):
+    if not LIVE_LIVENESS_ENABLED:
+        return {"accepted": True, "reason": "liveness_disabled", "message": ""}
+
+    liveness_config = resolve_live_liveness_profile_thresholds()
+    current_ts = float(now_ts if now_ts is not None else time.time())
+    row = track if isinstance(track, dict) else {}
+    liveness_frames = int(row.get("liveness_frames") or 0)
+    motion_score = float(row.get("liveness_motion_score") or 0.0)
+    pose_score = float(row.get("liveness_pose_score") or 0.0)
+    first_seen_ts = float(row.get("first_seen_ts") or current_ts)
+    track_age_seconds = max(current_ts - first_seen_ts, 0.0)
+
+    min_frames = max(int(liveness_config.get("min_track_frames") or 1), 1)
+    min_motion = max(float(liveness_config.get("min_motion_score") or 0.0), 0.0)
+    min_pose = max(float(liveness_config.get("min_pose_score") or 0.0), 0.0)
+    pose_grace_seconds = max(float(liveness_config.get("pose_grace_seconds") or 0.0), 0.0)
+    min_parallax = max(float(liveness_config.get("min_parallax_score") or 0.0), 0.0)
+    required_streak = max(int(liveness_config.get("planar_streak_frames") or 4), 2)
+    planar_streak = int(row.get("liveness_planar_streak") or 0)
+    parallax_score = float(row.get("liveness_parallax_score") or 0.0)
+    last_blink_ts = float(row.get("liveness_last_blink_ts") or 0.0)
+    motion_component = float(row.get("liveness_motion_component") or 0.0)
+    pose_component = float(row.get("liveness_pose_component") or 0.0)
+    has_recent_blink = (current_ts - last_blink_ts) <= max(float(liveness_config.get("blink_recent_seconds") or 0.0), 0.5)
+    age_relax = min(max(track_age_seconds / max(pose_grace_seconds + 1.0, 1.0), 0.0), 1.0)
+    effective_min_motion = max(min_motion * (1.0 - (0.28 * age_relax)), min_motion * 0.68)
+    effective_min_pose = max(min_pose * (1.0 - (0.22 * age_relax)), min_pose * 0.65)
+
+    if liveness_frames < min_frames:
+        return {"accepted": False, "reason": "liveness_building", "message": "Liveness Check Required"}
+    if motion_score < effective_min_motion:
+        # Recent blink can compensate for low box movement while preserving strict checks.
+        if not (has_recent_blink and motion_score >= (effective_min_motion * 0.6)):
+            return {"accepted": False, "reason": "liveness_motion_required", "message": "Liveness Check Required"}
+    if pose_score < effective_min_pose and track_age_seconds < pose_grace_seconds:
+        if not has_recent_blink:
+            return {"accepted": False, "reason": "liveness_pose_required", "message": "Liveness Check Required"}
+    near_parallax_threshold = parallax_score >= (min_parallax * 0.74)
+    blink_backed_motion = (
+        has_recent_blink
+        and motion_component >= max(float(LIVE_LIVENESS_MOTION_COMPONENT_THRESHOLD) * 0.82, 0.02)
+        and pose_component >= max(float(liveness_config.get("max_planar_pose_component") or 0.0) * 0.4, 0.004)
+        and near_parallax_threshold
+    )
+    if (
+        LIVE_LIVENESS_PATCH_PARALLAX_ENABLED
+        and planar_streak >= required_streak
+        and parallax_score < min_parallax
+        and liveness_frames >= (min_frames + 1)
+        and not blink_backed_motion
+    ):
+        return {"accepted": False, "reason": "liveness_flat_motion_pattern", "message": "Verification Failed"}
+
+    strong_depth_signal = (
+        (not LIVE_LIVENESS_PATCH_PARALLAX_ENABLED)
+        or parallax_score >= max((min_parallax * 1.08), min_parallax + 0.006)
+        or planar_streak < required_streak
+    )
+    strong_non_blink_liveness = (
+        liveness_frames >= (min_frames + 1)
+        and motion_score >= max((effective_min_motion * 1.08), effective_min_motion + 0.015)
+        and (
+            pose_score >= max((effective_min_pose * 1.04), effective_min_pose + 0.004)
+            or track_age_seconds >= pose_grace_seconds
+        )
+        and strong_depth_signal
+    )
+
+    if LIVE_LIVENESS_BLINK_ENABLED and bool(liveness_config.get("blink_required")):
+        if (not has_recent_blink) and (not strong_non_blink_liveness):
+            return {"accepted": False, "reason": "liveness_blink_or_depth_required", "message": "Liveness Check Required"}
+
+    if face_quality is None:
+        return {"accepted": True, "reason": "liveness_motion_pose_ok", "message": ""}
+
+    texture_gate = evaluate_live_texture_liveness(face_quality)
+    if not texture_gate.get("accepted"):
+        return texture_gate
+    return {"accepted": True, "reason": "liveness_ok", "message": ""}
+
+
+def set_live_face_track_state(track_id, *, next_attempt_ts=None, student_id=None, last_result=None, last_confidence=None):
+    try:
+        normalized_track_id = int(track_id)
+    except (TypeError, ValueError):
+        return
+
+    with scan_lock:
+        tracks = scan_state.get("face_tracks")
+        if not isinstance(tracks, dict):
+            return
+        track = tracks.get(normalized_track_id)
+        if not isinstance(track, dict):
+            return
+        if next_attempt_ts is not None:
+            track["next_attempt_ts"] = float(next_attempt_ts)
+        if student_id is not None:
+            track["student_id"] = str(student_id or "").strip()
+        if last_result is not None:
+            track["last_result"] = str(last_result)
+        if last_confidence is not None:
+            try:
+                track["last_confidence"] = float(last_confidence)
+            except (TypeError, ValueError):
+                track["last_confidence"] = 0.0
+
+
+def set_live_face_track_liveness_state(track_id, **updates):
+    if not updates:
+        return
+    try:
+        normalized_track_id = int(track_id)
+    except (TypeError, ValueError):
+        return
+
+    with scan_lock:
+        tracks = scan_state.get("face_tracks")
+        if not isinstance(tracks, dict):
+            return
+        track = tracks.get(normalized_track_id)
+        if not isinstance(track, dict):
+            return
+        for key, value in updates.items():
+            if not key:
+                continue
+            track[str(key)] = value
 
 
 def prepare_live_encoding_frame(frame, face_locations):
@@ -7356,6 +8384,11 @@ def process_client_frame(frame_bytes):
             small_frame = frame
         
         rgb_small = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
+        rgb_full_for_blink = (
+            cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            if LIVE_LIVENESS_ENABLED and LIVE_LIVENESS_BLINK_ENABLED
+            else None
+        )
         
         # Detect faces
         face_locations_small = face_recognition.face_locations(
@@ -7363,36 +8396,54 @@ def process_client_frame(frame_bytes):
             number_of_times_to_upsample=0,
             model="hog",
         )
-
-        frame_height, frame_width = frame.shape[:2]
+        if len(face_locations_small) == 0 and scale < 0.75:
+            retry_scale = min(max(scale + 0.2, 0.65), 0.8)
+            if retry_scale > scale:
+                retry_frame = cv2.resize(frame, (0, 0), fx=retry_scale, fy=retry_scale, interpolation=cv2.INTER_LINEAR)
+                retry_rgb = cv2.cvtColor(retry_frame, cv2.COLOR_BGR2RGB)
+                retry_locations = face_recognition.face_locations(
+                    retry_rgb,
+                    number_of_times_to_upsample=0,
+                    model="hog",
+                )
+                if retry_locations:
+                    small_frame = retry_frame
+                    rgb_small = retry_rgb
+                    face_locations_small = retry_locations
+                    scale = retry_scale
         scale_back = 1.0 / scale if scale > 0 else 1.0
-        payload["faces"] = [
-            {
-                "id": f"scan-face-{index}",
-                "track_id": f"scan-face-{index}",
-                "x": int(round(float(left) * scale_back)),
-                "y": int(round(float(top) * scale_back)),
-                "width": int(round((float(right) - float(left)) * scale_back)),
-                "height": int(round((float(bottom) - float(top)) * scale_back)),
-                "frame_width": int(frame_width),
-                "frame_height": int(frame_height),
-            }
-            for index, (top, right, bottom, left) in enumerate(face_locations_small)
-            if (float(right) - float(left)) > 0 and (float(bottom) - float(top)) > 0
-        ]
 
         if len(face_locations_small) == 0:
+            clear_pending_live_recognition()
+            with scan_lock:
+                scan_state["last_faces_payload"] = []
             return True, "No faces detected", payload
 
         face_locations_small = filter_live_face_locations(face_locations_small, rgb_small.shape)
         if len(face_locations_small) == 0:
             push_not_registered_event("face_too_small", 0.0)
+            clear_pending_live_recognition()
+            with scan_lock:
+                scan_state["last_faces_payload"] = []
             return True, "Face detected but too small for reliable recognition", payload
 
-        face_locations_small, _ = prioritize_live_face_locations(face_locations_small)
+        frame_now_ts = time.time()
+        face_tracks = update_live_face_tracks(
+            face_locations_small,
+            scale_back,
+            frame.shape,
+            now_ts=frame_now_ts,
+        )
+        payload["faces"] = build_live_face_payload_from_tracks(face_tracks, frame.shape)
+        with scan_lock:
+            scan_state["last_faces_payload"] = [dict(row) for row in payload["faces"]]
 
         db_encoding_count = int(len(db_encodings)) if db_encodings is not None else 0
         legacy_flat_index = any("encodings" not in (student or {}) for student in db_students)
+        face_index = {
+            "students": db_students,
+            "centroids": db_encodings,
+        }
 
         if model_status == "loading":
             return True, "Model still loading", payload
@@ -7401,7 +8452,123 @@ def process_client_frame(frame_bytes):
             push_not_registered_event(reason, 0.0)
             return True, f"Not ready: {reason}", payload
 
-        face_locations_full = upscale_face_locations(face_locations_small, scale_back, frame.shape)
+        recognition_candidates = []
+        liveness_holds = []
+        required_stability = max(int(LIVE_RECOGNITION_TRACK_STABILITY_FRAMES or 1), 1)
+        max_candidates = max(int(LIVE_RECOGNITION_MAX_RECOGNITIONS_PER_FRAME or 1), 1)
+        ordered_tracks = sorted(
+            face_tracks,
+            key=lambda row: -float((row or {}).get("area") or 0.0),
+        )
+        if ordered_tracks:
+            with scan_lock:
+                try:
+                    track_cursor = int(scan_state.get("face_track_cursor") or 0)
+                except (TypeError, ValueError):
+                    track_cursor = 0
+            track_cursor %= len(ordered_tracks)
+            rotated_tracks = ordered_tracks[track_cursor:] + ordered_tracks[:track_cursor]
+        else:
+            track_cursor = 0
+            rotated_tracks = []
+
+        for track in rotated_tracks:
+            if len(recognition_candidates) >= max_candidates:
+                break
+            if int(track.get("stability") or 0) < required_stability:
+                continue
+            if frame_now_ts < float(track.get("next_attempt_ts") or 0.0):
+                continue
+            full_location = _normalized_face_location(track.get("full_location"))
+            if full_location is None:
+                continue
+            face_quality = None
+            blink_liveness_gate = evaluate_live_blink_liveness(
+                track,
+                rgb_small=rgb_small,
+                face_location=track.get("small_location"),
+                now_ts=frame_now_ts,
+                rgb_full=rgb_full_for_blink,
+                face_location_full=full_location,
+            )
+            blink_updates = blink_liveness_gate.get("updates") or {}
+            if blink_updates:
+                set_live_face_track_liveness_state(track.get("track_id"), **blink_updates)
+                track.update(blink_updates)
+
+            patch_liveness_gate = None
+            if LIVE_LIVENESS_ENABLED and LIVE_LIVENESS_PATCH_PARALLAX_ENABLED:
+                patch_liveness_gate = evaluate_live_patch_parallax_liveness(
+                    track,
+                    frame,
+                    track.get("small_location"),
+                    scale_back=scale_back,
+                    now_ts=frame_now_ts,
+                )
+                patch_updates = patch_liveness_gate.get("updates") or {}
+                if patch_updates:
+                    set_live_face_track_liveness_state(track.get("track_id"), **patch_updates)
+                    track.update(patch_updates)
+
+            liveness_gate = evaluate_live_track_liveness(track, face_quality=None, now_ts=frame_now_ts)
+            if liveness_gate.get("accepted") and not blink_liveness_gate.get("accepted"):
+                liveness_gate = blink_liveness_gate
+            if liveness_gate.get("accepted") and patch_liveness_gate is not None and not patch_liveness_gate.get("accepted"):
+                liveness_gate = patch_liveness_gate
+            if (
+                liveness_gate.get("accepted")
+                and LIVE_LIVENESS_ENABLED
+                and LIVE_LIVENESS_TEXTURE_CHECK_ENABLED
+            ):
+                face_quality = measure_live_face_quality(frame, track.get("small_location"), scale_back=scale_back)
+                texture_gate = evaluate_live_texture_liveness(face_quality)
+                if not texture_gate.get("accepted"):
+                    liveness_gate = texture_gate
+            if (
+                liveness_gate.get("accepted")
+                and LIVE_LIVENESS_ENABLED
+                and LIVE_LIVENESS_AI_MODEL_ENABLED
+            ):
+                ai_gate = evaluate_live_ai_liveness(
+                    frame,
+                    track.get("small_location"),
+                    scale_back=scale_back,
+                )
+                if not ai_gate.get("accepted"):
+                    liveness_gate = ai_gate
+            if not liveness_gate.get("accepted"):
+                hold_message = str(liveness_gate.get("message") or "Liveness Check Required")
+                if blink_liveness_gate.get("blink_detected") and hold_message.lower().startswith("liveness check"):
+                    hold_message = "Blink Detected"
+                liveness_holds.append(hold_message)
+                set_live_face_track_state(
+                    track.get("track_id"),
+                    next_attempt_ts=frame_now_ts + float(LIVE_RECOGNITION_LIVENESS_RETRY_SECONDS),
+                    student_id="",
+                    last_result=str(liveness_gate.get("reason") or "liveness_check_required"),
+                    last_confidence=0.0,
+                )
+                continue
+            recognition_candidates.append({
+                "track_id": int(track.get("track_id") or 0),
+                "small_location": track.get("small_location"),
+                "full_location": full_location,
+                "area": float(track.get("area") or 0.0),
+                "face_quality": dict(face_quality) if isinstance(face_quality, dict) else None,
+            })
+
+        if ordered_tracks:
+            with scan_lock:
+                scan_state["face_track_cursor"] = (track_cursor + max(len(recognition_candidates), 1)) % len(ordered_tracks)
+
+        if not recognition_candidates:
+            if liveness_holds:
+                return True, liveness_holds[0], payload
+            if len(payload["faces"]) > 1:
+                return True, f"Tracking {len(payload['faces'])} faces", payload
+            return True, "Face detected", payload
+
+        face_locations_full = [row["full_location"] for row in recognition_candidates]
         encoding_frame, encoding_face_locations = prepare_live_encoding_frame(frame, face_locations_full)
         rgb_encoding = cv2.cvtColor(encoding_frame, cv2.COLOR_BGR2RGB) if encoding_frame is not None and encoding_frame.size else None
         face_encs = face_recognition.face_encodings(
@@ -7412,14 +8579,26 @@ def process_client_frame(frame_bytes):
         ) if rgb_encoding is not None else []
 
         if not face_encs:
+            fallback_locations = [
+                _normalized_face_location(row.get("small_location"))
+                for row in recognition_candidates
+            ]
+            fallback_locations = [row for row in fallback_locations if row]
             face_encs = face_recognition.face_encodings(
                 rgb_small,
-                face_locations_small,
+                fallback_locations,
                 num_jitters=LIVE_RECOGNITION_ENCODING_JITTERS,
                 model="small",
-            )
+            ) if fallback_locations else []
         
         if not face_encs:
+            for track in recognition_candidates:
+                set_live_face_track_state(
+                    track.get("track_id"),
+                    next_attempt_ts=frame_now_ts + float(LIVE_RECOGNITION_TRACK_UNKNOWN_RETRY_SECONDS),
+                    last_result="face_not_encoded",
+                    last_confidence=0.0,
+                )
             push_not_registered_event("face_not_encoded", 0.0)
             return True, "Face(s) not encoded", payload
 
@@ -7429,8 +8608,9 @@ def process_client_frame(frame_bytes):
         unknown_confidences = []
         unknown_reasons = []
         seen_student_ids = set()
-        frame_now_ts = time.time()
-        for enc, face_location_small in zip(face_encs, face_locations_small):
+        for track, enc in zip(recognition_candidates, face_encs):
+            track_id = track.get("track_id")
+            face_location_small = track.get("small_location")
             if legacy_flat_index:
                 distances = face_recognition.face_distance(db_encodings, enc)
                 if len(distances) > 0:
@@ -7458,7 +8638,7 @@ def process_client_frame(frame_bytes):
             else:
                 match_result = match_face_probe(
                     enc,
-                    {"students": db_students, "centroids": db_encodings},
+                    face_index,
                     shortlist_size=RECOGNITION_SHORTLIST_SIZE,
                     match_distance_threshold=RECOGNITION_TOLERANCE,
                     score_threshold=RECOGNITION_SCORE_TOLERANCE,
@@ -7475,16 +8655,41 @@ def process_client_frame(frame_bytes):
                     unknown_confidences.append(confidence_pct)
                     unknown_reasons.append("low_confidence")
                     results.append(f"Low confidence: {confidence_pct:.1f}%")
+                    set_live_face_track_state(
+                        track_id,
+                        next_attempt_ts=frame_now_ts + float(LIVE_RECOGNITION_TRACK_UNKNOWN_RETRY_SECONDS),
+                        student_id="",
+                        last_result="low_confidence",
+                        last_confidence=confidence_pct,
+                    )
                     continue
 
                 candidate_student_id = str(candidate.get("student_id") or "").strip()
                 if candidate_student_id and should_suppress_recent_live_scan(candidate_student_id, frame_now_ts, mode=session_mode):
                     clear_pending_live_recognition(candidate_student_id)
+                    set_live_face_track_state(
+                        track_id,
+                        next_attempt_ts=frame_now_ts + max(float(LIVE_RECOGNITION_TRACK_RETRY_SECONDS), float(SCAN_FACE_PRESENCE_RESET_SECONDS)),
+                        student_id=candidate_student_id,
+                        last_result="suppressed_recent_scan",
+                        last_confidence=confidence_pct,
+                    )
                     continue
-                face_quality = measure_live_face_quality(frame, face_location_small, scale_back=scale_back)
+                face_quality = (
+                    track.get("face_quality")
+                    if isinstance(track.get("face_quality"), dict)
+                    else measure_live_face_quality(frame, face_location_small, scale_back=scale_back)
+                )
                 live_match_gate = evaluate_live_recognition_match(match_result, confidence_pct, face_quality)
                 if not live_match_gate.get("accepted"):
                     results.append(str(live_match_gate.get("message") or "Hold still for identity confirmation."))
+                    set_live_face_track_state(
+                        track_id,
+                        next_attempt_ts=frame_now_ts + float(LIVE_RECOGNITION_CONFIRMATION_RETRY_SECONDS),
+                        student_id=candidate_student_id,
+                        last_result=str(live_match_gate.get("reason") or "awaiting_confirmation"),
+                        last_confidence=confidence_pct,
+                    )
                     continue
 
                 confirmation_state = track_pending_live_recognition(
@@ -7500,10 +8705,24 @@ def process_client_frame(frame_bytes):
                     results.append(
                         f"Confirming {candidate.get('name', 'identity')} ({observed_frames}/{required_frames})"
                     )
+                    set_live_face_track_state(
+                        track_id,
+                        next_attempt_ts=frame_now_ts + float(LIVE_RECOGNITION_CONFIRMATION_RETRY_SECONDS),
+                        student_id=candidate_student_id,
+                        last_result="confirming_identity",
+                        last_confidence=confidence_pct,
+                    )
                     continue
 
                 if candidate_student_id and candidate_student_id in seen_student_ids:
                     duplicate_students.append(candidate.get("name", "Unknown"))
+                    set_live_face_track_state(
+                        track_id,
+                        next_attempt_ts=frame_now_ts + float(LIVE_RECOGNITION_CONFIRMATION_RETRY_SECONDS),
+                        student_id=candidate_student_id,
+                        last_result="duplicate_in_frame",
+                        last_confidence=confidence_pct,
+                    )
                     continue
                 if candidate_student_id:
                     seen_student_ids.add(candidate_student_id)
@@ -7511,9 +8730,23 @@ def process_client_frame(frame_bytes):
                 if verification:
                     verified_students.append(candidate.get("name", "Unknown"))
                     results.append(f"Verified: {candidate.get('name', 'Unknown')}")
+                    set_live_face_track_state(
+                        track_id,
+                        next_attempt_ts=frame_now_ts + max(float(LIVE_RECOGNITION_TRACK_RETRY_SECONDS), float(SCAN_FACE_PRESENCE_RESET_SECONDS)),
+                        student_id=candidate_student_id,
+                        last_result="verified",
+                        last_confidence=confidence_pct,
+                    )
                 else:
                     duplicate_students.append(candidate.get("name", "Unknown"))
                     results.append(f"Duplicate scan (cooldown) - {candidate.get('name', 'Unknown')}")
+                    set_live_face_track_state(
+                        track_id,
+                        next_attempt_ts=frame_now_ts + max(float(LIVE_RECOGNITION_TRACK_RETRY_SECONDS), float(SCAN_FACE_PRESENCE_RESET_SECONDS)),
+                        student_id=candidate_student_id,
+                        last_result="duplicate_cooldown",
+                        last_confidence=confidence_pct,
+                    )
             elif match_result.get("candidate"):
                 confidence_pct = float(match_result.get("confidence") or 0.0)
                 unknown_confidences.append(confidence_pct)
@@ -7521,10 +8754,34 @@ def process_client_frame(frame_bytes):
                 results.append(
                     f"No reliable match ({str(match_result.get('reason') or 'unmatched').replace('_', ' ')})"
                 )
+                set_live_face_track_state(
+                    track_id,
+                    next_attempt_ts=frame_now_ts + float(LIVE_RECOGNITION_TRACK_UNKNOWN_RETRY_SECONDS),
+                    student_id="",
+                    last_result=str(match_result.get("reason") or "unmatched"),
+                    last_confidence=confidence_pct,
+                )
             else:
                 unknown_confidences.append(0.0)
                 unknown_reasons.append("no_face_index")
                 results.append("No face index")
+                set_live_face_track_state(
+                    track_id,
+                    next_attempt_ts=frame_now_ts + float(LIVE_RECOGNITION_TRACK_UNKNOWN_RETRY_SECONDS),
+                    student_id="",
+                    last_result="no_face_index",
+                    last_confidence=0.0,
+                )
+
+        if len(face_encs) < len(recognition_candidates):
+            for track in recognition_candidates[len(face_encs):]:
+                set_live_face_track_state(
+                    track.get("track_id"),
+                    next_attempt_ts=frame_now_ts + float(LIVE_RECOGNITION_TRACK_UNKNOWN_RETRY_SECONDS),
+                    student_id="",
+                    last_result="encoding_missing",
+                    last_confidence=0.0,
+                )
 
         if not verified_students and unknown_confidences:
             clear_pending_live_recognition()
@@ -7540,10 +8797,12 @@ def process_client_frame(frame_bytes):
             summary = f"Verified {verified_count} student{'s' if verified_count != 1 else ''}: " + ", ".join(verified_students)
             if duplicate_count:
                 summary += f" | {duplicate_count} duplicate scan{'s' if duplicate_count != 1 else ''} ignored"
-            if unknown_count and not verified_count:
+            if unknown_count:
                 summary += f" | {unknown_count} unmatched face{'s' if unknown_count != 1 else ''}"
             return True, summary, payload
 
+        if len(payload["faces"]) > 1 and not results:
+            return True, f"Tracking {len(payload['faces'])} faces", payload
         return True, results[0] if results else "Frame processed", payload
         
     except Exception as exc:
@@ -7572,13 +8831,26 @@ def process_scan_frame():
         if not frame_bytes:
             return jsonify({"status": "error", "message": "No frame content"}), 400
         
-        # Process the frame
-        success, message, payload = process_client_frame(frame_bytes)
+        if not frame_processing_lock.acquire(blocking=False):
+            return jsonify({
+                "status": "ok",
+                "message": "Frame skipped: processor busy",
+                "processed": False,
+                "busy": True,
+                "faces": get_latest_live_faces_payload(),
+            }), 200
+
+        try:
+            # Process the frame
+            success, message, payload = process_client_frame(frame_bytes)
+        finally:
+            frame_processing_lock.release()
         
         return jsonify({
             "status": "ok" if success else "error",
             "message": message,
             "processed": success,
+            "busy": False,
             "faces": payload.get("faces", []),
         }), (200 if success else 400)
         
@@ -7694,18 +8966,23 @@ def scan_events():
         events = [e for e in scan_state["events"] if e["id"] > since]
         active = scan_state["active"]
         session_mode = normalize_scan_session_mode(scan_state.get("session_mode", "auto"), default="auto")
+        liveness_profile = normalize_scan_liveness_profile(scan_state.get("liveness_profile", LIVE_LIVENESS_PROFILE))
         model_status = str(scan_state.get("model_status") or "idle")
         face_index_loading = bool(scan_state.get("face_index_loading"))
         registered_faces = len(scan_state.get("known_students", []))
+        active_tracks = len(scan_state.get("face_tracks") or {})
     effective_session = resolve_gate_session(now_local())
     return jsonify({
         "events": events,
         "active": active,
         "scan_session_mode": session_mode,
+        "scan_liveness_profile": liveness_profile,
         "model_status": model_status,
         "face_index_loading": face_index_loading,
         "registered_faces": int(registered_faces),
+        "active_tracks": int(active_tracks),
         "session_mode_label": scan_session_mode_label(session_mode),
+        "liveness_profile_label": scan_liveness_profile_label(liveness_profile),
         "effective_session": {
             "session": effective_session.get("session", ""),
             "gate_action": effective_session.get("gate_action", ""),
@@ -7745,6 +9022,30 @@ def api_scan_session_mode():
             "display_message": effective_session.get("display_message", ""),
             "voice_message": effective_session.get("voice_message", ""),
         },
+    })
+
+
+@app.route("/api/scan/liveness-profile", methods=["GET", "POST"])
+@require_permission("scan", api=True)
+def api_scan_liveness_profile():
+    if request.method == "POST":
+        payload = request_payload()
+        requested_profile = payload.get("profile") or payload.get("liveness_profile")
+        try:
+            profile = set_scan_liveness_profile(requested_profile)
+        except ValueError as exc:
+            return jsonify({"status": "error", "message": str(exc)}), 400
+    else:
+        profile = get_scan_liveness_profile()
+
+    with scan_lock:
+        active = bool(scan_state.get("active"))
+
+    return jsonify({
+        "status": "ok",
+        "profile": profile,
+        "profile_label": scan_liveness_profile_label(profile),
+        "active": active,
     })
 
 

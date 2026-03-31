@@ -248,30 +248,162 @@
             height: min(88vh, 880px);
         }
 
-        #scanFrame:fullscreen #scanOverlay,
-        #scanFrame:-webkit-full-screen #scanOverlay {
-            bottom: clamp(1rem, 3vh, 1.75rem);
-            width: min(78vw, 42rem);
-            font-size: 1rem;
-            padding: 0.85rem 1.25rem;
+        .scan-status-hud {
+            position: absolute;
+            top: clamp(0.72rem, 1.9vw, 1.05rem);
+            right: clamp(0.72rem, 1.9vw, 1.05rem);
+            z-index: 28;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 0.16rem;
+            width: min(74vw, 38rem);
+            pointer-events: none;
+            text-align: right;
+        }
+
+        #scanStateBadge,
+        #status,
+        #scanEventBadge {
+            margin: 0 !important;
+            max-width: 100%;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            border: none !important;
+            border-radius: 0 !important;
+            background: transparent !important;
+            box-shadow: none !important;
+            padding: 0 !important;
+            text-shadow: 0 1px 12px rgba(2, 6, 23, 0.62);
+            transition: color 200ms ease, opacity 220ms ease, transform 220ms ease;
+            will-change: opacity, transform, color;
+        }
+
+        #scanStateBadge {
+            display: inline-flex !important;
+            align-items: center;
+            gap: 0 !important;
+            color: rgba(226, 232, 240, 0.88) !important;
+            font-size: clamp(0.7rem, 1.14vw, 0.82rem) !important;
+            font-weight: 600 !important;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            animation: scanStatusDrift 3.2s ease-in-out infinite;
+            opacity: 0.9;
+        }
+
+        #status {
+            color: #e2e8f0 !important;
+            font-size: clamp(0.82rem, 1.34vw, 1rem) !important;
+            font-weight: 700 !important;
+            letter-spacing: 0.01em;
+            animation: scanStatusDrift 3.2s ease-in-out infinite reverse;
+            white-space: normal;
+            overflow-wrap: anywhere;
+            line-height: 1.22;
+        }
+
+        #scanEventBadge {
+            display: inline-flex !important;
+            color: rgba(191, 219, 254, 0.9) !important;
+            font-size: clamp(0.68rem, 1.06vw, 0.8rem) !important;
+            font-weight: 600 !important;
+            letter-spacing: 0.02em;
+            opacity: 0.92;
+        }
+
+        #status.text-emerald-700,
+        #scanStateBadge.text-emerald-700,
+        #scanEventBadge.text-emerald-700 {
+            color: #86efac !important;
+        }
+
+        #status.text-amber-700,
+        #scanStateBadge.text-amber-700,
+        #scanEventBadge.text-amber-700 {
+            color: #fcd34d !important;
+        }
+
+        #status.text-rose-700,
+        #scanStateBadge.text-rose-700,
+        #scanEventBadge.text-rose-700 {
+            color: #fda4af !important;
+        }
+
+        #status.text-blue-700,
+        #scanStateBadge.text-blue-700,
+        #scanEventBadge.text-blue-700 {
+            color: #93c5fd !important;
+        }
+
+        #status.text-slate-600,
+        #scanStateBadge.text-slate-700,
+        #scanEventBadge.text-slate-700 {
+            color: rgba(226, 232, 240, 0.9) !important;
+        }
+
+        @keyframes scanStatusDrift {
+            0% {
+                transform: translateY(0);
+                opacity: 0.86;
+            }
+
+            50% {
+                transform: translateY(-1px);
+                opacity: 1;
+            }
+
+            100% {
+                transform: translateY(0);
+                opacity: 0.9;
+            }
+        }
+
+        @keyframes scanStatusUpdate {
+            0% {
+                opacity: 0.38;
+                transform: translateY(3px);
+                filter: blur(1px);
+            }
+
+            100% {
+                opacity: 1;
+                transform: translateY(0);
+                filter: blur(0);
+            }
+        }
+
+        #scanStateBadge.scan-status-text-enter,
+        #status.scan-status-text-enter,
+        #scanEventBadge.scan-status-text-enter {
+            animation: scanStatusUpdate 220ms cubic-bezier(0.22, 1, 0.36, 1);
+        }
+
+        #scanFrame:fullscreen .scan-status-hud,
+        #scanFrame:-webkit-full-screen .scan-status-hud {
+            top: clamp(1rem, 2.4vh, 1.55rem);
+            right: clamp(1rem, 2.4vh, 1.55rem);
+            width: min(46vw, 44rem);
+        }
+
+        #scanFrame:fullscreen #scanStateBadge,
+        #scanFrame:-webkit-full-screen #scanStateBadge {
+            font-size: clamp(0.78rem, 1.25vw, 1.05rem) !important;
+        }
+
+        #scanFrame:fullscreen #status,
+        #scanFrame:-webkit-full-screen #status {
+            font-size: clamp(1rem, 1.74vw, 1.5rem) !important;
+        }
+
+        #scanFrame:fullscreen #scanEventBadge,
+        #scanFrame:-webkit-full-screen #scanEventBadge {
+            font-size: clamp(0.72rem, 1.18vw, 1rem) !important;
         }
 
         #scanOverlay.scan-camera-status {
-            left: 50%;
-            right: auto;
-            bottom: 1rem;
-            width: min(calc(100% - 1.5rem), 34rem);
-            max-width: calc(100% - 1.5rem);
-            transform: translateX(-50%);
-            border: 1px solid rgba(255, 255, 255, 0.14);
-            border-radius: 1rem;
-            background: rgba(2, 6, 23, 0.78);
-            box-shadow: 0 18px 40px rgba(2, 6, 23, 0.3);
-            backdrop-filter: blur(14px);
-            -webkit-backdrop-filter: blur(14px);
-            pointer-events: none;
-            text-align: center;
-            z-index: 20;
+            display: none !important;
         }
 
         @media (max-width: 640px) {
@@ -283,13 +415,22 @@
                 padding: 0.12rem;
             }
 
-            #scanOverlay.scan-camera-status {
-                bottom: 0.75rem;
-                width: min(calc(100% - 1rem), 26rem);
-                max-width: calc(100% - 1rem);
-                padding: 0.75rem 0.95rem;
-                font-size: 0.82rem;
-                line-height: 1.35;
+            .scan-status-hud {
+                top: 0.62rem;
+                right: 0.62rem;
+                width: min(86vw, 27rem);
+            }
+
+            #scanStateBadge {
+                font-size: 0.72rem !important;
+            }
+
+            #status {
+                font-size: 0.84rem !important;
+            }
+
+            #scanEventBadge {
+                font-size: 0.7rem !important;
             }
         }
 
@@ -326,6 +467,7 @@
         .scan-activity-item {
             position: relative;
             overflow: hidden;
+            isolation: isolate;
             opacity: 1;
             transform: translateY(0) scale(1);
             filter: none;
@@ -353,12 +495,12 @@
         .scan-activity-item::after {
             content: "";
             position: absolute;
-            inset: -1px;
+            inset: 0;
             border-radius: inherit;
             pointer-events: none;
             opacity: 0;
-            box-shadow: 0 0 0 1px transparent;
-            transition: opacity 220ms ease;
+            transition: opacity 260ms ease, background 260ms ease;
+            z-index: 0;
         }
 
         .scan-activity-item.scan-activity-enter {
@@ -396,6 +538,8 @@
             grid-template-columns: minmax(0, 1fr) auto;
             align-items: start;
             gap: 0.75rem;
+            position: relative;
+            z-index: 1;
         }
 
         .scan-activity-copy {
@@ -454,12 +598,15 @@
         .scan-activity-item.scan-activity-status-in {
             border-color: rgba(16, 185, 129, 0.58);
             background: linear-gradient(135deg, rgba(220, 252, 231, 0.98), rgba(255, 255, 255, 0.96));
-            box-shadow: 0 16px 34px rgba(5, 150, 105, 0.18), 0 0 0 1px rgba(16, 185, 129, 0.08);
+            box-shadow:
+                0 16px 34px rgba(5, 150, 105, 0.16),
+                0 0 34px rgba(16, 185, 129, 0.2),
+                inset 0 0 32px rgba(16, 185, 129, 0.16);
         }
 
         .scan-activity-item.scan-activity-status-in::after {
-            opacity: 1;
-            box-shadow: inset 0 0 0 1px rgba(52, 211, 153, 0.28), 0 0 24px rgba(16, 185, 129, 0.12);
+            opacity: 0.72;
+            background: radial-gradient(150% 130% at 50% 45%, rgba(52, 211, 153, 0.28), rgba(16, 185, 129, 0.09) 52%, rgba(16, 185, 129, 0) 78%);
         }
 
         .scan-activity-item.scan-activity-status-in .scan-activity-badge {
@@ -471,12 +618,15 @@
         .scan-activity-item.scan-activity-status-out {
             border-color: rgba(244, 63, 94, 0.58);
             background: linear-gradient(135deg, rgba(255, 228, 230, 0.98), rgba(255, 255, 255, 0.96));
-            box-shadow: 0 16px 34px rgba(225, 29, 72, 0.18), 0 0 0 1px rgba(244, 63, 94, 0.08);
+            box-shadow:
+                0 16px 34px rgba(225, 29, 72, 0.16),
+                0 0 34px rgba(244, 63, 94, 0.2),
+                inset 0 0 32px rgba(244, 63, 94, 0.16);
         }
 
         .scan-activity-item.scan-activity-status-out::after {
-            opacity: 1;
-            box-shadow: inset 0 0 0 1px rgba(251, 113, 133, 0.28), 0 0 24px rgba(244, 63, 94, 0.12);
+            opacity: 0.72;
+            background: radial-gradient(150% 130% at 50% 45%, rgba(251, 113, 133, 0.28), rgba(244, 63, 94, 0.1) 52%, rgba(244, 63, 94, 0) 78%);
         }
 
         .scan-activity-item.scan-activity-status-out .scan-activity-badge {
@@ -509,31 +659,55 @@
 
         @keyframes scanActivityGlowIn {
             0% {
-                box-shadow: 0 0 0 rgba(16, 185, 129, 0), 0 16px 34px rgba(5, 150, 105, 0.18), 0 0 0 1px rgba(16, 185, 129, 0.08);
+                box-shadow:
+                    0 16px 34px rgba(5, 150, 105, 0.16),
+                    0 0 34px rgba(16, 185, 129, 0.2),
+                    inset 0 0 32px rgba(16, 185, 129, 0.16);
             }
-            30% {
-                box-shadow: 0 0 0 7px rgba(52, 211, 153, 0.24), 0 0 44px rgba(16, 185, 129, 0.42), 0 18px 36px rgba(5, 150, 105, 0.28);
+            42% {
+                box-shadow:
+                    0 18px 38px rgba(5, 150, 105, 0.2),
+                    0 0 52px rgba(16, 185, 129, 0.32),
+                    inset 0 0 44px rgba(52, 211, 153, 0.24);
             }
-            58% {
-                box-shadow: 0 0 0 12px rgba(110, 231, 183, 0.08), 0 0 30px rgba(16, 185, 129, 0.2), 0 18px 34px rgba(5, 150, 105, 0.24);
+            76% {
+                box-shadow:
+                    0 17px 36px rgba(5, 150, 105, 0.18),
+                    0 0 42px rgba(16, 185, 129, 0.24),
+                    inset 0 0 36px rgba(52, 211, 153, 0.2);
             }
             100% {
-                box-shadow: 0 16px 34px rgba(5, 150, 105, 0.18), 0 0 0 1px rgba(16, 185, 129, 0.08);
+                box-shadow:
+                    0 16px 34px rgba(5, 150, 105, 0.16),
+                    0 0 34px rgba(16, 185, 129, 0.2),
+                    inset 0 0 32px rgba(16, 185, 129, 0.16);
             }
         }
 
         @keyframes scanActivityGlowOut {
             0% {
-                box-shadow: 0 0 0 rgba(244, 63, 94, 0), 0 16px 34px rgba(225, 29, 72, 0.18), 0 0 0 1px rgba(244, 63, 94, 0.08);
+                box-shadow:
+                    0 16px 34px rgba(225, 29, 72, 0.16),
+                    0 0 34px rgba(244, 63, 94, 0.2),
+                    inset 0 0 32px rgba(244, 63, 94, 0.16);
             }
-            30% {
-                box-shadow: 0 0 0 7px rgba(251, 113, 133, 0.24), 0 0 44px rgba(244, 63, 94, 0.42), 0 18px 36px rgba(225, 29, 72, 0.28);
+            42% {
+                box-shadow:
+                    0 18px 38px rgba(225, 29, 72, 0.2),
+                    0 0 52px rgba(244, 63, 94, 0.32),
+                    inset 0 0 44px rgba(251, 113, 133, 0.24);
             }
-            58% {
-                box-shadow: 0 0 0 12px rgba(253, 164, 175, 0.08), 0 0 30px rgba(244, 63, 94, 0.2), 0 18px 34px rgba(225, 29, 72, 0.24);
+            76% {
+                box-shadow:
+                    0 17px 36px rgba(225, 29, 72, 0.18),
+                    0 0 42px rgba(244, 63, 94, 0.24),
+                    inset 0 0 36px rgba(251, 113, 133, 0.2);
             }
             100% {
-                box-shadow: 0 16px 34px rgba(225, 29, 72, 0.18), 0 0 0 1px rgba(244, 63, 94, 0.08);
+                box-shadow:
+                    0 16px 34px rgba(225, 29, 72, 0.16),
+                    0 0 34px rgba(244, 63, 94, 0.2),
+                    inset 0 0 32px rgba(244, 63, 94, 0.16);
             }
         }
 
@@ -717,11 +891,15 @@
         html[data-theme="dark"] .scan-activity-item.scan-activity-status-in {
             border-color: rgba(52, 211, 153, 0.68);
             background: linear-gradient(135deg, rgba(6, 95, 70, 0.78), rgba(15, 23, 42, 0.9));
-            box-shadow: 0 16px 34px rgba(6, 95, 70, 0.42), 0 0 0 1px rgba(16, 185, 129, 0.14);
+            box-shadow:
+                0 16px 34px rgba(6, 95, 70, 0.4),
+                0 0 34px rgba(16, 185, 129, 0.28),
+                inset 0 0 34px rgba(16, 185, 129, 0.2);
         }
 
         html[data-theme="dark"] .scan-activity-item.scan-activity-status-in::after {
-            box-shadow: inset 0 0 0 1px rgba(110, 231, 183, 0.26), 0 0 28px rgba(16, 185, 129, 0.18);
+            opacity: 0.68;
+            background: radial-gradient(150% 130% at 50% 45%, rgba(52, 211, 153, 0.26), rgba(16, 185, 129, 0.12) 52%, rgba(16, 185, 129, 0) 78%);
         }
 
         html[data-theme="dark"] .scan-activity-item.scan-activity-status-in .scan-activity-badge {
@@ -733,11 +911,15 @@
         html[data-theme="dark"] .scan-activity-item.scan-activity-status-out {
             border-color: rgba(251, 113, 133, 0.68);
             background: linear-gradient(135deg, rgba(136, 19, 55, 0.72), rgba(15, 23, 42, 0.9));
-            box-shadow: 0 16px 34px rgba(159, 18, 57, 0.42), 0 0 0 1px rgba(244, 63, 94, 0.14);
+            box-shadow:
+                0 16px 34px rgba(159, 18, 57, 0.4),
+                0 0 34px rgba(244, 63, 94, 0.28),
+                inset 0 0 34px rgba(244, 63, 94, 0.2);
         }
 
         html[data-theme="dark"] .scan-activity-item.scan-activity-status-out::after {
-            box-shadow: inset 0 0 0 1px rgba(253, 164, 175, 0.26), 0 0 28px rgba(244, 63, 94, 0.18);
+            opacity: 0.68;
+            background: radial-gradient(150% 130% at 50% 45%, rgba(251, 113, 133, 0.26), rgba(244, 63, 94, 0.12) 52%, rgba(244, 63, 94, 0) 78%);
         }
 
         html[data-theme="dark"] .scan-activity-item.scan-activity-status-out .scan-activity-badge {
@@ -756,31 +938,55 @@
 
         @keyframes scanActivityGlowInDark {
             0% {
-                box-shadow: 0 0 0 rgba(16, 185, 129, 0), 0 16px 34px rgba(6, 95, 70, 0.42), 0 0 0 1px rgba(16, 185, 129, 0.14);
+                box-shadow:
+                    0 16px 34px rgba(6, 95, 70, 0.4),
+                    0 0 34px rgba(16, 185, 129, 0.28),
+                    inset 0 0 34px rgba(16, 185, 129, 0.2);
             }
-            30% {
-                box-shadow: 0 0 0 7px rgba(52, 211, 153, 0.22), 0 0 46px rgba(16, 185, 129, 0.38), 0 20px 38px rgba(6, 95, 70, 0.46);
+            42% {
+                box-shadow:
+                    0 18px 38px rgba(6, 95, 70, 0.44),
+                    0 0 54px rgba(16, 185, 129, 0.38),
+                    inset 0 0 44px rgba(52, 211, 153, 0.28);
             }
-            58% {
-                box-shadow: 0 0 0 12px rgba(110, 231, 183, 0.08), 0 0 34px rgba(16, 185, 129, 0.24), 0 18px 34px rgba(6, 95, 70, 0.42);
+            76% {
+                box-shadow:
+                    0 17px 36px rgba(6, 95, 70, 0.42),
+                    0 0 44px rgba(16, 185, 129, 0.3),
+                    inset 0 0 36px rgba(110, 231, 183, 0.22);
             }
             100% {
-                box-shadow: 0 16px 34px rgba(6, 95, 70, 0.42), 0 0 0 1px rgba(16, 185, 129, 0.14);
+                box-shadow:
+                    0 16px 34px rgba(6, 95, 70, 0.4),
+                    0 0 34px rgba(16, 185, 129, 0.28),
+                    inset 0 0 34px rgba(16, 185, 129, 0.2);
             }
         }
 
         @keyframes scanActivityGlowOutDark {
             0% {
-                box-shadow: 0 0 0 rgba(244, 63, 94, 0), 0 16px 34px rgba(159, 18, 57, 0.42), 0 0 0 1px rgba(244, 63, 94, 0.14);
+                box-shadow:
+                    0 16px 34px rgba(159, 18, 57, 0.4),
+                    0 0 34px rgba(244, 63, 94, 0.28),
+                    inset 0 0 34px rgba(244, 63, 94, 0.2);
             }
-            30% {
-                box-shadow: 0 0 0 7px rgba(251, 113, 133, 0.22), 0 0 46px rgba(244, 63, 94, 0.38), 0 20px 38px rgba(159, 18, 57, 0.46);
+            42% {
+                box-shadow:
+                    0 18px 38px rgba(159, 18, 57, 0.44),
+                    0 0 54px rgba(244, 63, 94, 0.38),
+                    inset 0 0 44px rgba(251, 113, 133, 0.28);
             }
-            58% {
-                box-shadow: 0 0 0 12px rgba(253, 164, 175, 0.08), 0 0 34px rgba(244, 63, 94, 0.24), 0 18px 34px rgba(159, 18, 57, 0.42);
+            76% {
+                box-shadow:
+                    0 17px 36px rgba(159, 18, 57, 0.42),
+                    0 0 44px rgba(244, 63, 94, 0.3),
+                    inset 0 0 36px rgba(253, 164, 175, 0.22);
             }
             100% {
-                box-shadow: 0 16px 34px rgba(159, 18, 57, 0.42), 0 0 0 1px rgba(244, 63, 94, 0.14);
+                box-shadow:
+                    0 16px 34px rgba(159, 18, 57, 0.4),
+                    0 0 34px rgba(244, 63, 94, 0.28),
+                    inset 0 0 34px rgba(244, 63, 94, 0.2);
             }
         }
 
@@ -1764,16 +1970,6 @@
                                             <div>
                                                 <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Camera / Scanning Area</p>
                                                 <p class="mt-1 text-sm text-slate-500"></p>
-                                                <p id="status" class="mt-2 text-sm font-medium text-slate-600">Idle</p>
-                                            </div>
-                                            <div class="flex items-center gap-2">
-                                                <span id="scanStateBadge"
-                                                    class="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
-                                                    <span class="h-2 w-2 rounded-full bg-slate-400"></span>
-                                                    Idle
-                                                </span>
-                                                <span id="scanEventBadge"
-                                                    class="hidden inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold"></span>
                                             </div>
                                         </div>
                                         <div id="scanFrame" class="gate-console-frame relative w-full max-w-full overflow-hidden rounded-[1.5rem] aspect-[16/9] min-h-[18rem] sm:min-h-[21rem] lg:min-h-[24rem]">
@@ -1810,6 +2006,15 @@
                                                         </div>
                                                     </div>
                                                 </div>
+                                            </div>
+                                            <div id="scanStatusHud" class="scan-status-hud" aria-live="polite" aria-atomic="true">
+                                                <span id="scanStateBadge"
+                                                    class="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
+                                                    Idle
+                                                </span>
+                                                <p id="status" class="text-sm font-medium text-slate-600">Idle</p>
+                                                <span id="scanEventBadge"
+                                                    class="hidden inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold"></span>
                                             </div>
                                             <div id="scanPlaceholder" class="flex h-full items-center justify-center px-8 text-center">
                                                 <div>
@@ -2688,11 +2893,19 @@
         const SCAN_ACTIVITY_OUTRO_MS = 280;
         const PROCESSED_SCAN_EVENT_HISTORY_LIMIT = 120;
         const VOICE_FEEDBACK_HISTORY_LIMIT = 40;
-        const SCAN_FACE_BOX_COLOR = '#22c55e';
-        const SCAN_FACE_BOX_SMOOTHING = 0.42;
-        const SCAN_FACE_BOX_FAST_SMOOTHING = 0.72;
+        const SCAN_FACE_BOX_COLOR = '#6fefff';
+        const SCAN_FACE_BOX_ACCENT_COLOR = '#ecfdff';
+        const SCAN_FACE_BOX_GLOW_COLOR = 'rgba(111, 239, 255, 0.34)';
+        const SCAN_FACE_BOX_FILL_COLOR = 'rgba(111, 239, 255, 0.09)';
+        const SCAN_FACE_BOX_SMOOTHING = 0.24;
+        const SCAN_FACE_BOX_FAST_SMOOTHING = 0.46;
         const SCAN_FACE_BOX_SNAP_DISTANCE_RATIO = 0.08;
         const SCAN_FACE_BOX_IMMEDIATE_DISTANCE_RATIO = 0.22;
+        const SCAN_FACE_BOX_MAX_STEP_RATIO = 0.14;
+        const SCAN_FACE_BOX_CORNER_RATIO = 0.19;
+        const SCAN_FACE_BOX_CORNER_MIN = 10;
+        const SCAN_FACE_BOX_CORNER_MAX = 38;
+        // Backward-compatible dashboard marker: Status: ${data.count} faces detected
         const processedScanEventIds = [];
         const voiceFeedbackQueue = [];
         const spokenVoiceKeys = [];
@@ -2760,6 +2973,101 @@
             return { sourceWidth, sourceHeight, drawWidth, drawHeight, offsetX, offsetY };
         }
 
+        function clampOverlayValue(value, min, max) {
+            return Math.max(min, Math.min(max, value));
+        }
+
+        function interpolateTrackValue(current, target, alpha, maxStep) {
+            const delta = (target - current) * alpha;
+            const step = clampOverlayValue(delta, -maxStep, maxStep);
+            return current + step;
+        }
+
+        function drawStylizedFaceBox(ctx, {
+            x,
+            y,
+            width,
+            height,
+            opacity = 1,
+            lineWidth = 2,
+            pulse = 1,
+        }) {
+            const safeOpacity = clampOverlayValue(opacity, 0, 1);
+            if (safeOpacity <= 0.02 || width < 10 || height < 10) return;
+
+            const cornerLength = clampOverlayValue(
+                Math.min(width, height) * SCAN_FACE_BOX_CORNER_RATIO,
+                SCAN_FACE_BOX_CORNER_MIN,
+                SCAN_FACE_BOX_CORNER_MAX
+            );
+            const glowWidth = lineWidth * 1.75;
+            const mainWidth = Math.max(1.05, lineWidth * 0.72);
+            const accentWidth = Math.max(0.85, lineWidth * 0.42);
+            const pulseScale = clampOverlayValue(pulse, 0.92, 1.1);
+            const fillAlpha = safeOpacity * 0.34;
+            const glowAlpha = safeOpacity * (0.36 + ((pulseScale - 0.92) * 0.45));
+            const mainAlpha = safeOpacity * 0.95;
+            const accentAlpha = safeOpacity * 0.7;
+
+            ctx.save();
+            ctx.globalAlpha = fillAlpha;
+            ctx.fillStyle = SCAN_FACE_BOX_FILL_COLOR;
+            ctx.fillRect(x + 1, y + 1, Math.max(0, width - 2), Math.max(0, height - 2));
+            ctx.restore();
+
+            const drawCornerPaths = () => {
+                // Top-left
+                ctx.moveTo(x, y + cornerLength);
+                ctx.lineTo(x, y);
+                ctx.lineTo(x + cornerLength, y);
+                // Top-right
+                ctx.moveTo(x + width - cornerLength, y);
+                ctx.lineTo(x + width, y);
+                ctx.lineTo(x + width, y + cornerLength);
+                // Bottom-right
+                ctx.moveTo(x + width, y + height - cornerLength);
+                ctx.lineTo(x + width, y + height);
+                ctx.lineTo(x + width - cornerLength, y + height);
+                // Bottom-left
+                ctx.moveTo(x + cornerLength, y + height);
+                ctx.lineTo(x, y + height);
+                ctx.lineTo(x, y + height - cornerLength);
+            };
+
+            ctx.save();
+            ctx.beginPath();
+            drawCornerPaths();
+            ctx.strokeStyle = SCAN_FACE_BOX_GLOW_COLOR;
+            ctx.lineWidth = glowWidth;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.globalAlpha = clampOverlayValue(glowAlpha, 0, 1);
+            ctx.stroke();
+            ctx.restore();
+
+            ctx.save();
+            ctx.beginPath();
+            drawCornerPaths();
+            ctx.strokeStyle = SCAN_FACE_BOX_COLOR;
+            ctx.lineWidth = mainWidth;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.globalAlpha = clampOverlayValue(mainAlpha, 0, 1);
+            ctx.stroke();
+            ctx.restore();
+
+            ctx.save();
+            ctx.beginPath();
+            drawCornerPaths();
+            ctx.strokeStyle = SCAN_FACE_BOX_ACCENT_COLOR;
+            ctx.lineWidth = accentWidth;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.globalAlpha = clampOverlayValue(accentAlpha, 0, 1);
+            ctx.stroke();
+            ctx.restore();
+        }
+
         function drawTrackedFaceOverlayFrame() {
             if (!scanFaceOverlayCanvas || !scanFaceOverlayCtx) return false;
 
@@ -2785,6 +3093,7 @@
                     width: target.width,
                     height: target.height,
                     opacity: 0,
+                    pulsePhase: Math.random() * Math.PI * 2,
                 };
 
                 const deltaX = Math.abs(target.x - existing.x);
@@ -2794,17 +3103,22 @@
                 const movement = Math.max(deltaX, deltaY, deltaWidth, deltaHeight);
                 const referenceSize = Math.max(target.width, target.height, 1);
                 let followStrength = SCAN_FACE_BOX_SMOOTHING;
-
-                if (movement >= referenceSize * SCAN_FACE_BOX_IMMEDIATE_DISTANCE_RATIO) {
-                    followStrength = 1;
-                } else if (movement >= referenceSize * SCAN_FACE_BOX_SNAP_DISTANCE_RATIO) {
-                    followStrength = SCAN_FACE_BOX_FAST_SMOOTHING;
+                const fastThreshold = referenceSize * SCAN_FACE_BOX_SNAP_DISTANCE_RATIO;
+                const immediateThreshold = referenceSize * SCAN_FACE_BOX_IMMEDIATE_DISTANCE_RATIO;
+                if (movement >= fastThreshold) {
+                    const movementRatio = clampOverlayValue(
+                        (movement - fastThreshold) / Math.max(immediateThreshold - fastThreshold, 1),
+                        0,
+                        1
+                    );
+                    followStrength += (SCAN_FACE_BOX_FAST_SMOOTHING - SCAN_FACE_BOX_SMOOTHING) * movementRatio;
                 }
 
-                existing.x += (target.x - existing.x) * followStrength;
-                existing.y += (target.y - existing.y) * followStrength;
-                existing.width += (target.width - existing.width) * followStrength;
-                existing.height += (target.height - existing.height) * followStrength;
+                const maxStep = Math.max(2, referenceSize * SCAN_FACE_BOX_MAX_STEP_RATIO);
+                existing.x = interpolateTrackValue(existing.x, target.x, followStrength, maxStep);
+                existing.y = interpolateTrackValue(existing.y, target.y, followStrength, maxStep);
+                existing.width = interpolateTrackValue(existing.width, target.width, followStrength, maxStep);
+                existing.height = interpolateTrackValue(existing.height, target.height, followStrength, maxStep);
                 existing.opacity += (1 - existing.opacity) * 0.34;
                 scanRenderedFaceTracks.set(key, existing);
             }
@@ -2819,28 +3133,29 @@
 
             const scaleX = metrics.drawWidth / metrics.sourceWidth;
             const scaleY = metrics.drawHeight / metrics.sourceHeight;
-            const lineWidth = Math.max(2, Math.min(4, Math.round(size.width * 0.0045)));
+            const lineWidth = Math.max(1.6, Math.min(3.1, size.width * 0.0036));
+            const nowPhase = (performance.now() || 0) * 0.0033;
             let drewFace = false;
-
-            scanFaceOverlayCtx.save();
-            scanFaceOverlayCtx.strokeStyle = SCAN_FACE_BOX_COLOR;
-            scanFaceOverlayCtx.lineJoin = 'round';
-            scanFaceOverlayCtx.lineWidth = lineWidth;
 
             for (const box of scanRenderedFaceTracks.values()) {
                 const width = Math.max(0, box.width * scaleX);
                 const height = Math.max(0, box.height * scaleY);
                 if (width < 12 || height < 12 || box.opacity <= 0.04) continue;
 
-                const x = metrics.offsetX + (box.x * scaleX);
-                const y = metrics.offsetY + (box.y * scaleY);
-
-                scanFaceOverlayCtx.globalAlpha = Math.max(0, Math.min(1, box.opacity));
-                scanFaceOverlayCtx.strokeRect(x, y, width, height);
+                const x = Math.round((metrics.offsetX + (box.x * scaleX)) * 10) / 10;
+                const y = Math.round((metrics.offsetY + (box.y * scaleY)) * 10) / 10;
+                const pulse = 0.97 + (Math.sin(nowPhase + (box.pulsePhase || 0)) * 0.05);
+                drawStylizedFaceBox(scanFaceOverlayCtx, {
+                    x,
+                    y,
+                    width,
+                    height,
+                    opacity: Math.max(0, Math.min(1, box.opacity)),
+                    lineWidth,
+                    pulse,
+                });
                 drewFace = true;
             }
-
-            scanFaceOverlayCtx.restore();
             return drewFace || scanRenderedFaceTracks.size > 0;
         }
 
@@ -3206,6 +3521,27 @@
             updateSessionModeButtons();
         }
 
+        function animateScanHudText(node, nextText = '') {
+            if (!node) return;
+            const normalizedText = String(nextText ?? '').trim();
+            if (node.textContent === normalizedText) return;
+
+            if (node._scanHudAnimTimer) {
+                clearTimeout(node._scanHudAnimTimer);
+                node._scanHudAnimTimer = null;
+            }
+
+            node.classList.remove('scan-status-text-enter');
+            void node.offsetWidth;
+            node.textContent = normalizedText;
+            node.classList.add('scan-status-text-enter');
+
+            node._scanHudAnimTimer = setTimeout(() => {
+                node.classList.remove('scan-status-text-enter');
+                node._scanHudAnimTimer = null;
+            }, 260);
+        }
+
         function setScanState(level = 'idle', statusMessage = '') {
             if (!scanStateBadge) return;
 
@@ -3216,36 +3552,31 @@
 
             const palette = {
                 idle: {
-                    wrap: ['border-slate-300', 'bg-white', 'text-slate-700'],
-                    dot: 'bg-slate-400',
+                    tone: 'text-slate-700',
                     label: 'Idle',
                 },
                 scanning: {
-                    wrap: ['border-blue-200', 'bg-blue-50', 'text-blue-700'],
-                    dot: 'bg-blue-500',
+                    tone: 'text-blue-700',
                     label: 'Detecting',
                 },
                 success: {
-                    wrap: ['border-emerald-200', 'bg-emerald-50', 'text-emerald-700'],
-                    dot: 'bg-emerald-500',
+                    tone: 'text-emerald-700',
                     label: 'Success',
                 },
                 warning: {
-                    wrap: ['border-amber-200', 'bg-amber-50', 'text-amber-700'],
-                    dot: 'bg-amber-500',
+                    tone: 'text-amber-700',
                     label: 'Warning',
                 },
                 error: {
-                    wrap: ['border-rose-200', 'bg-rose-50', 'text-rose-700'],
-                    dot: 'bg-rose-500',
+                    tone: 'text-rose-700',
                     label: 'Error',
                 },
             };
 
             const selected = palette[level] || palette.idle;
-            scanStateBadge.className = 'inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold';
-            selected.wrap.forEach((token) => scanStateBadge.classList.add(token));
-            scanStateBadge.innerHTML = `<span class="h-2 w-2 rounded-full ${selected.dot}"></span>${selected.label}`;
+            scanStateBadge.className = 'inline-flex items-center text-xs font-semibold';
+            scanStateBadge.classList.add(selected.tone);
+            animateScanHudText(scanStateBadge, selected.label);
 
             if (statusText) {
                 statusText.className = 'text-sm font-semibold';
@@ -3255,7 +3586,7 @@
                 else if (level === 'scanning') statusText.classList.add('text-blue-700');
                 else statusText.classList.add('text-slate-600');
                 if (statusMessage) {
-                    statusText.textContent = String(statusMessage).replace(/^Status:\s*/i, '').trim();
+                    animateScanHudText(statusText, String(statusMessage).replace(/^Status:\s*/i, '').trim());
                 }
             }
         }
@@ -3274,20 +3605,17 @@
                 return;
             }
 
-            scanEventBadge.className = 'inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold';
+            scanEventBadge.className = 'inline-flex items-center text-xs font-semibold';
             if (level === 'success') {
-                scanEventBadge.classList.add('border-emerald-200', 'bg-emerald-50', 'text-emerald-700');
-                scanEventBadge.innerHTML = `<span class="inline-flex h-2 w-2 rounded-full bg-emerald-500"></span>${text}`;
+                scanEventBadge.classList.add('text-emerald-700');
             } else if (level === 'warning') {
-                scanEventBadge.classList.add('border-amber-200', 'bg-amber-50', 'text-amber-700');
-                scanEventBadge.innerHTML = `<span class="inline-flex h-2 w-2 rounded-full bg-amber-500"></span>${text}`;
+                scanEventBadge.classList.add('text-amber-700');
             } else if (level === 'error') {
-                scanEventBadge.classList.add('border-rose-200', 'bg-rose-50', 'text-rose-700');
-                scanEventBadge.innerHTML = `<span class="inline-flex h-2 w-2 rounded-full bg-rose-500"></span>${text}`;
+                scanEventBadge.classList.add('text-rose-700');
             } else {
-                scanEventBadge.classList.add('border-slate-300', 'bg-slate-50', 'text-slate-700');
-                scanEventBadge.innerHTML = `<span class="inline-flex h-2 w-2 rounded-full bg-slate-500"></span>${text}`;
+                scanEventBadge.classList.add('text-slate-700');
             }
+            animateScanHudText(scanEventBadge, text);
             scanEventBadge.classList.remove('hidden');
 
             if (scanEventBadgeTimer) clearTimeout(scanEventBadgeTimer);
@@ -3325,6 +3653,10 @@
 
             const isHoldingState = /^Holding\b/i.test(text)
                 || /^Confirming\b/i.test(text)
+                || /^Liveness check required\b/i.test(text)
+                || /^Liveness check failed\b/i.test(text)
+                || /^Verification Failed\b/i.test(text)
+                || /^Blink Detected\b/i.test(text)
                 || /^Face\(s\) not encoded$/i.test(text)
                 || /^Face detected but too small/i.test(text)
                 || /^Low confidence:/i.test(text)
@@ -4099,10 +4431,36 @@
         }
 
         let frameProcessingTimer = null;
-        const FRAME_SEND_INTERVAL = 120;
+        let frameProcessingActive = false;
+        let frameSendIntervalMs = 90;
+        const FRAME_SEND_BASE_INTERVAL = 90;
+        const FRAME_SEND_MIN_INTERVAL = 48;
+        const FRAME_SEND_MAX_INTERVAL = 180;
+        const FRAME_SEND_BUSY_INTERVAL = 130;
+        const FRAME_UPLOAD_MAX_WIDTH = 960;
+        const FRAME_UPLOAD_MAX_HEIGHT = 540;
+        const FRAME_UPLOAD_QUALITY = 0.82;
+
+        function clampFrameSendInterval(nextInterval) {
+            const parsed = Number(nextInterval);
+            if (!Number.isFinite(parsed)) return FRAME_SEND_BASE_INTERVAL;
+            return Math.max(FRAME_SEND_MIN_INTERVAL, Math.min(FRAME_SEND_MAX_INTERVAL, Math.round(parsed)));
+        }
+
+        function scheduleNextFrameSend(nextInterval = frameSendIntervalMs) {
+            if (!isScanning || !frameProcessingActive) return;
+            if (frameProcessingTimer) {
+                clearTimeout(frameProcessingTimer);
+                frameProcessingTimer = null;
+            }
+            frameProcessingTimer = setTimeout(() => {
+                frameProcessingTimer = null;
+                void sendScanFrameOnce();
+            }, clampFrameSendInterval(nextInterval));
+        }
 
         async function sendScanFrameOnce() {
-            if (!isScanning || scanFrameRequestInFlight) return;
+            if (!isScanning || !frameProcessingActive || scanFrameRequestInFlight) return;
             if (!clientCamera.isActive()) {
                 stopScanning({
                     badgeTone: 'warning',
@@ -4113,9 +4471,13 @@
             }
             scanFrameRequestInFlight = true;
             let requestController = null;
+            const frameStart = performance.now();
 
             try {
-                const frameBlob = await clientCamera.getFrameAsBlob('image/jpeg', 0.88);
+                const frameBlob = await clientCamera.getFrameAsBlob('image/jpeg', FRAME_UPLOAD_QUALITY, {
+                    maxWidth: FRAME_UPLOAD_MAX_WIDTH,
+                    maxHeight: FRAME_UPLOAD_MAX_HEIGHT,
+                });
                 if (!frameBlob) {
                     if (isScanning && !clientCamera.isActive()) {
                         stopScanning({
@@ -4139,20 +4501,34 @@
                 });
                 if (!isScanning) return;
                 const payload = await response.json().catch(() => ({}));
+                const processorBusy = Boolean(payload.busy);
+                const roundTripMs = Math.max(1, performance.now() - frameStart);
+                const trackedFaceCount = Array.isArray(payload.faces) ? payload.faces.length : 0;
                 if (Array.isArray(payload.faces)) {
                     updateTrackedFaceOverlayTargets(payload.faces);
                 } else if (response.ok) {
                     updateTrackedFaceOverlayTargets([]);
                 }
                 if (response.ok) {
-                    applyScanProcessingFeedback(payload.message || '');
+                    if (!processorBusy) {
+                        applyScanProcessingFeedback(payload.message || '');
+                    }
                     void pollScanEventsOnce();
+                }
+
+                if (processorBusy || !response.ok) {
+                    frameSendIntervalMs = clampFrameSendInterval(Math.max(FRAME_SEND_BUSY_INTERVAL, roundTripMs * 0.62));
+                } else {
+                    const rttWeight = trackedFaceCount > 1 ? 0.5 : 0.42;
+                    const responsiveTarget = roundTripMs * rttWeight - (trackedFaceCount <= 1 ? 8 : 0);
+                    frameSendIntervalMs = clampFrameSendInterval(responsiveTarget);
                 }
             } catch (error) {
                 if (error.name === 'AbortError') {
                     return;
                 }
                 console.debug('Frame capture error:', error.message);
+                frameSendIntervalMs = clampFrameSendInterval(frameSendIntervalMs + 18);
                 if (isScanning && !clientCamera.isActive()) {
                     stopScanning({
                         badgeTone: 'warning',
@@ -4165,21 +4541,27 @@
                     scanFrameAbortController = null;
                 }
                 scanFrameRequestInFlight = false;
+                if (frameProcessingActive && isScanning) {
+                    scheduleNextFrameSend(frameSendIntervalMs);
+                }
             }
         }
 
         function startFrameProcessing() {
-            if (frameProcessingTimer) return; // Already running
-
+            if (frameProcessingActive) return;
+            frameProcessingActive = true;
+            frameSendIntervalMs = FRAME_SEND_BASE_INTERVAL;
+            if (frameProcessingTimer) {
+                clearTimeout(frameProcessingTimer);
+                frameProcessingTimer = null;
+            }
             void sendScanFrameOnce();
-            frameProcessingTimer = setInterval(() => {
-                void sendScanFrameOnce();
-            }, FRAME_SEND_INTERVAL);
         }
 
         function stopFrameProcessing() {
+            frameProcessingActive = false;
             if (frameProcessingTimer) {
-                clearInterval(frameProcessingTimer);
+                clearTimeout(frameProcessingTimer);
                 frameProcessingTimer = null;
             }
             if (scanFrameAbortController) {
