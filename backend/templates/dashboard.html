@@ -455,6 +455,14 @@
             pointer-events: none;
         }
 
+        .scan-activity-cleanup-layer {
+            position: absolute;
+            inset: 0;
+            z-index: 23;
+            overflow: hidden;
+            pointer-events: none;
+        }
+
         .scan-activity-feed::-webkit-scrollbar {
             width: 0.4rem;
         }
@@ -527,6 +535,155 @@
 
         .scan-activity-ghost.scan-activity-exit-overflow.scan-activity-exit-active {
             transform: translateY(0.75rem) scale(0.965);
+        }
+
+        .scan-activity-ghost.scan-activity-exit-trash {
+            z-index: 24;
+            transition:
+                opacity 320ms ease,
+                transform 460ms cubic-bezier(0.2, 0.9, 0.24, 1),
+                filter 460ms cubic-bezier(0.2, 0.9, 0.24, 1);
+            transform-origin: 50% 50%;
+            will-change: transform, opacity, filter;
+        }
+
+        .scan-activity-ghost.scan-activity-exit-trash.scan-activity-exit-active {
+            opacity: 0;
+            filter: blur(10px) saturate(0.84);
+            transform:
+                translate(var(--scan-activity-trash-x, 0px), var(--scan-activity-trash-y, 0px))
+                scale(0.24)
+                rotate(var(--scan-activity-trash-rotate, 12deg));
+        }
+
+        .scan-activity-trash-dock {
+            position: absolute;
+            right: clamp(0.8rem, 2vw, 1.15rem);
+            bottom: clamp(0.8rem, 2vw, 1.15rem);
+            z-index: 22;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: clamp(3.55rem, 7vw, 4.1rem);
+            height: clamp(3.55rem, 7vw, 4.1rem);
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            border-radius: 1.35rem;
+            background: linear-gradient(180deg, rgba(15, 23, 42, 0.22), rgba(15, 23, 42, 0.38));
+            box-shadow:
+                0 14px 32px rgba(2, 6, 23, 0.3),
+                inset 0 1px 0 rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(14px);
+            pointer-events: none;
+            transform: translateZ(0);
+        }
+
+        .scan-activity-trash-dock::before {
+            content: "";
+            position: absolute;
+            left: 50%;
+            bottom: 0.3rem;
+            width: 2.15rem;
+            height: 0.7rem;
+            border-radius: 999px;
+            background: radial-gradient(circle, rgba(15, 23, 42, 0.34), rgba(15, 23, 42, 0));
+            transform: translateX(-50%);
+            opacity: 0.9;
+        }
+
+        .scan-activity-trash-dock::after {
+            content: "";
+            position: absolute;
+            inset: 0.45rem;
+            border-radius: 1rem;
+            border: 1px solid rgba(110, 231, 183, 0.4);
+            opacity: 0;
+            transform: scale(0.82);
+        }
+
+        .scan-activity-trash {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-end;
+            width: 2.2rem;
+            height: 2.55rem;
+            color: #e2e8f0;
+            transform: translateZ(0);
+        }
+
+        .scan-activity-trash-lid {
+            position: relative;
+            width: 1.95rem;
+            height: 0.42rem;
+            border: 1.5px solid rgba(226, 232, 240, 0.56);
+            border-radius: 999px;
+            background: linear-gradient(180deg, rgba(248, 250, 252, 0.52), rgba(148, 163, 184, 0.22));
+            box-shadow: 0 6px 14px rgba(15, 23, 42, 0.14);
+            transform-origin: 74% 100%;
+            transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
+        }
+
+        .scan-activity-trash-lid::after {
+            content: "";
+            position: absolute;
+            left: 50%;
+            top: -0.34rem;
+            width: 0.72rem;
+            height: 0.24rem;
+            border: 1.5px solid rgba(226, 232, 240, 0.52);
+            border-bottom: none;
+            border-radius: 0.45rem 0.45rem 0 0;
+            transform: translateX(-50%);
+        }
+
+        .scan-activity-trash-body {
+            position: relative;
+            margin-top: 0.18rem;
+            width: 1.72rem;
+            height: 1.7rem;
+            border: 1.5px solid rgba(226, 232, 240, 0.56);
+            border-top: none;
+            border-radius: 0 0 0.72rem 0.72rem;
+            background: linear-gradient(180deg, rgba(248, 250, 252, 0.44), rgba(148, 163, 184, 0.18));
+            box-shadow:
+                inset 0 1px 0 rgba(255, 255, 255, 0.2),
+                0 8px 18px rgba(15, 23, 42, 0.16);
+            overflow: hidden;
+        }
+
+        .scan-activity-trash-line {
+            position: absolute;
+            top: 0.36rem;
+            bottom: 0.36rem;
+            width: 1.5px;
+            border-radius: 999px;
+            background: rgba(226, 232, 240, 0.56);
+        }
+
+        .scan-activity-trash-line:nth-child(1) {
+            left: 0.45rem;
+        }
+
+        .scan-activity-trash-line:nth-child(2) {
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        .scan-activity-trash-line:nth-child(3) {
+            right: 0.45rem;
+        }
+
+        .scan-activity-trash-dock.scan-activity-trash-active {
+            animation: scanActivityTrashBounce 520ms cubic-bezier(0.22, 1, 0.36, 1);
+        }
+
+        .scan-activity-trash-dock.scan-activity-trash-active::after {
+            animation: scanActivityTrashPulse 480ms cubic-bezier(0.22, 1, 0.36, 1);
+        }
+
+        .scan-activity-trash-dock.scan-activity-trash-active .scan-activity-trash-lid {
+            transform: translateY(-0.08rem) rotate(-16deg);
         }
 
         .scan-activity-item.scan-activity-announce::before {
@@ -708,6 +865,35 @@
                     0 16px 34px rgba(225, 29, 72, 0.16),
                     0 0 34px rgba(244, 63, 94, 0.2),
                     inset 0 0 32px rgba(244, 63, 94, 0.16);
+            }
+        }
+
+        @keyframes scanActivityTrashBounce {
+            0% {
+                transform: translateY(0) scale(1);
+            }
+            34% {
+                transform: translateY(-0.18rem) scale(1.05);
+            }
+            62% {
+                transform: translateY(0.04rem) scale(0.985);
+            }
+            100% {
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        @keyframes scanActivityTrashPulse {
+            0% {
+                opacity: 0;
+                transform: scale(0.76);
+            }
+            30% {
+                opacity: 0.8;
+            }
+            100% {
+                opacity: 0;
+                transform: scale(1.16);
             }
         }
 
@@ -936,6 +1122,34 @@
             animation: scanActivityGlowOutDark 1.8s cubic-bezier(0.22, 1, 0.36, 1);
         }
 
+        html[data-theme="dark"] .scan-activity-trash-dock {
+            border-color: rgba(148, 163, 184, 0.18);
+            background: linear-gradient(180deg, rgba(2, 6, 23, 0.54), rgba(15, 23, 42, 0.76));
+            box-shadow:
+                0 16px 34px rgba(2, 6, 23, 0.42),
+                inset 0 1px 0 rgba(255, 255, 255, 0.05);
+        }
+
+        html[data-theme="dark"] .scan-activity-trash-dock::after {
+            border-color: rgba(94, 234, 212, 0.34);
+        }
+
+        html[data-theme="dark"] .scan-activity-trash-lid {
+            border-color: rgba(226, 232, 240, 0.48);
+            background: linear-gradient(180deg, rgba(226, 232, 240, 0.28), rgba(51, 65, 85, 0.2));
+        }
+
+        html[data-theme="dark"] .scan-activity-trash-body {
+            border-color: rgba(226, 232, 240, 0.48);
+            background: linear-gradient(180deg, rgba(148, 163, 184, 0.22), rgba(30, 41, 59, 0.3));
+        }
+
+        html[data-theme="dark"] .scan-activity-trash-line,
+        html[data-theme="dark"] .scan-activity-trash-lid::after {
+            background: rgba(226, 232, 240, 0.52);
+            border-color: rgba(226, 232, 240, 0.48);
+        }
+
         @keyframes scanActivityGlowInDark {
             0% {
                 box-shadow:
@@ -1031,6 +1245,16 @@
                 padding: 0.38rem 0.62rem;
                 font-size: 0.66rem;
             }
+
+            .scan-activity-trash-dock {
+                width: 3.3rem;
+                height: 3.3rem;
+                border-radius: 1.1rem;
+            }
+
+            .scan-activity-trash {
+                transform: scale(0.9);
+            }
         }
 
         @media (prefers-reduced-motion: reduce) {
@@ -1050,6 +1274,14 @@
                 opacity: 1;
                 transform: none;
                 filter: none;
+            }
+
+            .scan-activity-ghost,
+            .scan-activity-trash-dock,
+            .scan-activity-trash-lid,
+            .scan-activity-trash-dock::after {
+                transition: none !important;
+                animation: none !important;
             }
         }
 
@@ -2007,6 +2239,17 @@
                                                     </div>
                                                 </div>
                                             </div>
+                                            <div id="scanActivityCleanupLayer" class="scan-activity-cleanup-layer" aria-hidden="true"></div>
+                                            <div id="scanActivityTrashDock" class="scan-activity-trash-dock" aria-hidden="true">
+                                                <div id="scanActivityTrash" class="scan-activity-trash">
+                                                    <div class="scan-activity-trash-lid"></div>
+                                                    <div id="scanActivityTrashTarget" class="scan-activity-trash-body">
+                                                        <span class="scan-activity-trash-line"></span>
+                                                        <span class="scan-activity-trash-line"></span>
+                                                        <span class="scan-activity-trash-line"></span>
+                                                    </div>
+                                                </div>
+                                            </div>
                                             <div id="scanStatusHud" class="scan-status-hud" aria-live="polite" aria-atomic="true">
                                                 <span id="scanStateBadge"
                                                     class="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
@@ -2860,8 +3103,11 @@
         const smsStatusChip = document.getElementById('smsStatusChip');
         const scanActivityFeed = document.getElementById('scanActivityFeed');
         const scanActivityGhostLayer = document.getElementById('scanActivityGhostLayer');
+        const scanActivityCleanupLayer = document.getElementById('scanActivityCleanupLayer');
         const scanActivityEmpty = document.getElementById('scanActivityEmpty');
         const scanActivityCount = document.getElementById('scanActivityCount');
+        const scanActivityTrashDock = document.getElementById('scanActivityTrashDock');
+        const scanActivityTrashTarget = document.getElementById('scanActivityTrashTarget');
         const alertsSummaryCount = document.getElementById('alertsSummaryCount');
         let scanPollingTimer = null;
         let scanEventsRequestInFlight = false;
@@ -2888,9 +3134,12 @@
         let scanFaceOverlayFrameRequest = null;
         let scanTrackedFaceTargets = [];
         let scanFaceOverlaySourceSize = null;
+        let scanActivityTrashResetTimer = null;
         const scanRenderedFaceTracks = new Map();
         const SCAN_ACTIVITY_LIMIT = 10;
+        const SCAN_ACTIVITY_TRASH_BATCH_SIZE = 5;
         const SCAN_ACTIVITY_OUTRO_MS = 280;
+        const SCAN_ACTIVITY_TRASH_OUTRO_MS = 460;
         const PROCESSED_SCAN_EVENT_HISTORY_LIMIT = 120;
         const VOICE_FEEDBACK_HISTORY_LIMIT = 40;
         const SCAN_FACE_BOX_COLOR = '#6fefff';
@@ -3898,7 +4147,30 @@
             );
         }
 
-        function animateScanActivityRemoval(item, { reason = 'refresh' } = {}) {
+        function triggerScanActivityTrashInteraction(batchSize = 1) {
+            if (!scanActivityTrashDock || prefersReducedScanActivityMotion()) return;
+
+            const normalizedBatchSize = Math.max(
+                1,
+                Math.min(SCAN_ACTIVITY_TRASH_BATCH_SIZE, Number(batchSize) || 1)
+            );
+            const trashActiveMs = 520 + ((normalizedBatchSize - 1) * 12);
+
+            if (scanActivityTrashResetTimer) {
+                clearTimeout(scanActivityTrashResetTimer);
+            }
+
+            scanActivityTrashDock.classList.remove('scan-activity-trash-active');
+            void scanActivityTrashDock.offsetWidth;
+            scanActivityTrashDock.classList.add('scan-activity-trash-active');
+
+            scanActivityTrashResetTimer = window.setTimeout(() => {
+                scanActivityTrashDock.classList.remove('scan-activity-trash-active');
+                scanActivityTrashResetTimer = null;
+            }, trashActiveMs);
+        }
+
+        function animateScanActivityRemoval(item, { reason = 'refresh', batchIndex = 0 } = {}) {
             if (!item) return;
             clearScanActivityAnimationState(item);
 
@@ -3909,17 +4181,24 @@
                 return;
             }
 
-            if (!scanActivityGhostLayer || prefersReducedScanActivityMotion()) {
+            const wantsTrashAnimation = reason === 'trash';
+            const animationLayer = wantsTrashAnimation ? scanActivityCleanupLayer : scanActivityGhostLayer;
+
+            if (!animationLayer || prefersReducedScanActivityMotion()) {
                 item.remove();
                 return;
             }
 
             const itemRect = item.getBoundingClientRect();
-            const ghostLayerRect = scanActivityGhostLayer.getBoundingClientRect();
+            const ghostLayerRect = animationLayer.getBoundingClientRect();
             if (itemRect.width < 1 || itemRect.height < 1 || ghostLayerRect.width < 1 || ghostLayerRect.height < 1) {
                 item.remove();
                 return;
             }
+
+            let exitClass = reason === 'overflow' ? 'scan-activity-exit-overflow' : 'scan-activity-exit-refresh';
+            let outroDuration = SCAN_ACTIVITY_OUTRO_MS;
+            let transitionDelayMs = 0;
 
             const ghost = item.cloneNode(true);
             ghost.classList.remove(
@@ -3928,18 +4207,42 @@
                 'scan-activity-glow-out',
                 'scan-activity-announce',
             );
-            ghost.classList.add(
-                'scan-activity-ghost',
-                reason === 'overflow' ? 'scan-activity-exit-overflow' : 'scan-activity-exit-refresh',
-            );
             ghost.setAttribute('aria-hidden', 'true');
             ghost.style.top = `${itemRect.top - ghostLayerRect.top}px`;
             ghost.style.left = `${itemRect.left - ghostLayerRect.left}px`;
             ghost.style.width = `${itemRect.width}px`;
             ghost.style.height = `${itemRect.height}px`;
 
+            if (wantsTrashAnimation && scanActivityTrashTarget) {
+                const trashRect = scanActivityTrashTarget.getBoundingClientRect();
+                if (trashRect.width > 0 && trashRect.height > 0) {
+                    exitClass = 'scan-activity-exit-trash';
+                    outroDuration = SCAN_ACTIVITY_TRASH_OUTRO_MS;
+                    transitionDelayMs = Math.min(Math.max(Number(batchIndex) || 0, 0) * 36, 160);
+
+                    const startCenterX = (itemRect.left - ghostLayerRect.left) + (itemRect.width / 2);
+                    const startCenterY = (itemRect.top - ghostLayerRect.top) + (itemRect.height / 2);
+                    const targetCenterX = (trashRect.left - ghostLayerRect.left) + (trashRect.width / 2);
+                    const targetCenterY = (trashRect.top - ghostLayerRect.top) + (trashRect.height * 0.62);
+                    const travelX = targetCenterX - startCenterX;
+                    const travelY = targetCenterY - startCenterY;
+                    const travelRotation = (((batchIndex % 2 === 0) ? -1 : 1) * (11 + (Math.min(batchIndex, 4) * 3)));
+
+                    ghost.style.setProperty('--scan-activity-trash-x', `${Math.round(travelX * 10) / 10}px`);
+                    ghost.style.setProperty('--scan-activity-trash-y', `${Math.round(travelY * 10) / 10}px`);
+                    ghost.style.setProperty('--scan-activity-trash-rotate', `${travelRotation}deg`);
+                } else {
+                    transitionDelayMs = 0;
+                }
+            }
+
+            ghost.classList.add('scan-activity-ghost', exitClass);
+            if (transitionDelayMs > 0) {
+                ghost.style.transitionDelay = `${transitionDelayMs}ms`;
+            }
+
             item.remove();
-            scanActivityGhostLayer.appendChild(ghost);
+            animationLayer.appendChild(ghost);
 
             requestAnimationFrame(() => {
                 ghost.classList.add('scan-activity-exit-active');
@@ -3947,7 +4250,7 @@
 
             window.setTimeout(() => {
                 ghost.remove();
-            }, SCAN_ACTIVITY_OUTRO_MS + 80);
+            }, outroDuration + transitionDelayMs + 90);
         }
 
         function applyScanActivityVisualState(item, action, { animate = false } = {}) {
@@ -4003,11 +4306,29 @@
             const seenStudentIds = new Set();
             Array.from(scanActivityFeed.children).forEach((node) => {
                 const studentId = String(node.dataset.studentId || '').trim();
-                if (!studentId || seenStudentIds.has(studentId) || seenStudentIds.size >= SCAN_ACTIVITY_LIMIT) {
+                if (!studentId || seenStudentIds.has(studentId)) {
                     node.remove();
                     return;
                 }
                 seenStudentIds.add(studentId);
+            });
+            while (scanActivityFeed.children.length > SCAN_ACTIVITY_LIMIT) {
+                const overflowItem = scanActivityFeed.lastElementChild;
+                if (!overflowItem) break;
+                overflowItem.remove();
+            }
+            updateScanActivityState();
+        }
+
+        function cleanupOverflowScanActivityEntries() {
+            if (!scanActivityFeed || scanActivityFeed.children.length <= SCAN_ACTIVITY_LIMIT) return;
+
+            const overflowItems = Array.from(scanActivityFeed.children).slice(-SCAN_ACTIVITY_TRASH_BATCH_SIZE);
+            if (!overflowItems.length) return;
+
+            triggerScanActivityTrashInteraction(overflowItems.length);
+            overflowItems.forEach((node, index) => {
+                animateScanActivityRemoval(node, { reason: 'trash', batchIndex: index });
             });
             updateScanActivityState();
         }
@@ -4048,11 +4369,7 @@
             const item = createScanActivityItem(entry);
             item.classList.add('scan-activity-enter');
             scanActivityFeed.prepend(item);
-            while (scanActivityFeed.children.length > SCAN_ACTIVITY_LIMIT) {
-                const overflowItem = scanActivityFeed.lastElementChild;
-                if (!overflowItem) break;
-                animateScanActivityRemoval(overflowItem, { reason: 'overflow' });
-            }
+            cleanupOverflowScanActivityEntries();
 
             requestAnimationFrame(() => {
                 requestAnimationFrame(() => {
@@ -4432,14 +4749,14 @@
 
         let frameProcessingTimer = null;
         let frameProcessingActive = false;
-        let frameSendIntervalMs = 90;
-        const FRAME_SEND_BASE_INTERVAL = 90;
-        const FRAME_SEND_MIN_INTERVAL = 48;
-        const FRAME_SEND_MAX_INTERVAL = 180;
-        const FRAME_SEND_BUSY_INTERVAL = 130;
-        const FRAME_UPLOAD_MAX_WIDTH = 960;
-        const FRAME_UPLOAD_MAX_HEIGHT = 540;
-        const FRAME_UPLOAD_QUALITY = 0.82;
+        let frameSendIntervalMs = 72;
+        const FRAME_SEND_BASE_INTERVAL = 72;
+        const FRAME_SEND_MIN_INTERVAL = 38;
+        const FRAME_SEND_MAX_INTERVAL = 170;
+        const FRAME_SEND_BUSY_INTERVAL = 112;
+        const FRAME_UPLOAD_MAX_WIDTH = 896;
+        const FRAME_UPLOAD_MAX_HEIGHT = 504;
+        const FRAME_UPLOAD_QUALITY = 0.8;
 
         function clampFrameSendInterval(nextInterval) {
             const parsed = Number(nextInterval);
@@ -4503,7 +4820,15 @@
                 const payload = await response.json().catch(() => ({}));
                 const processorBusy = Boolean(payload.busy);
                 const roundTripMs = Math.max(1, performance.now() - frameStart);
+                const serverProcessingMs = Math.max(0, Number(payload.server_processing_ms) || 0);
+                const effectiveProcessingMs = Math.max(1, serverProcessingMs || (roundTripMs * 0.72));
                 const trackedFaceCount = Array.isArray(payload.faces) ? payload.faces.length : 0;
+                const scanMessage = String(payload.message || '').trim();
+                const activeFaceSignal = trackedFaceCount > 0
+                    || /^Face detected$/i.test(scanMessage)
+                    || /^Confirming\b/i.test(scanMessage)
+                    || /^Holding\b/i.test(scanMessage)
+                    || /^Liveness check\b/i.test(scanMessage);
                 if (Array.isArray(payload.faces)) {
                     updateTrackedFaceOverlayTargets(payload.faces);
                 } else if (response.ok) {
@@ -4517,10 +4842,14 @@
                 }
 
                 if (processorBusy || !response.ok) {
-                    frameSendIntervalMs = clampFrameSendInterval(Math.max(FRAME_SEND_BUSY_INTERVAL, roundTripMs * 0.62));
+                    frameSendIntervalMs = clampFrameSendInterval(
+                        Math.max(FRAME_SEND_BUSY_INTERVAL, effectiveProcessingMs * 0.88)
+                    );
                 } else {
-                    const rttWeight = trackedFaceCount > 1 ? 0.5 : 0.42;
-                    const responsiveTarget = roundTripMs * rttWeight - (trackedFaceCount <= 1 ? 8 : 0);
+                    const processingWeight = trackedFaceCount > 1
+                        ? 0.74
+                        : (activeFaceSignal ? 0.58 : 0.66);
+                    const responsiveTarget = (effectiveProcessingMs * processingWeight) - (activeFaceSignal ? 12 : 6);
                     frameSendIntervalMs = clampFrameSendInterval(responsiveTarget);
                 }
             } catch (error) {

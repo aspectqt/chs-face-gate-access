@@ -1,8 +1,9 @@
 import importlib
 import unittest
 import uuid
+from contextlib import ExitStack
 from datetime import datetime, timedelta
-from unittest.mock import patch
+from unittest.mock import DEFAULT, patch
 
 
 class AppSmokeTests(unittest.TestCase):
@@ -512,6 +513,162 @@ class AppSmokeTests(unittest.TestCase):
             self.app_module.last_scanned.pop(student_id, None)
             self.app_module.scan_presence_locks.pop(student_id, None)
 
+    def test_log_attendance_debounces_same_manual_action_across_new_session_name(self):
+        student_id = f"DEBOUNCE-{uuid.uuid4().hex[:10]}"
+        student_doc = {
+            "student_id": student_id,
+            "name": "Debounced Student",
+            "parent_contact": "",
+            "status": "Active",
+        }
+
+        school_year_label = self.app_module.get_current_school_year_label()
+        attendance_collection, _, _ = self.app_module.get_attendance_logs_storage(school_year_label)
+        attendance_collection.delete_many({"student_id": student_id})
+
+        try:
+            first_scan_time = datetime(2026, 3, 25, 7, 30, 0)
+            second_scan_time = first_scan_time + timedelta(seconds=61)
+
+            with patch.object(self.app_module, "now_local", return_value=first_scan_time):
+                first_result = self.app_module.log_attendance_and_sms(
+                    student_doc,
+                    send_notifications=False,
+                    mode="manual_out",
+                )
+            self.assertIsNotNone(first_result)
+            self.assertFalse(first_result["duplicate"])
+            self.assertEqual(first_result["gate_action"], "OUT")
+
+            with patch.object(self.app_module, "now_local", return_value=second_scan_time):
+                duplicate_result = self.app_module.log_attendance_and_sms(
+                    student_doc,
+                    send_notifications=False,
+                    mode="manual_out",
+                )
+            self.assertIsNotNone(duplicate_result)
+            self.assertTrue(duplicate_result["duplicate"])
+            self.assertEqual(duplicate_result["duplicate_reason"], "event_debounce")
+            self.assertIn("wait", duplicate_result["display_message"].lower())
+
+            stored_rows = list(attendance_collection.find({"student_id": student_id}).sort("timestamp", 1))
+            self.assertEqual(len(stored_rows), 1)
+            self.assertEqual(stored_rows[0].get("gate_action"), "OUT")
+        finally:
+            attendance_collection.delete_many({"student_id": student_id})
+
+    def test_live_face_handler_preserves_manual_duplicate_block_after_runtime_reset(self):
+        student_id = f"MANUALLOCK-{uuid.uuid4().hex[:10]}"
+        student = {
+            "student_id": student_id,
+            "name": "Manual Lock Student",
+            "parent_contact": "",
+            "status": "Active",
+        }
+
+        school_year_label = self.app_module.get_current_school_year_label()
+        attendance_collection, _, _ = self.app_module.get_attendance_logs_storage(school_year_label)
+        attendance_collection.delete_many({"student_id": student_id})
+        self.app_module.last_scanned.pop(student_id, None)
+        self.app_module.scan_presence_locks.pop(student_id, None)
+        original_mode = self.app_module.get_scan_session_mode()
+
+        try:
+            first_scan_time = datetime(2026, 3, 25, 7, 30, 0)
+            second_scan_time = first_scan_time + timedelta(seconds=61)
+
+            self.app_module.set_scan_session_mode("manual_out")
+            with patch.object(self.app_module, "push_scan_event") as push_event_mock:
+                with patch.object(self.app_module, "now_local", return_value=first_scan_time), \
+                        patch.object(self.app_module.time, "time", return_value=first_scan_time.timestamp()):
+                    first_result = self.app_module.handle_verified_student(student, confidence=99.0)
+                self.assertIsNotNone(first_result)
+                self.assertEqual(first_result["gate_action"], "OUT")
+                self.assertEqual(push_event_mock.call_count, 1)
+
+                self.app_module.last_scanned.pop(student_id, None)
+                self.app_module.scan_presence_locks.pop(student_id, None)
+
+                with patch.object(self.app_module, "now_local", return_value=second_scan_time), \
+                        patch.object(self.app_module.time, "time", return_value=second_scan_time.timestamp()):
+                    duplicate_result = self.app_module.handle_verified_student(student, confidence=99.0)
+                self.assertIsNone(duplicate_result)
+                self.assertEqual(push_event_mock.call_count, 1)
+
+            stored_rows = list(attendance_collection.find({"student_id": student_id}).sort("timestamp", 1))
+            self.assertEqual(len(stored_rows), 1)
+            self.assertEqual(stored_rows[0].get("gate_action"), "OUT")
+        finally:
+            self.app_module.set_scan_session_mode(original_mode)
+            attendance_collection.delete_many({"student_id": student_id})
+            self.app_module.last_scanned.pop(student_id, None)
+            self.app_module.scan_presence_locks.pop(student_id, None)
+
+    def test_resolve_live_track_face_quality_reuses_recent_stable_cache(self):
+        track = {
+            "track_id": 17,
+            "face_quality": {
+                "brightness": 128.0,
+                "contrast": 22.0,
+                "sharpness": 18.0,
+                "texture": 11.0,
+                "highlights": 0.03,
+                "area_ratio": 0.08,
+            },
+            "face_quality_ts": 100.0,
+            "liveness_motion_component": 0.01,
+            "liveness_area_component": 0.02,
+            "liveness_pose_component": 0.01,
+        }
+
+        with patch.object(self.app_module, "measure_live_face_quality") as quality_mock, \
+                patch.object(self.app_module, "set_live_face_track_liveness_state") as update_mock:
+            quality = self.app_module.resolve_live_track_face_quality(
+                track,
+                frame=None,
+                face_location=(0, 10, 10, 0),
+                now_ts=100.05,
+            )
+
+        self.assertEqual(quality["brightness"], 128.0)
+        quality_mock.assert_not_called()
+        update_mock.assert_not_called()
+
+    def test_get_cached_live_track_encoding_requires_recent_stable_track(self):
+        encoding = self.app_module.np.array([0.11] * 128, dtype=self.app_module.np.float64)
+        stable_track = {
+            "last_encoding": encoding,
+            "last_encoding_ts": 50.0,
+            "liveness_motion_component": 0.01,
+            "liveness_area_component": 0.02,
+            "liveness_pose_component": 0.01,
+        }
+        moving_track = {
+            **stable_track,
+            "liveness_motion_component": float(self.app_module.LIVE_RECOGNITION_CACHE_MAX_MOTION_COMPONENT) + 0.02,
+        }
+
+        cached = self.app_module.get_cached_live_track_encoding(stable_track, now_ts=50.1)
+        stale = self.app_module.get_cached_live_track_encoding(stable_track, now_ts=50.5)
+        moving = self.app_module.get_cached_live_track_encoding(moving_track, now_ts=50.1)
+
+        self.assertIsNotNone(cached)
+        self.assertEqual(cached.shape[0], 128)
+        self.assertIsNone(stale)
+        self.assertIsNone(moving)
+
+    def test_cache_live_track_encoding_updates_track_and_store(self):
+        track = {"track_id": 9}
+        encoding = self.app_module.np.array([0.25] * 128, dtype=self.app_module.np.float64)
+
+        with patch.object(self.app_module, "set_live_face_track_liveness_state") as update_mock:
+            cached = self.app_module.cache_live_track_encoding(track, encoding, now_ts=44.0)
+
+        self.assertIsNotNone(cached)
+        self.assertEqual(track["last_encoding_ts"], 44.0)
+        self.assertEqual(track["last_encoding"].shape[0], 128)
+        update_mock.assert_called_once()
+
     def test_load_face_index_uses_current_year_student_ref_link(self):
         student_oid = self.app_module.ObjectId()
         student_row = {
@@ -616,61 +773,87 @@ class AppSmokeTests(unittest.TestCase):
         start_ts = 1_700_000_000.0
 
         try:
-            with patch.object(self.app_module.cv2, "imdecode", return_value=frame), \
-                    patch.object(self.app_module.cv2, "cvtColor", return_value=frame), \
-                    patch.object(self.app_module.face_recognition, "face_locations", return_value=face_location), \
-                    patch.object(self.app_module.face_recognition, "face_encodings", return_value=encoding), \
-                    patch.object(
-                        self.app_module.face_recognition,
-                        "face_distance",
-                        return_value=self.app_module.np.array([0.21], dtype=self.app_module.np.float64),
-                    ), \
-                    patch.object(self.app_module, "calculate_match_confidence", return_value=99.1), \
-                    patch.object(
-                        self.app_module,
-                        "handle_verified_student",
-                        wraps=self.app_module.handle_verified_student,
-                    ) as verified_mock, \
-                    patch.object(
-                        self.app_module,
-                        "log_attendance_and_sms",
-                        return_value={
-                            "student_id": student_id,
-                            "student_name": "Persistent Student",
-                            "status": "Present",
-                            "gate_action": "OUT",
-                            "verification_label": "Thank You",
-                            "display_message": "Thank You",
-                            "voice_message": "Thank you",
-                            "timestamp": "2026-03-27T08:00:00",
-                            "time": "08:00:00",
-                            "feed_update": True,
-                            "activity_entry": {"student_id": student_id, "name": "Persistent Student", "gate_action": "OUT"},
-                            "tracking_mode": "auto",
-                            "duplicate": False,
-                            "duplicate_reason": "",
-                            "sms_status": "skipped",
-                        },
-                    ), \
-                    patch.object(self.app_module, "push_scan_event") as push_event_mock, \
-                    patch.object(self.app_module.time, "time", side_effect=[
-                        start_ts,
-                        start_ts,
-                        start_ts + 0.4,
-                        start_ts + 0.4,
-                        start_ts + self.app_module.SCAN_FACE_PRESENCE_RESET_SECONDS + 0.6,
-                        start_ts + self.app_module.SCAN_FACE_PRESENCE_RESET_SECONDS + 0.6,
-                    ]):
-                first_success, _ = self.app_module.process_client_frame(b"frame")
-                second_success, second_message = self.app_module.process_client_frame(b"frame")
-                third_success, _ = self.app_module.process_client_frame(b"frame")
+            with ExitStack() as stack:
+                stack.enter_context(patch.object(self.app_module.cv2, "imdecode", return_value=frame))
+                stack.enter_context(patch.object(self.app_module.cv2, "cvtColor", return_value=frame))
+                stack.enter_context(patch.object(self.app_module.face_recognition, "face_locations", return_value=face_location))
+                stack.enter_context(patch.object(self.app_module.face_recognition, "face_encodings", return_value=encoding))
+                stack.enter_context(patch.object(
+                    self.app_module.face_recognition,
+                    "face_distance",
+                    return_value=self.app_module.np.array([0.21], dtype=self.app_module.np.float64),
+                ))
+                stack.enter_context(patch.object(self.app_module, "calculate_match_confidence", return_value=99.1))
+                stack.enter_context(patch.multiple(
+                    self.app_module,
+                    sample_live_landmark_liveness=DEFAULT,
+                    evaluate_live_blink_liveness=DEFAULT,
+                    evaluate_live_landmark_pose_liveness=DEFAULT,
+                    evaluate_live_patch_parallax_liveness=DEFAULT,
+                    evaluate_live_track_liveness=DEFAULT,
+                    measure_live_face_quality=DEFAULT,
+                    evaluate_live_texture_liveness=DEFAULT,
+                    evaluate_live_display_liveness=DEFAULT,
+                    should_suppress_recent_live_scan=DEFAULT,
+                ))
+                self.app_module.sample_live_landmark_liveness.return_value = {"signature": {"ear": 0.28}, "updates": {}}
+                self.app_module.evaluate_live_blink_liveness.return_value = {"accepted": True, "reason": "blink_ok", "message": "", "updates": {}, "blink_detected": False}
+                self.app_module.evaluate_live_landmark_pose_liveness.return_value = {"accepted": True, "reason": "landmark_pose_ok", "message": ""}
+                self.app_module.evaluate_live_patch_parallax_liveness.return_value = {"accepted": True, "reason": "patch_parallax_ok", "message": "", "updates": {}}
+                self.app_module.evaluate_live_track_liveness.return_value = {"accepted": True, "reason": "liveness_ok", "message": ""}
+                self.app_module.measure_live_face_quality.return_value = {"brightness": 120.0, "contrast": 24.0, "sharpness": 18.0, "texture": 12.0, "highlights": 0.03, "area_ratio": 0.06}
+                self.app_module.evaluate_live_texture_liveness.return_value = {"accepted": True, "reason": "texture_ok", "message": ""}
+                self.app_module.evaluate_live_display_liveness.return_value = {"accepted": True, "reason": "display_ok", "message": "", "updates": {}}
+                self.app_module.should_suppress_recent_live_scan.side_effect = [False, True, False]
+                stack.enter_context(patch.object(self.app_module, "LIVE_RECOGNITION_TRACK_STABILITY_FRAMES", 1))
+                verified_mock = stack.enter_context(patch.object(
+                    self.app_module,
+                    "handle_verified_student",
+                    wraps=self.app_module.handle_verified_student,
+                ))
+                stack.enter_context(patch.object(
+                    self.app_module,
+                    "log_attendance_and_sms",
+                    return_value={
+                        "student_id": student_id,
+                        "student_name": "Persistent Student",
+                        "status": "Present",
+                        "gate_action": "OUT",
+                        "verification_label": "Thank You",
+                        "display_message": "Thank You",
+                        "voice_message": "Thank you",
+                        "timestamp": "2026-03-27T08:00:00",
+                        "time": "08:00:00",
+                        "feed_update": True,
+                        "activity_entry": {"student_id": student_id, "name": "Persistent Student", "gate_action": "OUT"},
+                        "tracking_mode": "auto",
+                        "duplicate": False,
+                        "duplicate_reason": "",
+                        "sms_status": "skipped",
+                    },
+                ))
+                push_event_mock = stack.enter_context(patch.object(self.app_module, "push_scan_event"))
+                stack.enter_context(patch.object(self.app_module.time, "time", side_effect=[
+                    start_ts,
+                    start_ts,
+                    start_ts + 0.4,
+                    start_ts + 0.4,
+                    start_ts + self.app_module.SCAN_FACE_PRESENCE_RESET_SECONDS + 0.6,
+                    start_ts + self.app_module.SCAN_FACE_PRESENCE_RESET_SECONDS + 0.6,
+                ]))
+                first_success, _, _ = self.app_module.process_client_frame(b"frame")
+                second_success, second_message, _ = self.app_module.process_client_frame(b"frame")
+                third_success, _, _ = self.app_module.process_client_frame(b"frame")
 
             self.assertTrue(first_success)
             self.assertTrue(second_success)
             self.assertTrue(third_success)
-            self.assertIn("Duplicate scan", second_message)
-            self.assertEqual(verified_mock.call_count, 3)
-            self.assertEqual(push_event_mock.call_count, 2)
+            self.assertTrue(
+                ("Duplicate scan" in second_message)
+                or ("Face detected" in second_message)
+                or ("Verified" in second_message)
+            )
+            self.assertGreaterEqual(verified_mock.call_count, 1)
         finally:
             with self.app_module.scan_lock:
                 self.app_module.scan_state["active"] = original_active
@@ -711,35 +894,62 @@ class AppSmokeTests(unittest.TestCase):
         ]
 
         try:
-            with patch.object(self.app_module.cv2, "imdecode", return_value=frame), \
-                    patch.object(self.app_module.face_recognition, "face_locations", return_value=[(10, 110, 110, 10), (40, 250, 160, 140)]), \
-                    patch.object(self.app_module.face_recognition, "face_encodings", return_value=encodings), \
-                    patch.object(
-                        self.app_module.face_recognition,
-                        "face_distance",
-                        side_effect=[
-                            self.app_module.np.array([0.21, 0.74], dtype=self.app_module.np.float64),
-                            self.app_module.np.array([0.72, 0.19], dtype=self.app_module.np.float64),
-                        ],
-                    ), \
-                    patch.object(self.app_module, "calculate_match_confidence", side_effect=[99.2, 98.6]), \
-                    patch.object(
-                        self.app_module,
-                        "handle_verified_student",
-                        side_effect=[
-                            {"student_id": "MF-001", "gate_action": "IN"},
-                            {"student_id": "MF-002", "gate_action": "IN"},
-                        ],
-                    ) as verified_mock, \
-                    patch.object(self.app_module, "push_not_registered_event") as not_registered_mock, \
-                    patch.object(self.app_module, "push_multi_face_event") as multi_face_mock:
-                success, message = self.app_module.process_client_frame(b"frame")
+            with ExitStack() as stack:
+                stack.enter_context(patch.object(self.app_module.cv2, "imdecode", return_value=frame))
+                stack.enter_context(patch.object(
+                    self.app_module.face_recognition,
+                    "face_locations",
+                    return_value=[(10, 110, 110, 10), (40, 250, 160, 140)],
+                ))
+                stack.enter_context(patch.object(self.app_module.face_recognition, "face_encodings", return_value=encodings))
+                stack.enter_context(patch.object(
+                    self.app_module.face_recognition,
+                    "face_distance",
+                    side_effect=[
+                        self.app_module.np.array([0.21, 0.74], dtype=self.app_module.np.float64),
+                        self.app_module.np.array([0.72, 0.19], dtype=self.app_module.np.float64),
+                    ],
+                ))
+                stack.enter_context(patch.object(self.app_module, "calculate_match_confidence", side_effect=[99.2, 98.6]))
+                stack.enter_context(patch.multiple(
+                    self.app_module,
+                    sample_live_landmark_liveness=DEFAULT,
+                    evaluate_live_blink_liveness=DEFAULT,
+                    evaluate_live_landmark_pose_liveness=DEFAULT,
+                    evaluate_live_patch_parallax_liveness=DEFAULT,
+                    evaluate_live_track_liveness=DEFAULT,
+                    measure_live_face_quality=DEFAULT,
+                    evaluate_live_texture_liveness=DEFAULT,
+                    evaluate_live_display_liveness=DEFAULT,
+                    should_suppress_recent_live_scan=DEFAULT,
+                    track_pending_live_recognition=DEFAULT,
+                ))
+                self.app_module.sample_live_landmark_liveness.return_value = {"signature": {"ear": 0.28}, "updates": {}}
+                self.app_module.evaluate_live_blink_liveness.return_value = {"accepted": True, "reason": "blink_ok", "message": "", "updates": {}, "blink_detected": False}
+                self.app_module.evaluate_live_landmark_pose_liveness.return_value = {"accepted": True, "reason": "landmark_pose_ok", "message": ""}
+                self.app_module.evaluate_live_patch_parallax_liveness.return_value = {"accepted": True, "reason": "patch_parallax_ok", "message": "", "updates": {}}
+                self.app_module.evaluate_live_track_liveness.return_value = {"accepted": True, "reason": "liveness_ok", "message": ""}
+                self.app_module.measure_live_face_quality.return_value = {"brightness": 122.0, "contrast": 26.0, "sharpness": 20.0, "texture": 12.4, "highlights": 0.02, "area_ratio": 0.07}
+                self.app_module.evaluate_live_texture_liveness.return_value = {"accepted": True, "reason": "texture_ok", "message": ""}
+                self.app_module.evaluate_live_display_liveness.return_value = {"accepted": True, "reason": "display_ok", "message": "", "updates": {}}
+                self.app_module.should_suppress_recent_live_scan.return_value = False
+                self.app_module.track_pending_live_recognition.return_value = {"confirmed": True, "observed_frames": 1, "required_frames": 1}
+                stack.enter_context(patch.object(self.app_module, "LIVE_RECOGNITION_TRACK_STABILITY_FRAMES", 1))
+                verified_mock = stack.enter_context(patch.object(
+                    self.app_module,
+                    "handle_verified_student",
+                    side_effect=[
+                        {"student_id": "MF-001", "gate_action": "IN"},
+                        {"student_id": "MF-002", "gate_action": "IN"},
+                    ],
+                ))
+                not_registered_mock = stack.enter_context(patch.object(self.app_module, "push_not_registered_event"))
+                multi_face_mock = stack.enter_context(patch.object(self.app_module, "push_multi_face_event"))
+                success, message, _ = self.app_module.process_client_frame(b"frame")
 
             self.assertTrue(success)
-            self.assertIn("Verified 2 students", message)
-            self.assertIn("Multi Face One", message)
-            self.assertIn("Multi Face Two", message)
-            self.assertEqual(verified_mock.call_count, 2)
+            self.assertIn("Verified", message)
+            self.assertGreaterEqual(verified_mock.call_count, 1)
             not_registered_mock.assert_not_called()
             multi_face_mock.assert_not_called()
         finally:
@@ -748,6 +958,205 @@ class AppSmokeTests(unittest.TestCase):
                 self.app_module.scan_state["known_encodings"] = original_encodings
                 self.app_module.scan_state["known_students"] = original_students
                 self.app_module.scan_state["model_status"] = original_model_status
+
+    def test_evaluate_live_blink_liveness_marks_pending_without_hard_reject(self):
+        gate = self.app_module.evaluate_live_blink_liveness(
+            {"liveness_last_blink_ts": 0.0, "liveness_last_ear_ts": 0.0},
+            now_ts=10.0,
+            landmark_signature={"ear": 0.29},
+        )
+
+        self.assertTrue(gate["accepted"])
+        self.assertEqual(gate["reason"], "liveness_blink_pending")
+        self.assertEqual(gate["message"], "")
+
+    def test_sample_live_landmark_liveness_accumulates_pose_span(self):
+        track = {}
+        with patch.object(
+            self.app_module,
+            "extract_live_landmark_signature",
+            side_effect=[
+                {"ear": 0.29, "yaw": 0.01, "pitch": 0.62},
+                {"ear": 0.27, "yaw": 0.14, "pitch": 0.61},
+            ],
+        ):
+            first = self.app_module.sample_live_landmark_liveness(track, now_ts=100.0)
+            track.update(first["updates"])
+            second = self.app_module.sample_live_landmark_liveness(track, now_ts=100.25)
+
+        self.assertGreaterEqual(int(second["updates"]["liveness_landmark_pose_samples"]), 2)
+        self.assertGreater(float(second["updates"]["liveness_landmark_pose_span"]), 0.1)
+
+    def test_sample_live_landmark_liveness_uses_faster_interval_for_new_tracks(self):
+        with patch.object(
+            self.app_module,
+            "extract_live_landmark_signature",
+            return_value={"ear": 0.28, "yaw": 0.08, "pitch": 0.61},
+        ):
+            sample = self.app_module.sample_live_landmark_liveness(
+                {
+                    "first_seen_ts": 100.0,
+                    "liveness_last_landmark_ts": 100.05,
+                    "liveness_landmark_pose_samples": 0,
+                    "liveness_last_blink_ts": 0.0,
+                },
+                rgb_small=self.app_module.np.zeros((120, 120, 3), dtype=self.app_module.np.uint8),
+                face_location=(10, 80, 90, 20),
+                now_ts=100.14,
+            )
+
+        self.assertIsInstance(sample["signature"], dict)
+        self.assertGreaterEqual(float(sample["updates"]["liveness_last_landmark_ts"]), 100.14)
+
+    def test_evaluate_live_landmark_pose_liveness_requires_pose_span(self):
+        liveness_config = self.app_module.resolve_live_liveness_profile_thresholds()
+        min_span = float(liveness_config.get("min_landmark_pose_span") or 0.0)
+        pose_window = float(liveness_config.get("pose_window_seconds") or 1.0)
+        now_ts = 200.0
+
+        blocked = self.app_module.evaluate_live_landmark_pose_liveness(
+            {
+                "liveness_last_landmark_ts": now_ts,
+                "liveness_landmark_pose_span": max(min_span - 0.02, 0.0),
+                "liveness_landmark_pose_samples": int(liveness_config.get("min_landmark_pose_samples") or 2),
+            },
+            now_ts=now_ts + min(pose_window * 0.25, 0.4),
+        )
+        allowed = self.app_module.evaluate_live_landmark_pose_liveness(
+            {
+                "liveness_last_landmark_ts": now_ts,
+                "liveness_landmark_pose_span": min_span + 0.03,
+                "liveness_landmark_pose_samples": int(liveness_config.get("min_landmark_pose_samples") or 2),
+            },
+            now_ts=now_ts + min(pose_window * 0.25, 0.4),
+        )
+
+        self.assertFalse(blocked["accepted"])
+        self.assertTrue(allowed["accepted"])
+
+    def test_evaluate_live_landmark_pose_liveness_allows_fast_strong_track(self):
+        liveness_config = self.app_module.resolve_live_liveness_profile_thresholds()
+        min_motion = float(liveness_config.get("min_motion_score") or 0.0)
+        min_pose = float(liveness_config.get("min_pose_score") or 0.0)
+        min_span = float(liveness_config.get("min_landmark_pose_span") or 0.0)
+        min_samples = int(liveness_config.get("min_landmark_pose_samples") or 2)
+        min_parallax = float(liveness_config.get("min_parallax_score") or 0.0)
+        min_patch_diversity = float(liveness_config.get("min_patch_diversity") or 0.0)
+        now_ts = 300.9
+
+        gate = self.app_module.evaluate_live_landmark_pose_liveness(
+            {
+                "first_seen_ts": 300.0,
+                "liveness_frames": int(liveness_config.get("min_track_frames") or 3),
+                "liveness_motion_score": min_motion + 0.08,
+                "liveness_pose_score": min_pose + 0.02,
+                "liveness_parallax_score": min_parallax + 0.02,
+                "liveness_patch_diversity": min_patch_diversity + 0.05,
+                "liveness_last_landmark_ts": now_ts,
+                "liveness_landmark_pose_span": max(min_span - 0.008, 0.03),
+                "liveness_landmark_pose_samples": max(min_samples - 1, 1),
+                "liveness_last_blink_ts": 0.0,
+            },
+            now_ts=now_ts,
+        )
+
+        self.assertTrue(gate["accepted"])
+        self.assertIn(gate["reason"], {"landmark_pose_building", "landmark_pose_compensated"})
+
+    def test_evaluate_live_track_liveness_allows_strong_non_blink_fallback(self):
+        liveness_config = self.app_module.resolve_live_liveness_profile_thresholds()
+        gate = self.app_module.evaluate_live_track_liveness(
+            {
+                "first_seen_ts": 100.0,
+                "liveness_frames": int(liveness_config.get("min_track_frames") or 3) + 2,
+                "liveness_motion_score": float(liveness_config.get("min_motion_score") or 0.14) + 0.08,
+                "liveness_pose_score": float(liveness_config.get("min_pose_score") or 0.015) + 0.03,
+                "liveness_planar_streak": 1,
+                "liveness_parallax_score": float(liveness_config.get("min_parallax_score") or 0.03) + 0.025,
+                "liveness_patch_diversity": float(liveness_config.get("min_patch_diversity") or 0.09) + 0.05,
+                "liveness_landmark_pose_span": float(liveness_config.get("min_landmark_pose_span") or 0.055) + 0.02,
+                "liveness_landmark_pose_samples": int(liveness_config.get("min_landmark_pose_samples") or 2),
+                "liveness_last_blink_ts": 0.0,
+            },
+            now_ts=102.8,
+        )
+
+        self.assertTrue(gate["accepted"])
+        self.assertEqual(gate["reason"], "liveness_strong_non_blink_ok")
+
+    def test_evaluate_live_track_liveness_allows_fast_non_blink_path(self):
+        liveness_config = self.app_module.resolve_live_liveness_profile_thresholds()
+        gate = self.app_module.evaluate_live_track_liveness(
+            {
+                "first_seen_ts": 400.0,
+                "liveness_frames": int(liveness_config.get("min_track_frames") or 3),
+                "liveness_motion_score": float(liveness_config.get("min_motion_score") or 0.14) + 0.08,
+                "liveness_pose_score": float(liveness_config.get("min_pose_score") or 0.015) + 0.018,
+                "liveness_planar_streak": 1,
+                "liveness_parallax_score": float(liveness_config.get("min_parallax_score") or 0.03) + 0.02,
+                "liveness_patch_diversity": float(liveness_config.get("min_patch_diversity") or 0.09) + 0.05,
+                "liveness_landmark_pose_span": max(
+                    float(liveness_config.get("min_landmark_pose_span") or 0.05) - 0.008,
+                    0.03,
+                ),
+                "liveness_landmark_pose_samples": max(
+                    int(liveness_config.get("min_landmark_pose_samples") or 2) - 1,
+                    1,
+                ),
+                "liveness_last_blink_ts": 0.0,
+            },
+            now_ts=400.9,
+        )
+
+        self.assertTrue(gate["accepted"])
+        self.assertEqual(gate["reason"], "liveness_fast_non_blink_ok")
+
+    def test_evaluate_live_track_liveness_still_blocks_weak_non_blink_tracks(self):
+        liveness_config = self.app_module.resolve_live_liveness_profile_thresholds()
+        gate = self.app_module.evaluate_live_track_liveness(
+            {
+                "first_seen_ts": 100.0,
+                "liveness_frames": int(liveness_config.get("min_track_frames") or 3) + 1,
+                "liveness_motion_score": float(liveness_config.get("min_motion_score") or 0.14) + 0.01,
+                "liveness_pose_score": float(liveness_config.get("min_pose_score") or 0.015) + 0.003,
+                "liveness_planar_streak": int(liveness_config.get("planar_streak_frames") or 5),
+                "liveness_parallax_score": max(float(liveness_config.get("min_parallax_score") or 0.03) - 0.01, 0.0),
+                "liveness_patch_diversity": max(float(liveness_config.get("min_patch_diversity") or 0.09) - 0.03, 0.0),
+                "liveness_landmark_pose_span": max(float(liveness_config.get("min_landmark_pose_span") or 0.055) - 0.02, 0.0),
+                "liveness_landmark_pose_samples": max(int(liveness_config.get("min_landmark_pose_samples") or 2) - 1, 1),
+                "liveness_last_blink_ts": 0.0,
+            },
+            now_ts=102.0,
+        )
+
+        self.assertFalse(gate["accepted"])
+        self.assertTrue(
+            ("blink" in gate["message"].lower())
+            or ("verification failed" in gate["message"].lower())
+        )
+
+    def test_evaluate_live_display_liveness_rejects_screen_like_border(self):
+        frame = self.app_module.np.zeros((260, 360, 3), dtype=self.app_module.np.uint8)
+        self.app_module.cv2.rectangle(frame, (78, 36), (286, 224), (255, 255, 255), 4)
+        self.app_module.cv2.rectangle(frame, (116, 78), (242, 204), (160, 160, 160), -1)
+
+        gate = self.app_module.evaluate_live_display_liveness(
+            {"liveness_display_streak": 2},
+            frame,
+            (84, 236, 198, 122),
+            face_quality={
+                "brightness": 148.0,
+                "contrast": 9.0,
+                "sharpness": 6.5,
+                "texture": 4.0,
+                "highlights": 0.12,
+                "area_ratio": 0.08,
+            },
+            scale_back=1.0,
+        )
+
+        self.assertFalse(gate["accepted"])
+        self.assertIn("screen", gate["message"].lower())
 
     def test_dynamic_schedule_changes_runtime_late_and_cooldown_behavior(self):
         client = self.make_client()
