@@ -1,0 +1,13 @@
+{
+  "name": "chs-gate-access-live-monitoring",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Socket.IO signaling server for CHS Gate Access live gate monitoring",
+  "main": "live_monitor_server.js",
+  "scripts": {
+    "start:live-monitor": "node live_monitor_server.js"
+  },
+  "dependencies": {
+    "socket.io": "^4.8.1"
+  }
+}

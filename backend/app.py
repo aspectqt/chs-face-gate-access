@@ -3473,7 +3473,12 @@ def build_gate_scan_result(attendance_collection, school_year_label, student, no
     manual_override_enabled = normalized_mode in {"manual_in", "manual_out"}
     allow_immediate_reentry = last_action == "OUT" and normalized_mode == "auto"
 
-    if not manual_override_enabled and last_action == "OUT" and last_record_dt is not None:
+    if (
+        not manual_override_enabled
+        and not allow_immediate_reentry
+        and last_action == "OUT"
+        and last_record_dt is not None
+    ):
         elapsed_since_out = max((now - last_record_dt).total_seconds(), 0.0)
         if elapsed_since_out < scan_out_cooldown_seconds:
             remaining_seconds = max(scan_out_cooldown_seconds - elapsed_since_out, 0.0)
@@ -6591,6 +6596,83 @@ def logout():
     return redirect(url_for("login"))
 
 
+LIVE_MONITORING_DEFAULT_CHANNEL = os.getenv("LIVE_MONITORING_CHANNEL", "main-gate").strip() or "main-gate"
+LIVE_MONITORING_SIGNALING_PORT = env_int("LIVE_MONITORING_SIGNALING_PORT", FLASK_PORT + 1, minimum=1, maximum=65535)
+LIVE_MONITORING_TOKEN_TTL_SECONDS = env_int("LIVE_MONITORING_TOKEN_TTL_SECONDS", 120, minimum=30, maximum=900)
+
+
+def live_monitoring_secret_bytes():
+    secret = (
+        os.getenv("LIVE_MONITORING_TOKEN_SECRET", "").strip()
+        or str(app.secret_key or "").strip()
+        or "live-monitoring-secret"
+    )
+    return secret.encode("utf-8")
+
+
+def resolve_live_monitoring_signaling_url():
+    configured = os.getenv("LIVE_MONITORING_SIGNALING_URL", "").strip()
+    if configured:
+        return configured.rstrip("/")
+
+    host = request.host.split(":", 1)[0].strip() or request.host.strip()
+    scheme = request.scheme or ("https" if HTTPS_ENABLED else "http")
+    return f"{scheme}://{host}:{LIVE_MONITORING_SIGNALING_PORT}"
+
+
+def resolve_live_monitoring_ice_servers():
+    raw_urls = os.getenv(
+        "LIVE_MONITORING_STUN_URLS",
+        "stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302",
+    )
+    urls = [value.strip() for value in raw_urls.split(",") if value.strip()]
+    return [{"urls": urls}] if urls else []
+
+
+def create_live_monitoring_token(payload):
+    import hmac
+
+    payload_json = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    payload_b64 = base64.urlsafe_b64encode(payload_json).decode("ascii").rstrip("=")
+    signature = hmac.new(
+        live_monitoring_secret_bytes(),
+        payload_b64.encode("ascii"),
+        hashlib.sha256,
+    ).digest()
+    signature_b64 = base64.urlsafe_b64encode(signature).decode("ascii").rstrip("=")
+    return f"{payload_b64}.{signature_b64}"
+
+
+@app.route("/api/live-monitoring/token")
+@require_permission("dashboard")
+def live_monitoring_token():
+    role_name = current_role()
+    if role_name not in {ROLE_FULL_ADMIN, ROLE_STAFF}:
+        return jsonify({"status": "error", "message": "Live monitoring is unavailable for this role."}), 403
+
+    issued_at = int(time.time())
+    expires_at = issued_at + LIVE_MONITORING_TOKEN_TTL_SECONDS
+    username = (session.get("admin") or "").strip()
+    channel = LIVE_MONITORING_DEFAULT_CHANNEL
+    token = create_live_monitoring_token({
+        "sub": username,
+        "role": role_name,
+        "channel": channel,
+        "iat": issued_at,
+        "exp": expires_at,
+    })
+
+    return jsonify({
+        "status": "ok",
+        "token": token,
+        "role": role_name,
+        "channel": channel,
+        "signaling_url": resolve_live_monitoring_signaling_url(),
+        "ice_servers": resolve_live_monitoring_ice_servers(),
+        "expires_at": expires_at,
+    })
+
+
 @app.route("/dashboard")
 @require_permission("dashboard")
 def dashboard():
@@ -6608,6 +6690,17 @@ def dashboard():
     today_ev_doc = calendar_events.find_one({"date": today_date_str})
     payload["today_event_title"] = today_ev_doc.get("title", "") if today_ev_doc else ""
     return render_template("dashboard.html", **payload)
+
+
+@app.route("/live-gate-monitoring")
+@require_permission("dashboard")
+def live_monitoring_page():
+    if current_role() != ROLE_FULL_ADMIN:
+        return redirect(url_for("dashboard"))
+
+    selected_school_year = resolve_selected_school_year(request.args.get("school_year", ""))
+    payload = sidebar_context("live_monitoring", selected_school_year)
+    return render_template("live_monitoring.html", **payload)
 
 
 @app.route("/test_enhanced_scanning")
@@ -11165,20 +11258,25 @@ def parse_faces_payload(data):
             "instruction": meta_row.get("instruction") or "",
         }
         validated = validate_face_capture_image(raw_face)
-        if not validated or not validated.get("ok"):
+        validated_payload = validated if isinstance(validated, dict) else {}
+        encoding = validated_payload.get("encoding")
+        if (
+            not validated_payload
+            or validated_payload.get("ok") is False
+            or encoding is None
+        ):
             invalid_captures.append({
                 **row_detail,
-                "reason": (validated or {}).get("reason") or "validation_failed",
-                "hint": (validated or {}).get("hint") or "",
+                "reason": validated_payload.get("reason") or "validation_failed",
+                "hint": validated_payload.get("hint") or "",
                 "quality": {
-                    "brightness": (validated or {}).get("brightness"),
-                    "contrast": (validated or {}).get("contrast"),
-                    "sharpness": (validated or {}).get("sharpness"),
+                    "brightness": validated_payload.get("brightness"),
+                    "contrast": validated_payload.get("contrast"),
+                    "sharpness": validated_payload.get("sharpness"),
                 },
             })
             continue
 
-        encoding = validated["encoding"]
         if seen_encodings:
             try:
                 distances = face_distance(seen_encodings, encoding)
@@ -11203,9 +11301,9 @@ def parse_faces_payload(data):
             "yaw": meta_row.get("yaw"),
             "pitch": meta_row.get("pitch"),
             "quality": {
-                "brightness": validated["brightness"],
-                "contrast": validated["contrast"],
-                "sharpness": validated["sharpness"],
+                "brightness": validated_payload.get("brightness"),
+                "contrast": validated_payload.get("contrast"),
+                "sharpness": validated_payload.get("sharpness"),
             },
         })
 
