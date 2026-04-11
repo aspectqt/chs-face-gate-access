@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Developers</title>
+  <title>Help / Guide</title>
   <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32x32.png') }}">
   <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon-16x16.png') }}">
   <link rel="shortcut icon" href="{{ url_for('static', filename='favicon-32x32.png') }}">
@@ -24,8 +24,8 @@
           </svg>
         </button>
         <div class="hidden sm:block">
-          <h1 class="app-header-title">Developers</h1>
-          <p class="app-header-subtitle"></p>
+          <h1 class="app-header-title">Help / Guide</h1>
+          <p class="app-header-subtitle">Quick workflows, module guidance, and support references for daily system use.</p>
         </div>
       </div>
       <div class="app-header-actions">
@@ -34,98 +34,179 @@
       </div>
     </header>
 
-    <main class="app-main-content flex-1 overflow-y-auto p-6 space-y-6">
-      <section class="app-content-card app-content-card--hero relative overflow-hidden p-6">
-        <div class="absolute -top-20 -right-20 h-56 w-56 rounded-full bg-emerald-200/35 blur-3xl"></div>
-        <div class="absolute -left-20 -bottom-24 h-56 w-56 rounded-full bg-sky-200/30 blur-3xl"></div>
-        <div class="relative grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          <div class="lg:col-span-8">
-            <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700">Face Recognition Student Gate Access System with SMS Notification for Cawitan High School</p>
-            <h2 class="mt-1 text-2xl lg:text-3xl font-bold text-slate-900 leading-tight">
-              Developers and Project Information Portal
-            </h2>
-            <p class="mt-3 text-sm text-slate-600 leading-relaxed max-w-3xl">
-              This page presents the development team, institutional affiliation, and project background of the
-              Face Recognition Student Gate Access System with SMS Notification for Cawitan High School.
+    <main class="app-main-content flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+      <section class="app-content-card app-content-card--hero relative overflow-hidden p-6 sm:p-7">
+        <div class="absolute -top-24 -right-16 h-60 w-60 rounded-full bg-emerald-200/35 blur-3xl"></div>
+        <div class="absolute -left-20 -bottom-24 h-60 w-60 rounded-full bg-sky-200/25 blur-3xl"></div>
+        <div class="relative grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_19rem]">
+          <div class="min-w-0">
+            <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700">System Help Center</p>
+            <h2 class="mt-1 text-2xl font-bold leading-tight text-slate-900 sm:text-3xl">A clearer guide for scanning, live monitoring, logs, and everyday admin tasks.</h2>
+            <p class="mt-3 max-w-3xl text-sm leading-relaxed text-slate-600 sm:text-[15px]">
+              Use this page to understand what each module does, which workflow to follow, and where to check when something needs attention.
+              The layout is organized for quick reading on desktop, tablet, and mobile.
             </p>
             <div class="mt-5 flex flex-wrap gap-2">
-              <a href="/dashboard" class="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-700">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M3 10.5L12 3l9 7.5V21a1 1 0 01-1 1h-5v-6H9v6H4a1 1 0 01-1-1z" />
-                </svg>
-                Back to Dashboard
-              </a>
-              <a href="/analytics" class="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 hover:text-emerald-700">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M4 20h16M7 16V9m5 7V5m5 11v-4" />
-                </svg>
-                View Analytics
-              </a>
+              <a href="#quick-start" class="inline-flex items-center rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-700">Quick Start</a>
+              <a href="#module-guide" class="inline-flex items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 hover:text-emerald-700">Module Guide</a>
+              <a href="#faq" class="inline-flex items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 hover:text-emerald-700">FAQs</a>
+              <a href="#support" class="inline-flex items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 hover:text-emerald-700">Support</a>
+            </div>
+            <div class="mt-6 grid grid-cols-1 gap-3 md:grid-cols-3">
+              <article class="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm">
+                <p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">For Staff</p>
+                <p class="mt-2 text-sm font-semibold text-slate-900">Start scanning in the correct mode and let the system detect and recognize multiple faces in real time.</p>
+              </article>
+              <article class="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm">
+                <p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">For Admin</p>
+                <p class="mt-2 text-sm font-semibold text-slate-900">Monitor live multi-face recognition activity, then validate results through logs and analytics.</p>
+              </article>
+              <article class="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm">
+                <p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Best Practice</p>
+                <p class="mt-2 text-sm font-semibold text-slate-900">Check the school year first and keep lighting and camera framing clear.</p>
+              </article>
             </div>
           </div>
-          <div class="lg:col-span-4">
+          <div class="space-y-4">
             <article class="app-content-pane p-4">
-              <h3 class="text-sm font-semibold text-slate-800">System Information</h3>
-              <div class="mt-3 space-y-2">
-                <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs">
-                  <p class="text-slate-500">Version</p>
-                  <p class="mt-0.5 font-semibold text-slate-800">{{ system_info.version }}</p>
+              <h3 class="text-sm font-semibold text-slate-800">Access Snapshot</h3>
+              <div class="mt-3 space-y-2 text-xs">
+                <div class="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                  <span class="font-medium text-slate-600">Current Role</span>
+                  <span class="rounded-full border border-slate-300 bg-white px-2.5 py-1 font-semibold text-slate-700">{{ current_role }}</span>
                 </div>
-                <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs">
-                  <p class="text-slate-500">Last Update</p>
-                  <p class="mt-0.5 font-semibold text-slate-800">{{ system_info.last_update }}</p>
+                <div class="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                  <span class="font-medium text-slate-600">School Year</span>
+                  <span class="rounded-full border border-slate-300 bg-white px-2.5 py-1 font-semibold text-slate-700">{{ selected_school_year or current_school_year }}</span>
                 </div>
-                <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs">
-                  <p class="text-slate-500">Environment</p>
-                  <p class="mt-0.5 font-semibold text-slate-800">{{ system_info.environment|upper }}</p>
+                <div class="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                  <span class="font-medium text-slate-600">Version</span>
+                  <span class="font-semibold text-slate-700">{{ system_info.version }}</span>
                 </div>
               </div>
+            </article>
+            <article class="rounded-3xl border border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-sky-50 p-4 shadow-sm">
+              <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700">Quick Reminder</p>
+              <ul class="mt-3 space-y-2 text-sm leading-relaxed text-slate-600">
+                <li>Use Dashboard to manage active multi-face scanning.</li>
+                <li>Admins can open Live Gate Monitoring during active scans.</li>
+                <li>Review Gate Logs and SMS Logs when results look unexpected.</li>
+              </ul>
             </article>
           </div>
         </div>
       </section>
 
-      <section class="grid grid-cols-1 xl:grid-cols-2 gap-5">
+      <section id="quick-start" class="grid grid-cols-1 gap-5 xl:grid-cols-2">
         <article class="app-content-card p-5">
-          <div class="flex items-start gap-4">
-            <div class="flex h-16 w-16 shrink-0 items-center justify-center">
-              <img
-                src="{{ url_for('static', filename='norsu-logo.png') }}"
-                alt="Negros Oriental State University official logo"
-                class="h-14 w-14 object-contain"
-                loading="lazy"
-              >
+          <p class="text-[11px] font-semibold uppercase tracking-[0.15em] text-emerald-700">Quick Start</p>
+          <h3 class="mt-1 text-lg font-semibold text-slate-900">Follow this order for a smooth daily workflow.</h3>
+          <div class="mt-4 space-y-3">
+            <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <p class="text-sm font-semibold text-slate-900">1. Prepare students and sections</p>
+              <p class="mt-1 text-sm text-slate-600">Use the Students module to verify profiles, year levels, sections, and face registration details.</p>
             </div>
-            <div class="min-w-0">
-              <p class="text-[11px] font-semibold uppercase tracking-[0.15em] text-blue-700">University / Institution Information</p>
-              <h3 class="mt-1 text-lg font-semibold text-slate-900">Negros Oriental State University - Bayawan-Sta. Catalina Campus (NORSU-BSCC)</h3>
-              <p class="mt-2 text-sm text-slate-600 leading-relaxed">
-                This project was developed by students from the College of Arts and Sciences (CAS), demonstrating
-                applied research, responsible systems design, and campus-level technology integration.
-              </p>
+            <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <p class="text-sm font-semibold text-slate-900">2. Start scanning from Dashboard</p>
+              <p class="mt-1 text-sm text-slate-600">Confirm the scan mode first, then begin scanning when the camera area is ready for real-time multi-face detection and recognition.</p>
+            </div>
+            <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <p class="text-sm font-semibold text-slate-900">3. Watch live activity and verification</p>
+              <p class="mt-1 text-sm text-slate-600">Admins can open Live Gate Monitoring while staff continue real-time multi-face scanning.</p>
+            </div>
+            <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <p class="text-sm font-semibold text-slate-900">4. Validate logs and reports</p>
+              <p class="mt-1 text-sm text-slate-600">Check Gate Logs, SMS Logs, and Analytics after scanning when you need confirmation or troubleshooting.</p>
             </div>
           </div>
         </article>
 
-        <article class="app-content-card p-5">
-          <p class="text-[11px] font-semibold uppercase tracking-[0.15em] text-emerald-700">Project Information</p>
-          <h3 class="mt-1 text-lg font-semibold text-slate-900">Face Recognition Student Gate Access System with SMS Notification for Cawitan High School</h3>
-          <p class="mt-2 text-sm text-slate-600 leading-relaxed">
-            The system enhances school security through biometric gate verification, automates attendance tracking,
-            and sends real-time SMS notifications to parents and guardians for timely status updates.
-          </p>
-          <div class="mt-3 flex flex-wrap gap-2">
-            <span class="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">School Security</span>
-            <span class="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700">Automated Attendance</span>
-            <span class="inline-flex items-center rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-[11px] font-semibold text-violet-700">Real-time SMS Alerts</span>
+        <article id="daily-workflow" class="app-content-card p-5">
+          <p class="text-[11px] font-semibold uppercase tracking-[0.15em] text-blue-700">Daily Workflows</p>
+          <h3 class="mt-1 text-lg font-semibold text-slate-900">What to do based on your role.</h3>
+          <div class="mt-4 grid grid-cols-1 gap-3">
+            <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+              <p class="text-sm font-semibold text-slate-900">Staff workflow</p>
+              <p class="mt-1 text-sm text-slate-600">Open Dashboard, confirm scan mode, and monitor verification results while the system detects and recognizes multiple visible faces in real time.</p>
+            </div>
+            <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+              <p class="text-sm font-semibold text-slate-900">Admin workflow</p>
+              <p class="mt-1 text-sm text-slate-600">Keep Live Gate Monitoring open during active scanning, then review logs and analytics to validate real-time multi-face recognition activity.</p>
+            </div>
+            <div class="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+              <p class="text-sm font-semibold text-emerald-900">Before making changes</p>
+              <p class="mt-1 text-sm text-emerald-800">Verify the selected school year first because sections, logs, and student records depend on it.</p>
+            </div>
           </div>
         </article>
+      </section>
+
+      <section id="module-guide" class="app-content-card p-5">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p class="text-[11px] font-semibold uppercase tracking-[0.15em] text-emerald-700">Module Guide</p>
+            <h3 class="mt-1 text-lg font-semibold text-slate-900">Use the right module for the right task.</h3>
+          </div>
+          <span class="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-600">Fast navigation</span>
+        </div>
+        <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <article class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <h4 class="text-sm font-semibold text-slate-900">Dashboard</h4>
+            <p class="mt-2 text-sm text-slate-600">Use for scan control, mode checks, and live multi-face recognition activity overview.</p>
+            <a href="/dashboard" class="mt-3 inline-flex text-xs font-semibold text-emerald-700 hover:text-emerald-800">Open Dashboard</a>
+          </article>
+          <article class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <h4 class="text-sm font-semibold text-slate-900">Students</h4>
+            <p class="mt-2 text-sm text-slate-600">Use for profiles, sections, school year enrollment, and face registration.</p>
+            {% if can_manage_students or can_register_faces %}
+            <a href="/students" class="mt-3 inline-flex text-xs font-semibold text-emerald-700 hover:text-emerald-800">Open Students</a>
+            {% else %}
+            <span class="mt-3 inline-flex rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600">Admin access required</span>
+            {% endif %}
+          </article>
+          <article class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <h4 class="text-sm font-semibold text-slate-900">Live Gate Monitoring</h4>
+            <p class="mt-2 text-sm text-slate-600">Use for real-time monitoring of multi-face detection and recognition while staff scanning is active.</p>
+            {% if is_full_admin %}
+            <a href="/live-gate-monitoring" class="mt-3 inline-flex text-xs font-semibold text-emerald-700 hover:text-emerald-800">Open Live Monitoring</a>
+            {% else %}
+            <span class="mt-3 inline-flex rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600">Full Admin only</span>
+            {% endif %}
+          </article>
+          <article class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <h4 class="text-sm font-semibold text-slate-900">Gate Logs</h4>
+            <p class="mt-2 text-sm text-slate-600">Use for attendance verification, filtering, corrections, and review.</p>
+            {% if can_view_logs %}
+            <a href="/gate-logs" class="mt-3 inline-flex text-xs font-semibold text-emerald-700 hover:text-emerald-800">Open Gate Logs</a>
+            {% else %}
+            <span class="mt-3 inline-flex rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600">Access limited</span>
+            {% endif %}
+          </article>
+          <article class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <h4 class="text-sm font-semibold text-slate-900">SMS Logs</h4>
+            <p class="mt-2 text-sm text-slate-600">Use for delivery history, skipped notifications, and resend review.</p>
+            {% if can_view_logs %}
+            <a href="/sms-logs" class="mt-3 inline-flex text-xs font-semibold text-emerald-700 hover:text-emerald-800">Open SMS Logs</a>
+            {% else %}
+            <span class="mt-3 inline-flex rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600">Access limited</span>
+            {% endif %}
+          </article>
+          <article class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <h4 class="text-sm font-semibold text-slate-900">Analytics</h4>
+            <p class="mt-2 text-sm text-slate-600">Use for attendance patterns, summaries, and date-based activity checks.</p>
+            {% if can_view_analytics %}
+            <a href="/analytics" class="mt-3 inline-flex text-xs font-semibold text-emerald-700 hover:text-emerald-800">Open Analytics</a>
+            {% else %}
+            <span class="mt-3 inline-flex rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600">Access limited</span>
+            {% endif %}
+          </article>
+        </div>
       </section>
 
       <section class="app-content-card p-5">
         <div class="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p class="text-[11px] font-semibold uppercase tracking-[0.15em] text-emerald-700">Developers Team Profiles</p>
+            <p class="text-[11px] font-semibold uppercase tracking-[0.15em] text-emerald-700">Support Contacts</p>
             <h3 class="mt-1 text-lg font-semibold text-slate-900">Project Development Team</h3>
           </div>
           <span class="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-600">
@@ -155,7 +236,7 @@
               </div>
 
               <div class="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3">
-                <p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Professional Contribution</p>
+                <p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Contribution</p>
                 <p class="mt-1 text-sm text-slate-600 leading-relaxed min-h-[72px]">{{ dev.contribution }}</p>
               </div>
 
@@ -175,37 +256,58 @@
         </div>
       </section>
 
-      <section class="grid grid-cols-1 xl:grid-cols-3 gap-5">
-        <article class="app-content-card xl:col-span-2 p-5">
-          <p class="text-[11px] font-semibold uppercase tracking-[0.15em] text-blue-700">System Profile</p>
-          <h3 class="mt-1 text-lg font-semibold text-slate-900">Implementation and Operations Summary</h3>
-          <p class="mt-2 text-sm text-slate-600 leading-relaxed">
-            The platform integrates gate entry verification, attendance monitoring, and parent communication workflows.
-            It is designed for practical school deployment with emphasis on reliability, data accuracy, and operational transparency.
-          </p>
-          <div class="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
-            <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
-              <p class="font-semibold text-slate-700">Technology Stack</p>
-              <p class="mt-1 text-slate-500">Flask, MongoDB, Face Recognition, SMS API</p>
-            </div>
-            <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
-              <p class="font-semibold text-slate-700">Core Functions</p>
-              <p class="mt-1 text-slate-500">Gate Access, Student Logs, Parent Notification</p>
-            </div>
-            <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
-              <p class="font-semibold text-slate-700">Deployment Focus</p>
-              <p class="mt-1 text-slate-500">Security, Attendance Integrity, Real-time Communication</p>
-            </div>
+      <section class="grid grid-cols-1 gap-5 xl:grid-cols-3">
+        <article id="faq" class="app-content-card xl:col-span-2 p-5">
+          <p class="text-[11px] font-semibold uppercase tracking-[0.15em] text-blue-700">Frequently Asked Questions</p>
+          <h3 class="mt-1 text-lg font-semibold text-slate-900">Common answers for everyday issues.</h3>
+          <div class="mt-4 space-y-3">
+            <details class="rounded-2xl border border-slate-200 bg-slate-50">
+              <summary class="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-slate-900">How do I start scanning correctly?</summary>
+              <div class="border-t border-slate-200 px-4 py-3 text-sm leading-relaxed text-slate-600">
+                Open Dashboard, confirm the current scan mode, then begin scanning when the camera area is ready. The system supports real-time multi-face detection and recognition, while clear lighting and unobstructed faces help maintain accuracy.
+              </div>
+            </details>
+            <details class="rounded-2xl border border-slate-200 bg-slate-50">
+              <summary class="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-slate-900">Why is a student not being recognized?</summary>
+              <div class="border-t border-slate-200 px-4 py-3 text-sm leading-relaxed text-slate-600">
+                Check lighting, camera framing, and whether the student's face is clearly visible. The system can detect multiple faces in real time, but blur, occlusion, and poor positioning can still reduce recognition accuracy. Then verify the student profile and face registration in the Students module.
+              </div>
+            </details>
+            <details class="rounded-2xl border border-slate-200 bg-slate-50">
+              <summary class="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-slate-900">Where should I confirm attendance results?</summary>
+              <div class="border-t border-slate-200 px-4 py-3 text-sm leading-relaxed text-slate-600">
+                Start with Gate Logs to review the exact action, time, and session. Check SMS Logs next if you also need to verify notification behavior.
+              </div>
+            </details>
+            <details class="rounded-2xl border border-slate-200 bg-slate-50">
+              <summary class="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-slate-900">When should an admin open Live Gate Monitoring?</summary>
+              <div class="border-t border-slate-200 px-4 py-3 text-sm leading-relaxed text-slate-600">
+                Open it during active scanning whenever you need live observation of recognition activity, feed updates, and real-time monitoring status.
+              </div>
+            </details>
           </div>
         </article>
 
-        <article class="app-content-card p-5">
-          <h3 class="text-base font-semibold text-slate-800">Quick Navigation</h3>
+        <article id="support" class="app-content-card p-5">
+          <p class="text-[11px] font-semibold uppercase tracking-[0.15em] text-emerald-700">Quick Navigation</p>
           <div class="mt-3 space-y-2 text-sm">
-            <a href="/students" class="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 transition hover:bg-slate-100">
-              <span class="font-medium text-slate-700">Students Module</span>
+            <a href="/dashboard" class="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 transition hover:bg-slate-100">
+              <span class="font-medium text-slate-700">Dashboard</span>
               <span class="text-xs text-slate-500">Open</span>
             </a>
+            {% if can_manage_students or can_register_faces %}
+            <a href="/students" class="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 transition hover:bg-slate-100">
+              <span class="font-medium text-slate-700">Students</span>
+              <span class="text-xs text-slate-500">Open</span>
+            </a>
+            {% endif %}
+            {% if is_full_admin %}
+            <a href="/live-gate-monitoring" class="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 transition hover:bg-slate-100">
+              <span class="font-medium text-slate-700">Live Gate Monitoring</span>
+              <span class="text-xs text-slate-500">Open</span>
+            </a>
+            {% endif %}
+            {% if can_view_logs %}
             <a href="/gate-logs" class="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 transition hover:bg-slate-100">
               <span class="font-medium text-slate-700">Gate Logs</span>
               <span class="text-xs text-slate-500">Open</span>
@@ -214,10 +316,30 @@
               <span class="font-medium text-slate-700">SMS Logs</span>
               <span class="text-xs text-slate-500">Open</span>
             </a>
+            {% endif %}
+            {% if can_view_analytics %}
             <a href="/analytics" class="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 transition hover:bg-slate-100">
               <span class="font-medium text-slate-700">Analytics</span>
               <span class="text-xs text-slate-500">Open</span>
             </a>
+            {% endif %}
+          </div>
+          <div class="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-relaxed text-slate-600">
+            Report issues with the module name, school year, and a short description of what happened during scanning or monitoring.
+          </div>
+          <div class="mt-4 grid grid-cols-1 gap-2.5 text-xs">
+            <div class="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+              <p class="font-semibold text-slate-700">Technology Stack</p>
+              <p class="mt-1 text-slate-500">Flask, MongoDB, Face Recognition, SMS API</p>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+              <p class="font-semibold text-slate-700">Environment</p>
+              <p class="mt-1 text-slate-500">{{ system_info.environment|upper }}</p>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+              <p class="font-semibold text-slate-700">Last Update</p>
+              <p class="mt-1 text-slate-500">{{ system_info.last_update }}</p>
+            </div>
           </div>
         </article>
       </section>

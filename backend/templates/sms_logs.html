@@ -89,6 +89,46 @@
         </article>
       </section>
 
+      <section class="app-content-card p-4 lg:p-5">
+        <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <div class="flex flex-wrap items-center gap-2">
+              <h2 class="text-base font-semibold text-slate-800">Attendance SMS Notifications</h2>
+              <span
+                class="inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold"
+                :class="smsNotificationsEnabled ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-700'">
+                <span x-text="smsNotificationsEnabled ? 'Enabled' : 'Disabled'"></span>
+              </span>
+            </div>
+            <p class="mt-1 text-xs text-slate-500">
+              Turn attendance SMS sending on or off. Gate scan events will still be recorded in SMS Logs even when notifications are disabled.
+            </p>
+            <p x-show="smsNotificationsUpdatedAt" class="mt-2 text-[11px] text-slate-500">
+              Last updated:
+              <span x-text="smsNotificationsUpdatedAt"></span>
+              <span x-show="smsNotificationsUpdatedBy">by <span x-text="smsNotificationsUpdatedBy"></span></span>
+            </p>
+          </div>
+
+          <div class="flex items-center gap-3">
+            <span class="text-sm font-semibold text-slate-700" x-text="smsNotificationsEnabled ? 'ON' : 'OFF'"></span>
+            <button
+              type="button"
+              role="switch"
+              :aria-checked="smsNotificationsEnabled ? 'true' : 'false'"
+              :disabled="smsNotificationsSaving"
+              @click="toggleSmsNotifications()"
+              class="relative inline-flex h-7 w-12 items-center rounded-full border transition disabled:cursor-not-allowed disabled:opacity-60"
+              :class="smsNotificationsEnabled ? 'border-emerald-500 bg-emerald-500' : 'border-slate-300 bg-slate-300'">
+              <span class="sr-only">Toggle attendance SMS notifications</span>
+              <span
+                class="inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition"
+                :class="smsNotificationsEnabled ? 'translate-x-6' : 'translate-x-1'"></span>
+            </button>
+          </div>
+        </div>
+      </section>
+
       <section class="app-content-card p-4 lg:p-5 space-y-4">
         <div class="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -195,6 +235,7 @@
               <option value="FAILED" {% if filters.status == 'FAILED' %}selected{% endif %}>Failed</option>
               <option value="SENDING" {% if filters.status == 'SENDING' %}selected{% endif %}>Sending</option>
               <option value="QUEUED" {% if filters.status == 'QUEUED' %}selected{% endif %}>Queued</option>
+              <option value="SKIPPED" {% if filters.status == 'SKIPPED' %}selected{% endif %}>Skipped</option>
             </select>
           </div>
           <div class="xl:col-span-2">
@@ -443,6 +484,10 @@ function smsLogsPage() {
     }),
     toastMessage: '',
     toastType: 'success',
+    smsNotificationsEnabled: {{ 'true' if sms_notification_settings.enabled else 'false' }},
+    smsNotificationsUpdatedAt: {{ sms_notification_settings.updated_at|tojson }},
+    smsNotificationsUpdatedBy: {{ sms_notification_settings.updated_by|tojson }},
+    smsNotificationsSaving: false,
     templateText: {{ sms_template.template|tojson }},
     templateDefault: {{ sms_template.default_template|tojson }},
     templateUpdatedAt: {{ sms_template.updated_at|tojson }},
@@ -484,6 +529,35 @@ function smsLogsPage() {
       this.toastMessage = message;
       this.toastType = type;
       setTimeout(() => { this.toastMessage = ''; }, 2500);
+    },
+    async toggleSmsNotifications() {
+      if (this.smsNotificationsSaving) return;
+      this.smsNotificationsSaving = true;
+      const nextEnabled = !this.smsNotificationsEnabled;
+      try {
+        const res = await fetch('/sms-logs/notifications', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled: nextEnabled }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.status !== 'ok') {
+          this.setToast(data.message || 'Failed to update SMS notification setting.', 'error');
+          return;
+        }
+
+        this.smsNotificationsEnabled = Boolean(data.enabled);
+        this.smsNotificationsUpdatedAt = data.updated_at || this.smsNotificationsUpdatedAt;
+        this.smsNotificationsUpdatedBy = data.updated_by || this.smsNotificationsUpdatedBy;
+        this.setToast(
+          data.message || (this.smsNotificationsEnabled ? 'Attendance SMS notifications enabled.' : 'Attendance SMS notifications disabled.'),
+          'success'
+        );
+      } catch (_error) {
+        this.setToast('Failed to update SMS notification setting.', 'error');
+      } finally {
+        this.smsNotificationsSaving = false;
+      }
     },
     scheduleReload() {
       if (this.reloadScheduled) return;

@@ -559,7 +559,7 @@
           <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-6 0v-1m6 0H9" />
         </svg>
         <span x-show="open" x-transition.opacity>Early Time-Out</span>
-        <span id="sidebarETOBadge" class="ml-auto inline-flex items-center rounded-full bg-amber-500 px-2 py-0.5 text-[11px] font-semibold text-white {% if pending_count|default(0) == 0 %}hidden{% endif %}" :class="{'absolute -top-1 -right-1 ml-0': !open}">{{ pending_count|default(0) }}</span>
+        <span id="sidebarETOBadge" class="ml-auto inline-flex items-center rounded-full bg-amber-500 px-2 py-0.5 text-[11px] font-semibold text-white {% if pending_eto_count|default(0) == 0 %}hidden{% endif %}" :class="{'absolute -top-1 -right-1 ml-0': !open}">{{ pending_eto_count|default(0) }}</span>
         <span x-show="!open" x-transition.opacity class="sidebar-tooltip absolute left-full top-1/2 ml-3 -translate-y-1/2 rounded-md border border-slate-100 bg-white px-3 py-1 text-xs text-slate-800 shadow-md opacity-0 invisible transition-all duration-150 group-hover:opacity-100 group-hover:visible">Early Time-Out</span>
       </a>
       {% endif %}

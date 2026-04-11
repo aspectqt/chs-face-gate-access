@@ -450,8 +450,9 @@ class PhilSmsProvider(SmsProvider):
         }
 
         try:
-            for strategy_name in strategy_candidates:
+            for strategy_index, strategy_name in enumerate(strategy_candidates):
                 self.token_auth_strategy = strategy_name
+                strategy_failed = False
 
                 for attempt_index in range(self.max_retries):
                     payload = dict(base_payload)
@@ -495,6 +496,7 @@ class PhilSmsProvider(SmsProvider):
                         if attempt_index < self.max_retries - 1:
                             time.sleep(self.backoff_seconds)
                             continue
+                        strategy_failed = True
                         break
                     except Exception as exc:
                         error_text = str(exc)
@@ -512,6 +514,7 @@ class PhilSmsProvider(SmsProvider):
                         if attempt_index < self.max_retries - 1:
                             time.sleep(self.backoff_seconds)
                             continue
+                        strategy_failed = True
                         break
 
                     try:
@@ -546,9 +549,20 @@ class PhilSmsProvider(SmsProvider):
                         "to": phone_number,
                     }
 
-                    return last_failure
+                    auth_failed = self._is_auth_failure(status_code, response_json, error_code, error_message)
+                    if auth_failed and self.auth_mode() == "token" and strategy_index < len(strategy_candidates) - 1:
+                        strategy_failed = True
+                        break
 
-                return last_failure
+                    if self._is_retryable_http_status(status_code) and attempt_index < self.max_retries - 1:
+                        time.sleep(self.backoff_seconds)
+                        continue
+
+                    strategy_failed = True
+                    break
+
+                if strategy_failed:
+                    continue
         finally:
             self.token_auth_strategy = current_strategy
 
@@ -824,6 +838,14 @@ class PhilSmsProvider(SmsProvider):
         if "unauthenticated" in text or "unauthorized" in text or "invalid token" in text or ("auth" in text and "required" in text):
             return True
         return False
+
+    @staticmethod
+    def _is_retryable_http_status(status_code):
+        try:
+            code = int(status_code or 0)
+        except (TypeError, ValueError):
+            return False
+        return code == 429 or 500 <= code < 600
 
     def _apply_auth(self, url, headers, payload, token):
         if self.auth_mode() == "oauth":

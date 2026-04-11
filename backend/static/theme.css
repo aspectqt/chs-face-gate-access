@@ -15,6 +15,12 @@
   --sidebar-pill-left: 0.6rem;
   --sidebar-pill-blur: 6px;
   --sidebar-pill-radius: 9999px;
+  --app-theme-transition-duration: 280ms;
+  --app-theme-transition-easing: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+[x-cloak] {
+  display: none !important;
 }
 
 html[data-theme="dark"] {
@@ -153,6 +159,69 @@ body[data-authenticated="1"] > div:first-of-type > div {
 .app-header-icon-btn svg {
   width: 1.25rem;
   height: 1.25rem;
+}
+
+.app-theme-toggle-btn {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.app-theme-toggle-icon-stack {
+  position: relative;
+  display: inline-flex;
+  width: 1.25rem;
+  height: 1.25rem;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  transition: transform 0.18s ease;
+}
+
+.app-theme-toggle-btn:active .app-theme-toggle-icon-stack {
+  transform: scale(0.92);
+}
+
+.app-theme-toggle-icon {
+  position: absolute;
+  inset: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transform-origin: center;
+  transition:
+    opacity 0.28s var(--app-theme-transition-easing),
+    transform 0.42s var(--app-theme-transition-easing),
+    filter 0.28s ease;
+  will-change: opacity, transform;
+}
+
+.app-theme-toggle-icon svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.app-theme-toggle-icon--moon {
+  opacity: 0;
+  transform: rotate(-115deg) scale(0.55);
+  filter: saturate(0.9);
+}
+
+.app-theme-toggle-icon--sun {
+  opacity: 1;
+  transform: rotate(0deg) scale(1);
+}
+
+[data-theme-toggle][aria-pressed="true"] .app-theme-toggle-icon--sun {
+  opacity: 0;
+  transform: rotate(115deg) scale(0.58);
+  filter: saturate(0.8);
+}
+
+[data-theme-toggle][aria-pressed="true"] .app-theme-toggle-icon--moon {
+  opacity: 1;
+  transform: rotate(0deg) scale(1);
+  filter: saturate(1);
 }
 
 .app-header-text-link {
@@ -428,10 +497,24 @@ html.theme-ready *,
 html.theme-ready *::before,
 html.theme-ready *::after {
   transition:
-    background-color 0.22s ease,
-    color 0.22s ease,
-    border-color 0.22s ease,
-    box-shadow 0.22s ease;
+    background-color var(--app-theme-transition-duration) var(--app-theme-transition-easing),
+    color var(--app-theme-transition-duration) var(--app-theme-transition-easing),
+    border-color var(--app-theme-transition-duration) var(--app-theme-transition-easing),
+    box-shadow var(--app-theme-transition-duration) var(--app-theme-transition-easing),
+    fill var(--app-theme-transition-duration) var(--app-theme-transition-easing),
+    stroke var(--app-theme-transition-duration) var(--app-theme-transition-easing);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.theme-ready *,
+  html.theme-ready *::before,
+  html.theme-ready *::after,
+  .app-theme-toggle-icon,
+  .app-theme-toggle-icon-stack {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
 }
 
 html[data-theme="dark"] .bg-white,

@@ -1,9 +1,12 @@
 (function () {
     const config = window.liveGateMonitoringActivityConfig || {};
     const endpoint = String(config.endpoint || "/scan_events").trim() || "/scan_events";
+    const streamEndpoint = String(config.streamEndpoint || "/api/scan/stream").trim() || "/api/scan/stream";
+    const realtimeEnabled = config.realtimeEnabled !== false;
     const pollIntervalMs = Math.max(Number(config.pollIntervalMs) || 400, 200);
     const displayLimit = Math.max(Number(config.limit) || 5, 1);
     const processedHistoryLimit = 300;
+    const streamReconnectMs = 1400;
 
     const feed = document.getElementById("liveGateMonitoringActivityFeed");
     const ghostLayer = document.getElementById("liveGateMonitoringActivityGhostLayer");
@@ -18,6 +21,9 @@
     let lastEventId = 0;
     let pollTimer = null;
     let requestInFlight = false;
+    let activityStream = null;
+    let streamReconnectTimer = null;
+    let streamConnected = false;
 
     function escapeHtml(value) {
         return String(value ?? "")
@@ -280,6 +286,19 @@
         });
     }
 
+    function processPayload(payload) {
+        if (!payload || typeof payload !== "object") {
+            return;
+        }
+
+        const payloadLastEventId = Number(payload.last_event_id || 0);
+        if (payloadLastEventId > 0) {
+            lastEventId = Math.max(lastEventId, payloadLastEventId);
+        }
+
+        processEvents(payload.events || []);
+    }
+
     async function pollActivityEvents() {
         if (requestInFlight) {
             return;
@@ -300,7 +319,7 @@
             }
 
             const payload = await response.json().catch(() => ({}));
-            processEvents(payload?.events || []);
+            processPayload(payload);
         } catch (error) {
             console.error("[LiveMonitoringActivity] Failed to poll scan events:", error);
         } finally {
@@ -327,5 +346,94 @@
         }, pollIntervalMs);
     }
 
-    startPolling();
+    function stopStream() {
+        if (activityStream) {
+            activityStream.close();
+            activityStream = null;
+        }
+        streamConnected = false;
+    }
+
+    function scheduleStreamReconnect() {
+        if (streamReconnectTimer) {
+            return;
+        }
+
+        streamReconnectTimer = window.setTimeout(() => {
+            streamReconnectTimer = null;
+            connectStream();
+        }, streamReconnectMs);
+    }
+
+    function buildStreamUrl() {
+        const streamUrl = new URL(streamEndpoint, window.location.origin);
+        if (lastEventId > 0) {
+            streamUrl.searchParams.set("since", String(lastEventId));
+        }
+        return streamUrl.toString();
+    }
+
+    function connectStream() {
+        if (!realtimeEnabled || !streamEndpoint || !("EventSource" in window)) {
+            startPolling();
+            return false;
+        }
+
+        stopStream();
+        normalizeFeed();
+
+        try {
+            const stream = new EventSource(buildStreamUrl());
+            activityStream = stream;
+
+            stream.onopen = () => {
+                streamConnected = true;
+                stopPolling();
+            };
+
+            stream.addEventListener("scan_event", (event) => {
+                if (activityStream !== stream) {
+                    return;
+                }
+
+                streamConnected = true;
+                stopPolling();
+                const payload = JSON.parse(String(event?.data || "{}"));
+                processPayload(payload);
+            });
+
+            stream.onerror = () => {
+                if (activityStream !== stream) {
+                    return;
+                }
+
+                stopStream();
+                startPolling();
+                scheduleStreamReconnect();
+            };
+
+            if (!streamConnected) {
+                startPolling();
+            }
+            return true;
+        } catch (error) {
+            console.error("[LiveMonitoringActivity] Failed to open activity stream:", error);
+            startPolling();
+            scheduleStreamReconnect();
+            return false;
+        }
+    }
+
+    window.addEventListener("beforeunload", () => {
+        stopPolling();
+        stopStream();
+        if (streamReconnectTimer) {
+            window.clearTimeout(streamReconnectTimer);
+            streamReconnectTimer = null;
+        }
+    });
+
+    if (!connectStream()) {
+        startPolling();
+    }
 })();

@@ -296,6 +296,7 @@
                 approvedCount: 0,
                 totalCount: 0,
                 isFullAdmin: {{ 'true' if current_role == 'Full Admin' else 'false' }},
+                schoolYear: {{ selected_school_year|tojson }},
                 defaultRequestedBy: {{ (session.get('admin') or 'Admin') | tojson }},
                 filters: {
                     status: 'pending',
@@ -329,7 +330,9 @@
                 async fetchRequests() {
                     this.loading = true;
                     try {
-                        const qs = new URLSearchParams(this.filters).toString();
+                        const params = new URLSearchParams(this.filters);
+                        if (this.schoolYear) params.set('school_year', this.schoolYear);
+                        const qs = params.toString();
                         const res = await fetch(`/api/early-timeout/requests?${qs}`);
                         const data = await res.json();
                         if (data.status === 'ok') {
@@ -345,7 +348,9 @@
                 },
                 async updateCounts() {
                     try {
-                        const res = await fetch('/api/early-timeout/requests/count');
+                        const params = new URLSearchParams();
+                        if (this.schoolYear) params.set('school_year', this.schoolYear);
+                        const res = await fetch(`/api/early-timeout/requests/count?${params.toString()}`);
                         const data = await res.json();
                         if (data.status === 'ok') {
                             this.pendingCount = data.pending_count;
@@ -368,7 +373,7 @@
                         const res = await fetch('/api/early-timeout/request', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(this.form)
+                            body: JSON.stringify({ ...this.form, school_year: this.schoolYear })
                         });
                         const data = await res.json();
                         if (data.status === 'ok') {
@@ -438,7 +443,7 @@
                         const res = await fetch(`/api/early-timeout/requests/${req._id}/${action}`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ review_note: pendingAction.note })
+                            body: JSON.stringify({ review_note: pendingAction.note, school_year: this.schoolYear })
                         });
                         const data = await res.json();
                         if (data.status === 'ok') {
@@ -455,7 +460,9 @@
                 async deleteRequest(req) {
                     if (!confirm('Delete this request permanent?')) return;
                     try {
-                        const res = await fetch(`/api/early-timeout/requests/${req._id}`, { method: 'DELETE' });
+                        const params = new URLSearchParams();
+                        if (this.schoolYear) params.set('school_year', this.schoolYear);
+                        const res = await fetch(`/api/early-timeout/requests/${req._id}?${params.toString()}`, { method: 'DELETE' });
                         if (res.ok) {
                             this.showToast('Request deleted');
                             this.fetchRequests();

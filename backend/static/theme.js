@@ -9,6 +9,7 @@
   let initialized = false;
   let selectObserver = null;
   let fullscreenEventsBound = false;
+  let fullscreenLifecycleBound = false;
   let fullscreenResumeBound = false;
   let fullscreenResumeHandler = null;
   let logoutModalEl = null;
@@ -25,7 +26,7 @@
     "PageUp",
     "PageDown",
   ]);
-  const FULLSCREEN_EVENTS = ["fullscreenchange", "webkitfullscreenchange", "msfullscreenchange"];
+  const FULLSCREEN_EVENTS = ["fullscreenchange", "webkitfullscreenchange", "mozfullscreenchange", "msfullscreenchange"];
 
   function normalizeTheme(value) {
     const normalized = String(value || "").trim().toLowerCase();
@@ -94,7 +95,7 @@
   }
 
   function chooseInitialTheme() {
-    return getServerTheme() || getLocalTheme() || getSystemTheme();
+    return getLocalTheme() || getServerTheme() || getSystemTheme();
   }
 
   function hideUnauthorizedSidebarLinks() {
@@ -141,11 +142,12 @@
       const darkMode = theme === "dark";
 
       btn.setAttribute("aria-pressed", darkMode ? "true" : "false");
+      btn.dataset.themeState = darkMode ? "dark" : "light";
       btn.setAttribute("title", darkMode ? "Switch to Light Mode" : "Switch to Dark Mode");
       btn.setAttribute("aria-label", darkMode ? "Switch to light mode" : "Switch to dark mode");
 
-      if (sunIcon) sunIcon.classList.toggle("hidden", darkMode);
-      if (moonIcon) moonIcon.classList.toggle("hidden", !darkMode);
+      if (sunIcon) sunIcon.setAttribute("aria-hidden", darkMode ? "true" : "false");
+      if (moonIcon) moonIcon.setAttribute("aria-hidden", darkMode ? "false" : "true");
       if (labelEl) labelEl.textContent = darkMode ? "Dark" : "Light";
     });
   }
@@ -205,14 +207,23 @@
   function fullscreenSupported() {
     const root = document.documentElement;
     return Boolean(
-      root.requestFullscreen
+      document.fullscreenEnabled
+      || document.webkitFullscreenEnabled
+      || document.mozFullScreenEnabled
+      || document.msFullscreenEnabled
+      || root.mozRequestFullScreen
+      || root.requestFullscreen
       || root.webkitRequestFullscreen
       || root.msRequestFullscreen,
     );
   }
 
   function fullscreenElement() {
-    return document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement || null;
+    return document.fullscreenElement
+      || document.webkitFullscreenElement
+      || document.mozFullScreenElement
+      || document.msFullscreenElement
+      || null;
   }
 
   function fullscreenActive() {
@@ -249,6 +260,10 @@
       root.webkitRequestFullscreen();
       return;
     }
+    if (root.mozRequestFullScreen) {
+      root.mozRequestFullScreen();
+      return;
+    }
     if (root.msRequestFullscreen) {
       root.msRequestFullscreen();
     }
@@ -263,13 +278,17 @@
       document.webkitExitFullscreen();
       return;
     }
+    if (document.mozCancelFullScreen) {
+      document.mozCancelFullScreen();
+      return;
+    }
     if (document.msExitFullscreen) {
       document.msExitFullscreen();
     }
   }
 
   function updateFullscreenButtons() {
-    const active = rootFullscreenActive();
+    const active = fullscreenActive();
     const supported = fullscreenSupported();
 
     document.querySelectorAll("[data-fullscreen-toggle]").forEach((btn) => {
@@ -365,6 +384,43 @@
     fullscreenResumeBound = true;
   }
 
+  function syncFullscreenResumeState() {
+    if (fullscreenActive()) {
+      unbindFullscreenAutoResume();
+    } else if (getFullscreenPreference()) {
+      bindFullscreenAutoResume();
+      tryResumeFullscreen();
+    } else {
+      unbindFullscreenAutoResume();
+    }
+    updateFullscreenButtons();
+  }
+
+  function bindFullscreenLifecycle() {
+    if (fullscreenLifecycleBound) return;
+
+    const handlePotentialResume = () => {
+      if (!getFullscreenPreference()) {
+        updateFullscreenButtons();
+        return;
+      }
+      bindFullscreenAutoResume();
+      tryResumeFullscreen();
+    };
+
+    window.addEventListener("pageshow", handlePotentialResume);
+    window.addEventListener("focus", handlePotentialResume);
+    window.addEventListener("resize", updateFullscreenButtons);
+    window.addEventListener("orientationchange", updateFullscreenButtons);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") {
+        handlePotentialResume();
+      }
+    });
+
+    fullscreenLifecycleBound = true;
+  }
+
   function bindFullscreenButtons() {
     document.querySelectorAll("[data-fullscreen-toggle]").forEach((btn) => {
       if (btn.dataset.fullscreenBound === "1") return;
@@ -374,25 +430,12 @@
 
     if (!fullscreenEventsBound) {
       FULLSCREEN_EVENTS.forEach((eventName) => {
-        document.addEventListener(eventName, () => {
-          const activeElement = fullscreenElement();
-          if (activeElement === docEl) {
-            unbindFullscreenAutoResume();
-          } else if (activeElement) {
-            // Keep app-level fullscreen preference tied to the global fullscreen button only.
-            setFullscreenPreference(false);
-            unbindFullscreenAutoResume();
-          } else if (getFullscreenPreference()) {
-            bindFullscreenAutoResume();
-            tryResumeFullscreen();
-          } else {
-            unbindFullscreenAutoResume();
-          }
-          updateFullscreenButtons();
-        });
+        document.addEventListener(eventName, syncFullscreenResumeState);
       });
       fullscreenEventsBound = true;
     }
+
+    bindFullscreenLifecycle();
 
     if (getFullscreenPreference()) {
       bindFullscreenAutoResume();
@@ -872,6 +915,13 @@
     },
     toggleTheme,
     toggleFullscreen,
+    resumeFullscreen: tryResumeFullscreen,
+    setFullscreenPreference: function (active) {
+      setFullscreenPreference(Boolean(active));
+      syncFullscreenResumeState();
+    },
+    fullscreenActive,
+    fullscreenPreferred: getFullscreenPreference,
     enhanceSelects: enhanceSelectElements,
   };
 

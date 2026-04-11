@@ -27,7 +27,10 @@
 </head>
 
 <body class="bg-slate-100 min-h-screen min-h-[100svh] w-full overflow-hidden text-slate-800" data-authenticated="1"
-    data-user-theme="{{ current_theme|default('') }}" x-data="{ mobileMenuOpen: false }">
+    data-user-theme="{{ current_theme|default('') }}"
+    data-selected-school-year="{{ selected_school_year }}"
+    data-current-school-year="{{ current_school_year }}"
+    x-data="{ mobileMenuOpen: false }">
     <div class="flex h-full w-full min-w-0">
         {% include 'partials/sidebar.html' %}
         <!-- MAIN -->
@@ -209,13 +212,29 @@
     <script>
     (() => {
         const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-        let curYear = new Date().getFullYear();
-        let curMonth = new Date().getMonth();
+        const selectedSchoolYear = {{ selected_school_year|tojson }};
+        const currentSchoolYear = {{ current_school_year|tojson }};
+        const schoolYearStartMonth = Math.max(0, Math.min(11, Number({{ school_year_start_month|default(6) }}) - 1));
+        const today = new Date();
+        let curYear = today.getFullYear();
+        let curMonth = today.getMonth();
         let allEvents = {};
+
+        if (selectedSchoolYear && selectedSchoolYear !== currentSchoolYear) {
+            const startYear = Number(String(selectedSchoolYear).split('-', 1)[0]);
+            if (Number.isFinite(startYear)) {
+                curYear = startYear;
+                curMonth = schoolYearStartMonth;
+            }
+        }
 
         // ---- Helpers ----
         function padZ(n) { return String(n).padStart(2,'0'); }
         function dateStr(y,m,d) { return `${y}-${padZ(m+1)}-${padZ(d)}`; }
+        function withSchoolYear(params = new URLSearchParams()) {
+            if (selectedSchoolYear) params.set('school_year', selectedSchoolYear);
+            return params;
+        }
         function showAlert(el, msg, isError=false) {
             el.textContent = msg;
             el.className = `mb-3 rounded-xl border px-4 py-2.5 text-sm ${isError ? 'border-red-200 bg-red-50 text-red-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`;
@@ -264,7 +283,8 @@
             const lastDay = new Date(y, m+1, 0).getDate();
             const end = dateStr(y, m, lastDay);
             try {
-                const r = await fetch(`/api/calendar/events?start=${start}&end=${end}`);
+                const params = withSchoolYear(new URLSearchParams({ start, end }));
+                const r = await fetch(`/api/calendar/events?${params.toString()}`);
                 const d = await r.json();
                 allEvents = {};
                 (d.events || []).forEach(ev => { allEvents[ev.date] = ev; });
@@ -357,6 +377,7 @@
                 title: document.getElementById('evTitle').value,
                 type: document.getElementById('evType').value,
                 special_condition: document.getElementById('evCondition').value,
+                school_year: selectedSchoolYear,
                 custom_schedule: hasCustomSch ? {
                     morning_start: document.getElementById('ev_morning_start').value,
                     morning_late: document.getElementById('ev_morning_late').value,
@@ -385,7 +406,8 @@
             const id = document.getElementById('evEditId').value;
             if (!id || !confirm('Delete this event?')) return;
             try {
-                const r = await fetch(`/api/calendar/events/${id}`, { method: 'DELETE' });
+                const params = withSchoolYear();
+                const r = await fetch(`/api/calendar/events/${id}?${params.toString()}`, { method: 'DELETE' });
                 const d = await r.json();
                 if (d.status === 'ok') { modal.classList.add('hidden'); loadEvents(curYear, curMonth); }
             } catch(e) { alert('Failed to delete.'); }

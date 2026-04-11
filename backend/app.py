@@ -4,6 +4,7 @@ from pymongo.errors import DuplicateKeyError
 from pymongo import ASCENDING, DESCENDING
 from datetime import datetime, timedelta, time as dtime
 from decimal import Decimal, InvalidOperation
+import atexit
 import os
 import cv2
 import face_recognition
@@ -26,6 +27,8 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 from dotenv import load_dotenv
 from face_matching import (
     build_face_registration_metadata,
@@ -78,7 +81,7 @@ import time
 import sys
 import unicodedata
 from functools import wraps
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -90,6 +93,8 @@ import secrets
 import hashlib
 import smtplib
 import socket
+import shutil
+import subprocess
 from xml.sax.saxutils import escape as xml_escape
 from email.message import EmailMessage
 from services.sms_provider import SmsProvider, create_sms_provider_from_env
@@ -166,6 +171,18 @@ PREFERRED_URL_SCHEME = (
 REPORT_PREPARED_BY_TITLE = os.getenv("REPORT_PREPARED_BY_TITLE", "Administrator").strip() or "Administrator"
 REPORT_PRINCIPAL_NAME = os.getenv("REPORT_PRINCIPAL_NAME", "").strip()
 REPORT_PRINCIPAL_TITLE = os.getenv("REPORT_PRINCIPAL_TITLE", "Principal").strip() or "Principal"
+PDF_EXPORT_HEADER_REPUBLIC = "Republic of the Philippines"
+PDF_EXPORT_HEADER_DEPARTMENT = "Department of Education"
+PDF_EXPORT_HEADER_REGION = "REGION VII - CENTRAL VISAYAS"
+PDF_EXPORT_HEADER_DIVISION = "SCHOOLS DIVISION OF NEGROS ORIENTAL"
+PDF_EXPORT_HEADER_DISTRICT = "Sta. Catalina District 2"
+PDF_EXPORT_HEADER_SCHOOL = "CAWITAN HIGH SCHOOL"
+PDF_EXPORT_HEADER_ADDRESS = "Cawitan, Santa Catalina, Negros Oriental"
+PDF_EXPORT_OLD_ENGLISH_FONT_NAME = "PdfExportOldEnglish"
+PDF_EXPORT_OLD_ENGLISH_FONT_PATHS = (
+    r"C:\Windows\Fonts\OLDENGL.TTF",
+    r"C:\Windows\Fonts\GOTHIC.TTF",
+)
 
 # =====================================
 # FLASK SETUP
@@ -196,6 +213,18 @@ SCAN_TARGET_FPS = env_int("SCAN_TARGET_FPS", 20, minimum=5, maximum=60)
 SCAN_PROCESS_EVERY_N_FRAMES = env_int("SCAN_PROCESS_EVERY_N_FRAMES", 2, minimum=1, maximum=8)
 SCAN_RECOGNITION_INTERVAL_MS = env_int("SCAN_RECOGNITION_INTERVAL_MS", 120, minimum=50, maximum=1000)
 SCAN_RECOGNITION_SCALE_PERCENT = env_int("SCAN_RECOGNITION_SCALE_PERCENT", 50, minimum=25, maximum=100)
+SCAN_MULTI_FACE_RETRY_SCALE_PERCENT = env_int(
+    "SCAN_MULTI_FACE_RETRY_SCALE_PERCENT",
+    max(int(SCAN_RECOGNITION_SCALE_PERCENT) + 15, 55),
+    minimum=40,
+    maximum=85,
+)
+SCAN_MULTI_FACE_RETRY_MAX_FACE_AREA_RATIO = env_float(
+    "SCAN_MULTI_FACE_RETRY_MAX_FACE_AREA_RATIO",
+    0.16,
+    minimum=0.02,
+    maximum=0.8,
+)
 SCAN_JPEG_QUALITY = env_int("SCAN_JPEG_QUALITY", 80, minimum=40, maximum=95)
 SCAN_CAPTURE_FLUSH_GRABS = env_int("SCAN_CAPTURE_FLUSH_GRABS", 2, minimum=0, maximum=10)
 SCAN_FORCE_RESIZE = env_bool("SCAN_FORCE_RESIZE", True)
@@ -221,6 +250,9 @@ FACE_REGISTRATION_SHARPNESS_MIN = env_float("FACE_REGISTRATION_SHARPNESS_MIN", 3
 FACE_REGISTRATION_LOW_LIGHT_BRIGHTNESS = env_float("FACE_REGISTRATION_LOW_LIGHT_BRIGHTNESS", 80.0, minimum=0.0, maximum=255.0)
 FACE_REGISTRATION_LOW_LIGHT_SHARPNESS_MIN = env_float("FACE_REGISTRATION_LOW_LIGHT_SHARPNESS_MIN", 2.2, minimum=0.0, maximum=200.0)
 FACE_REGISTRATION_ENCODING_JITTERS = env_int("FACE_REGISTRATION_ENCODING_JITTERS", 1, minimum=1, maximum=4)
+FACE_REGISTRATION_MIN_ENCODING_SPREAD = env_float("FACE_REGISTRATION_MIN_ENCODING_SPREAD", 0.03, minimum=0.0, maximum=0.5)
+FACE_REGISTRATION_MIN_POSE_BUCKETS_STANDARD = env_int("FACE_REGISTRATION_MIN_POSE_BUCKETS_STANDARD", 4, minimum=0, maximum=10)
+FACE_REGISTRATION_MIN_POSE_BUCKETS_SIMILAR = env_int("FACE_REGISTRATION_MIN_POSE_BUCKETS_SIMILAR", 6, minimum=0, maximum=20)
 RECOGNITION_TOLERANCE = env_float("RECOGNITION_TOLERANCE", 0.45, minimum=0.2, maximum=0.75)
 RECOGNITION_SCORE_TOLERANCE = env_float("RECOGNITION_SCORE_TOLERANCE", 0.47, minimum=0.2, maximum=0.8)
 RECOGNITION_SUPPORT_TOLERANCE = env_float("RECOGNITION_SUPPORT_TOLERANCE", 0.50, minimum=0.2, maximum=0.8)
@@ -251,6 +283,13 @@ LIVE_RECOGNITION_CACHE_MAX_AREA_COMPONENT = env_float("LIVE_RECOGNITION_CACHE_MA
 LIVE_RECOGNITION_CACHE_MAX_POSE_COMPONENT = env_float("LIVE_RECOGNITION_CACHE_MAX_POSE_COMPONENT", 0.055, minimum=0.0, maximum=1.0)
 LIVE_RECOGNITION_MAX_TRACKED_FACES = env_int("LIVE_RECOGNITION_MAX_TRACKED_FACES", 12, minimum=2, maximum=40)
 LIVE_RECOGNITION_MAX_RECOGNITIONS_PER_FRAME = env_int("LIVE_RECOGNITION_MAX_RECOGNITIONS_PER_FRAME", 5, minimum=1, maximum=20)
+LIVE_RECOGNITION_MULTI_FACE_MAX_CANDIDATES = env_int("LIVE_RECOGNITION_MULTI_FACE_MAX_CANDIDATES", 8, minimum=1, maximum=24)
+LIVE_RECOGNITION_MAX_NEW_ENCODINGS_PER_FRAME = env_int(
+    "LIVE_RECOGNITION_MAX_NEW_ENCODINGS_PER_FRAME",
+    LIVE_RECOGNITION_MAX_RECOGNITIONS_PER_FRAME,
+    minimum=1,
+    maximum=20,
+)
 LIVE_RECOGNITION_TRACK_TIMEOUT_SECONDS = env_float("LIVE_RECOGNITION_TRACK_TIMEOUT_SECONDS", 1.4, minimum=0.5, maximum=5.0)
 LIVE_RECOGNITION_TRACK_STABILITY_FRAMES = env_int("LIVE_RECOGNITION_TRACK_STABILITY_FRAMES", 2, minimum=1, maximum=8)
 LIVE_RECOGNITION_TRACK_RETRY_SECONDS = env_float("LIVE_RECOGNITION_TRACK_RETRY_SECONDS", 0.45, minimum=0.1, maximum=3.0)
@@ -258,7 +297,12 @@ LIVE_RECOGNITION_TRACK_UNKNOWN_RETRY_SECONDS = env_float("LIVE_RECOGNITION_TRACK
 LIVE_RECOGNITION_CONFIRMATION_RETRY_SECONDS = env_float("LIVE_RECOGNITION_CONFIRMATION_RETRY_SECONDS", 0.18, minimum=0.05, maximum=1.0)
 LIVE_RECOGNITION_LIVENESS_RETRY_SECONDS = env_float("LIVE_RECOGNITION_LIVENESS_RETRY_SECONDS", 0.12, minimum=0.05, maximum=1.0)
 LIVE_RECOGNITION_TRACK_MATCH_DISTANCE_RATIO = env_float("LIVE_RECOGNITION_TRACK_MATCH_DISTANCE_RATIO", 0.32, minimum=0.05, maximum=1.0)
+LIVE_RECOGNITION_LOW_LIGHT_ENCODING_RETRY_ENABLED = env_bool("LIVE_RECOGNITION_LOW_LIGHT_ENCODING_RETRY_ENABLED", True)
+LIVE_RECOGNITION_LOW_LIGHT_ENCODING_BRIGHTNESS = env_float("LIVE_RECOGNITION_LOW_LIGHT_ENCODING_BRIGHTNESS", 82.0, minimum=0.0, maximum=255.0)
 LIVE_LIVENESS_ENABLED = env_bool("LIVE_LIVENESS_ENABLED", True)
+# Anti-spoofing is intentionally bypassed in the live gate workflow to keep
+# recognition responsive without changing the rest of the scan pipeline.
+LIVE_SCAN_LIVENESS_ENABLED = False
 LIVE_LIVENESS_MIN_TRACK_FRAMES = env_int("LIVE_LIVENESS_MIN_TRACK_FRAMES", 3, minimum=1, maximum=12)
 LIVE_LIVENESS_MIN_MOTION_SCORE = env_float("LIVE_LIVENESS_MIN_MOTION_SCORE", 0.16, minimum=0.0, maximum=3.0)
 LIVE_LIVENESS_MIN_POSE_SCORE = env_float("LIVE_LIVENESS_MIN_POSE_SCORE", 0.02, minimum=0.0, maximum=1.0)
@@ -385,6 +429,7 @@ ATTENDANCE_SMS_TEMPLATE_DEFAULT = (
     or "CHS Gate Access: {student_name} {movement_text} the gate ({status}) at {time} on {date}."
 )
 ATTENDANCE_SMS_TEMPLATE_DOC_ID = "attendance_gate_scan"
+ATTENDANCE_SMS_NOTIFICATION_SETTINGS_KEY = "attendance_sms_notifications"
 ATTENDANCE_SMS_TEMPLATE_VARIABLES = (
     "student_name",
     "student_id",
@@ -501,6 +546,7 @@ dev_reload_cache = {
 }
 
 scan_lock = threading.Lock()
+scan_event_condition = threading.Condition(scan_lock)
 frame_processing_lock = threading.Lock()
 scan_state = {
     "active": False,
@@ -1978,8 +2024,16 @@ def list_student_enrollment_school_year_labels(include_legacy=False):
     for collection_name in list_student_enrollment_collection_names():
         suffix = collection_name[len("student_"):] if collection_name.startswith("student_") else collection_name
         label = normalize_school_year_value(suffix)
-        if label:
+        if not label:
+            continue
+        if school_years.find_one({"label": label}, {"_id": 1}):
             labels.add(label)
+            continue
+        try:
+            if db[collection_name].count_documents({}, limit=1) > 0:
+                labels.add(label)
+        except Exception:
+            continue
     if include_legacy and student_enrollments.count_documents({}, limit=1) > 0:
         for label in student_enrollments.distinct("school_year"):
             normalized = normalize_school_year_value(label)
@@ -3014,8 +3068,8 @@ def set_scan_liveness_profile(profile):
                     row["liveness_patch_diversity"] = 0.0
                     row["liveness_display_score"] = 0.0
                     row["liveness_display_streak"] = 0
-                    row["liveness_ready"] = bool(not LIVE_LIVENESS_ENABLED)
-                    row["liveness_message"] = "" if not LIVE_LIVENESS_ENABLED else "Liveness Check Required"
+                    row["liveness_ready"] = bool(not LIVE_SCAN_LIVENESS_ENABLED)
+                    row["liveness_message"] = "" if not LIVE_SCAN_LIVENESS_ENABLED else "Liveness Check Required"
     return normalized
 
 
@@ -3584,7 +3638,7 @@ def build_gate_scan_result(attendance_collection, school_year_label, student, no
 
 
 def push_scan_event(event_type, payload):
-    with scan_lock:
+    with scan_event_condition:
         scan_state["event_counter"] += 1
         event = {
             "id": scan_state["event_counter"],
@@ -3595,6 +3649,8 @@ def push_scan_event(event_type, payload):
         scan_state["events"].append(event)
         if len(scan_state["events"]) > 300:
             scan_state["events"] = scan_state["events"][-300:]
+        scan_event_condition.notify_all()
+        return dict(event)
 
 
 def create_alert(level, message, category="system", meta=None):
@@ -3820,7 +3876,8 @@ def sidebar_context(current_page, school_year=""):
     pending_eto_count = 0
     if is_full_admin:
         try:
-            pending_eto_count = int(early_timeout_requests.count_documents({"status": "pending"}))
+            eto_collection, _, _ = get_early_timeout_requests_storage(selected_school_year)
+            pending_eto_count = int(eto_collection.count_documents({"status": "pending"}))
         except Exception:
             pass
 
@@ -3979,6 +4036,8 @@ def build_archive_summary_payload(selected_school_year=""):
             "gate_logs_url": url_for("gate_logs_page", school_year=label),
             "sms_logs_url": url_for("sms_logs_page", school_year=label),
             "analytics_url": url_for("analytics", school_year=label),
+            "calendar_url": url_for("admin_calendar", school_year=label),
+            "eto_url": url_for("early_timeout_page", school_year=label),
         })
 
     active_storage_total = (
@@ -3986,6 +4045,8 @@ def build_archive_summary_payload(selected_school_year=""):
         + safe_count_documents(sms_logs)
         + safe_count_documents(alerts)
         + safe_count_documents(attendance_corrections)
+        + safe_count_documents(early_timeout_requests)
+        + safe_count_documents(calendar_events)
         + current_student_count
         + safe_count_documents(sections, {"school_year": current_school_year})
     )
@@ -3994,6 +4055,8 @@ def build_archive_summary_payload(selected_school_year=""):
         + safe_count_documents(sms_logs_archive)
         + safe_count_documents(alerts_archive)
         + safe_count_documents(attendance_corrections_archive)
+        + safe_count_documents(early_timeout_requests_archive)
+        + safe_count_documents(calendar_events_archive)
         + archived_student_count
         + safe_count_documents(sections, {"school_year": {"$ne": current_school_year}})
     )
@@ -4004,6 +4067,8 @@ def build_archive_summary_payload(selected_school_year=""):
         ("SMS Logs", sms_logs, sms_logs_archive),
         ("Alerts", alerts, alerts_archive),
         ("Attendance Corrections", attendance_corrections, attendance_corrections_archive),
+        ("Early Time-Out Requests", early_timeout_requests, early_timeout_requests_archive),
+        ("Calendar Events", calendar_events, calendar_events_archive),
     ):
         active_mismatches = safe_count_documents(active_collection, active_storage_mismatch_query(current_school_year))
         archive_current = safe_count_documents(archive_collection, {"school_year": current_school_year})
@@ -4091,6 +4156,34 @@ def build_archive_summary_payload(selected_school_year=""):
             "category": "Corrections",
             "count": safe_count_documents(attendance_corrections_archive),
             "details": "Historical attendance correction requests.",
+        },
+        {
+            "name": "early_timeout_requests",
+            "scope": "Active",
+            "category": "Early Time-Out",
+            "count": safe_count_documents(early_timeout_requests),
+            "details": f"Operational early time-out requests for the current school year {current_school_year}.",
+        },
+        {
+            "name": "early_timeout_requests_archive",
+            "scope": "Archive",
+            "category": "Early Time-Out",
+            "count": safe_count_documents(early_timeout_requests_archive),
+            "details": "Historical early time-out requests retained outside the active workspace.",
+        },
+        {
+            "name": "calendar_events",
+            "scope": "Active",
+            "category": "Calendar",
+            "count": safe_count_documents(calendar_events),
+            "details": f"Calendar events for the current school year {current_school_year}.",
+        },
+        {
+            "name": "calendar_events_archive",
+            "scope": "Archive",
+            "category": "Calendar",
+            "count": safe_count_documents(calendar_events_archive),
+            "details": "Archived calendar events for prior school years.",
         },
     ]
 
@@ -4392,7 +4485,7 @@ def build_system_health_snapshot():
             "known_faces": known_faces,
             "active_tracks": int(active_tracks),
             "pending_recognition": int(pending_recognition),
-            "liveness_enabled": bool(LIVE_LIVENESS_ENABLED),
+            "liveness_enabled": bool(LIVE_SCAN_LIVENESS_ENABLED),
             "liveness_profile": str(get_scan_liveness_profile()),
         },
         "queues": {
@@ -4993,6 +5086,7 @@ def background_jobs_worker_loop():
     while True:
         try:
             cleanup_notification_alerts()
+            process_pending_sms_retries(max_logs=5)
             run_due_scheduled_reports(max_reports=3)
             evaluate_all_anomaly_rules(trigger="scheduler", max_rules=50)
         except Exception as exc:
@@ -5118,10 +5212,57 @@ def normalize_sms_template_text(value):
     return sanitize_profile_text(value, SMS_TEMPLATE_MAX_LENGTH, allow_newlines=False)
 
 
+def normalize_boolean_setting_value(value, default=False):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    normalized = str(value or "").strip().lower()
+    if normalized in {"1", "true", "yes", "on", "enabled"}:
+        return True
+    if normalized in {"0", "false", "no", "off", "disabled"}:
+        return False
+    return bool(default)
+
+
+def parse_boolean_setting_input(value, field_name="enabled"):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    normalized = str(value or "").strip().lower()
+    if normalized in {"1", "true", "yes", "on", "enabled"}:
+        return True
+    if normalized in {"0", "false", "no", "off", "disabled"}:
+        return False
+    raise ValueError(f"{field_name.replace('_', ' ').title()} must be true or false.")
+
+
 def get_default_attendance_sms_template():
     fallback = "CHS Gate Access: {student_name} {movement_text} the gate ({status}) at {time} on {date}."
     from_env = normalize_sms_template_text(ATTENDANCE_SMS_TEMPLATE_DEFAULT)
     return from_env or fallback
+
+
+def ensure_attendance_sms_notification_defaults():
+    now_ts = now_iso()
+    try:
+        system_settings.update_one(
+            {"key": ATTENDANCE_SMS_NOTIFICATION_SETTINGS_KEY},
+            {
+                "$setOnInsert": {
+                    "name": "Attendance SMS Notifications",
+                    "context": "attendance_gate_scan",
+                    "enabled": True,
+                    "createdAt": now_ts,
+                    "updatedAt": now_ts,
+                    "updatedBy": {"username": "system", "role": "System"},
+                }
+            },
+            upsert=True,
+        )
+    except Exception as exc:
+        print(f"[WARNING] Failed ensuring attendance SMS notification default: {exc}")
 
 
 def ensure_sms_template_defaults():
@@ -5146,6 +5287,37 @@ def ensure_sms_template_defaults():
         )
     except Exception as exc:
         print(f"[WARNING] Failed ensuring SMS template default: {exc}")
+
+
+def get_attendance_sms_notification_settings_payload():
+    payload = {
+        "enabled": True,
+        "updated_at": "",
+        "updated_by": "",
+        "status_label": "Enabled",
+    }
+
+    try:
+        doc = system_settings.find_one({"key": ATTENDANCE_SMS_NOTIFICATION_SETTINGS_KEY}) or {}
+    except Exception as exc:
+        print(f"[WARNING] Failed reading attendance SMS notification settings: {exc}")
+        return payload
+
+    payload["enabled"] = normalize_boolean_setting_value(doc.get("enabled"), default=True)
+    payload["status_label"] = "Enabled" if payload["enabled"] else "Disabled"
+    payload["updated_at"] = str(doc.get("updatedAt") or "").strip()
+
+    updated_by_value = doc.get("updatedBy")
+    if isinstance(updated_by_value, dict):
+        payload["updated_by"] = str(updated_by_value.get("username") or "").strip()
+    else:
+        payload["updated_by"] = str(updated_by_value or "").strip()
+
+    return payload
+
+
+def attendance_sms_notifications_enabled():
+    return bool(get_attendance_sms_notification_settings_payload().get("enabled"))
 
 
 def get_attendance_sms_template_payload():
@@ -5211,6 +5383,40 @@ def save_attendance_sms_template(template_text, actor_username="", actor_role=""
 
     payload = get_attendance_sms_template_payload()
     payload["template"] = cleaned_template
+    payload["updated_at"] = now_ts
+    payload["updated_by"] = actor_name or "system"
+    return payload
+
+
+def save_attendance_sms_notification_settings(enabled, actor_username="", actor_role=""):
+    normalized_enabled = parse_boolean_setting_input(enabled, field_name="enabled")
+    now_ts = now_iso()
+    actor_name = sanitize_profile_text(actor_username, 64)
+    actor_role_text = sanitize_profile_text(actor_role, 64)
+
+    system_settings.update_one(
+        {"key": ATTENDANCE_SMS_NOTIFICATION_SETTINGS_KEY},
+        {
+            "$set": {
+                "name": "Attendance SMS Notifications",
+                "context": "attendance_gate_scan",
+                "enabled": normalized_enabled,
+                "updatedAt": now_ts,
+                "updatedBy": {
+                    "username": actor_name or "system",
+                    "role": actor_role_text or "System",
+                },
+            },
+            "$setOnInsert": {
+                "createdAt": now_ts,
+            },
+        },
+        upsert=True,
+    )
+
+    payload = get_attendance_sms_notification_settings_payload()
+    payload["enabled"] = normalized_enabled
+    payload["status_label"] = "Enabled" if normalized_enabled else "Disabled"
     payload["updated_at"] = now_ts
     payload["updated_by"] = actor_name or "system"
     return payload
@@ -5457,6 +5663,147 @@ def send_sms(to_number, message, sms_type="transactional", metadata=None, studen
         "to": normalized_to,
         "log_id": str(queued_doc_id) if queued_doc_id else "",
     }
+
+
+def process_pending_sms_retries(max_logs=5):
+    try:
+        safe_limit = max(1, min(int(max_logs or 5), 25))
+    except Exception:
+        safe_limit = 5
+
+    school_year_label = get_current_school_year_label()
+    sms_collection, school_year_label, _ = get_sms_logs_storage(school_year_label)
+    now_dt = now_local()
+    now_value = now_iso()
+
+    try:
+        retry_delay_seconds = max(int(os.getenv("SMS_RETRY_DELAY_SECONDS", "300")), 60)
+    except Exception:
+        retry_delay_seconds = 300
+    try:
+        default_retry_max_attempts = max(int(os.getenv("SMS_RETRY_MAX_ATTEMPTS", "3")), 1)
+    except Exception:
+        default_retry_max_attempts = 3
+
+    due_query = {
+        "retryEligible": True,
+        "status": sms_status_mongo_filter("failed"),
+        "nextRetryAt": {"$ne": None, "$lte": now_value},
+    }
+    if school_year_label:
+        due_query["school_year"] = school_year_label
+
+    try:
+        due_docs = list(sms_collection.find(due_query).sort("nextRetryAt", 1).limit(safe_limit))
+    except Exception as exc:
+        print(f"[WARNING] Failed reading retryable SMS logs: {exc}")
+        return {"processed": 0, "sent": 0, "failed": 0, "remaining": 0}
+
+    summary = {"processed": 0, "sent": 0, "failed": 0, "remaining": 0}
+
+    if not attendance_sms_notifications_enabled():
+        try:
+            summary["remaining"] = int(sms_collection.count_documents(due_query))
+        except Exception:
+            summary["remaining"] = 0
+        return summary
+
+    for doc in due_docs:
+        doc_id = doc.get("_id")
+        recipient = str(doc.get("to") or doc.get("parent_contact") or "").strip()
+        message = str(doc.get("message") or "").strip()
+        if not doc_id or not recipient or not message:
+            continue
+
+        try:
+            previous_retry_count = max(int(doc.get("retryCount") or 0), 0)
+        except Exception:
+            previous_retry_count = 0
+        try:
+            retry_max_attempts = max(int(doc.get("retryMaxAttempts") or default_retry_max_attempts), 1)
+        except Exception:
+            retry_max_attempts = default_retry_max_attempts
+        attempt_number = previous_retry_count + 1
+
+        metadata_payload = {}
+        provider_response = doc.get("providerResponse")
+        if isinstance(provider_response, dict):
+            response_meta = provider_response.get("meta")
+            if isinstance(response_meta, dict):
+                metadata_payload.update(response_meta)
+        metadata_payload.update({
+            "context": "auto_retry_sms",
+            "retry_of": str(doc_id),
+            "school_year": school_year_label,
+        })
+        metadata_payload["retry_count"] = attempt_number
+
+        sms_result = send_sms(
+            recipient,
+            message,
+            sms_type=doc.get("type", "transactional"),
+            metadata=metadata_payload,
+            student_id=doc.get("student_id", ""),
+            student_name=doc.get("name", ""),
+            parent_contact=doc.get("parent_contact", ""),
+            persist=False,
+        )
+
+        log_fields = SmsProvider.map_result_to_log_fields(sms_result)
+        delivery_status = log_fields["status"]
+        error_message = (
+            str(sms_result.get("error") or "").strip()
+            or str(sms_result.get("error_message") or "").strip()
+            or str(log_fields.get("errorMessage") or "").strip()
+        )
+        can_retry_again = delivery_status != "sent" and attempt_number < retry_max_attempts
+        next_retry_at = (now_dt + timedelta(seconds=retry_delay_seconds)).isoformat() if can_retry_again else None
+
+        update_doc = {
+            **log_fields,
+            "updatedAt": now_iso(),
+            "retryEligible": can_retry_again,
+            "retryCount": attempt_number,
+            "retryMaxAttempts": retry_max_attempts,
+            "nextRetryAt": next_retry_at,
+            "lastRetryError": error_message or None,
+        }
+        if delivery_status == "sent":
+            update_doc["lastRetryError"] = None
+            invalidate_sms_balance_cache("Balance refresh pending after SMS retry.")
+
+        try:
+            sms_collection.update_one({"_id": doc_id}, {"$set": update_doc})
+            signal_data_change("sms_logs")
+        except Exception as exc:
+            print(f"[WARNING] Failed updating retried SMS log {doc_id}: {exc}")
+            continue
+
+        summary["processed"] += 1
+        if delivery_status == "sent":
+            summary["sent"] += 1
+        else:
+            summary["failed"] += 1
+            if not can_retry_again:
+                create_alert(
+                    level="high",
+                    message=f"SMS delivery failed after retries for {doc.get('name') or doc.get('student_id') or 'Unknown student'}.",
+                    category="sms",
+                    meta={
+                        "student_id": str(doc.get("student_id") or ""),
+                        "error": error_message,
+                        "school_year": school_year_label,
+                    },
+                )
+
+    try:
+        remaining_query = dict(due_query)
+        remaining_query["nextRetryAt"] = {"$ne": None, "$lte": now_iso()}
+        summary["remaining"] = int(sms_collection.count_documents(remaining_query))
+    except Exception:
+        summary["remaining"] = 0
+
+    return summary
 
 
 def ensure_default_admin_user():
@@ -5764,10 +6111,26 @@ def log_attendance_and_sms(student, source="gate_scan", send_notifications=True,
     signal_data_change("gate_logs")
 
     sms_status = "skipped"
-    sms_error = ""
     parent_contact = result["parent_contact"]
+    notifications_enabled = attendance_sms_notifications_enabled()
 
-    if send_notifications and parent_contact:
+    if send_notifications and not notifications_enabled:
+        log_skipped_sms(
+            student_id=result["student_id"],
+            student_name=result["student_name"],
+            parent_contact=parent_contact,
+            message=f"Attendance SMS notifications are disabled. SMS not sent for {result['student_name']}.",
+            reason="notifications_disabled",
+            sms_type="transactional",
+            metadata={
+                "context": "attendance_gate_scan",
+                "session": result["session"],
+                "school_year": school_year_label,
+                "notifications_enabled": False,
+            },
+        )
+        sms_status = "disabled"
+    elif send_notifications and parent_contact:
         movement_text = "entered" if result["gate_action"] == "IN" else "exited"
         display_time = format_time_for_display(result.get("time"), result.get("timestamp"))
         template_payload = get_attendance_sms_template_payload()
@@ -5821,7 +6184,6 @@ def log_attendance_and_sms(student, source="gate_scan", send_notifications=True,
         import threading
         threading.Thread(target=_send_sms_async, daemon=True).start()
         sms_status = "queued"
-        sms_error = ""
     elif send_notifications:
         log_skipped_sms(
             student_id=result["student_id"],
@@ -6313,6 +6675,7 @@ migrate_plaintext_user_passwords()
 ensure_user_theme_defaults()
 ensure_user_profile_defaults()
 ensure_sms_template_defaults()
+ensure_attendance_sms_notification_defaults()
 
 
 # =====================================
@@ -6599,6 +6962,23 @@ def logout():
 LIVE_MONITORING_DEFAULT_CHANNEL = os.getenv("LIVE_MONITORING_CHANNEL", "main-gate").strip() or "main-gate"
 LIVE_MONITORING_SIGNALING_PORT = env_int("LIVE_MONITORING_SIGNALING_PORT", FLASK_PORT + 1, minimum=1, maximum=65535)
 LIVE_MONITORING_TOKEN_TTL_SECONDS = env_int("LIVE_MONITORING_TOKEN_TTL_SECONDS", 120, minimum=30, maximum=900)
+LIVE_MONITORING_MANAGED = env_bool(
+    "LIVE_MONITORING_MANAGED",
+    not bool(os.getenv("LIVE_MONITORING_SIGNALING_URL", "").strip()),
+)
+LIVE_MONITORING_AUTO_START = env_bool("LIVE_MONITORING_AUTO_START", LIVE_MONITORING_MANAGED)
+LIVE_MONITORING_STARTUP_TIMEOUT_SECONDS = env_float(
+    "LIVE_MONITORING_STARTUP_TIMEOUT_SECONDS",
+    6.0,
+    minimum=1.0,
+    maximum=30.0,
+)
+LIVE_MONITORING_NODE_BIN = os.getenv("LIVE_MONITORING_NODE_BIN", "node").strip() or "node"
+LIVE_MONITORING_HOST = os.getenv("LIVE_MONITORING_HOST", "0.0.0.0").strip() or "0.0.0.0"
+LIVE_MONITORING_SERVER_SCRIPT = os.path.join(BASE_DIR, "live_monitor_server.js")
+live_monitoring_process_lock = threading.Lock()
+live_monitoring_process = None
+live_monitoring_process_started_by_app = False
 
 
 def live_monitoring_secret_bytes():
@@ -6608,6 +6988,184 @@ def live_monitoring_secret_bytes():
         or "live-monitoring-secret"
     )
     return secret.encode("utf-8")
+
+
+def resolve_live_monitoring_health_hosts():
+    candidates = []
+    host = LIVE_MONITORING_HOST.strip()
+    if host and host not in {"0.0.0.0", "::", "[::]"}:
+        candidates.append(host.strip("[]"))
+
+    configured_url = os.getenv("LIVE_MONITORING_SIGNALING_URL", "").strip()
+    if configured_url:
+        try:
+            configured_host = (urlparse(configured_url).hostname or "").strip()
+            if configured_host:
+                candidates.append(configured_host)
+        except Exception:
+            pass
+
+    candidates.extend(["127.0.0.1", "localhost"])
+
+    unique_hosts = []
+    seen = set()
+    for candidate in candidates:
+        normalized = str(candidate or "").strip()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        unique_hosts.append(normalized)
+    return unique_hosts
+
+
+def is_live_monitoring_service_available(timeout=0.35):
+    timeout_seconds = max(float(timeout or 0.0), 0.1)
+    for host in resolve_live_monitoring_health_hosts():
+        try:
+            with socket.create_connection((host, LIVE_MONITORING_SIGNALING_PORT), timeout=timeout_seconds):
+                return True
+        except OSError:
+            continue
+    return False
+
+
+def tracked_live_monitoring_process_running():
+    return bool(live_monitoring_process is not None and live_monitoring_process.poll() is None)
+
+
+def resolve_live_monitoring_start_command():
+    node_binary = shutil.which(LIVE_MONITORING_NODE_BIN)
+    if not node_binary:
+        raise RuntimeError(
+            f"Live monitoring requires Node.js. Could not find '{LIVE_MONITORING_NODE_BIN}' in PATH."
+        )
+    if not os.path.exists(LIVE_MONITORING_SERVER_SCRIPT):
+        raise RuntimeError(
+            f"Live monitoring server script was not found at '{LIVE_MONITORING_SERVER_SCRIPT}'."
+        )
+    return [node_binary, LIVE_MONITORING_SERVER_SCRIPT]
+
+
+def wait_for_live_monitoring_service(timeout_seconds=None):
+    deadline = time.time() + max(
+        float(timeout_seconds if timeout_seconds is not None else LIVE_MONITORING_STARTUP_TIMEOUT_SECONDS),
+        0.5,
+    )
+    last_error = "Live monitoring service did not become ready in time."
+
+    while time.time() < deadline:
+        if is_live_monitoring_service_available(timeout=0.25):
+            return True, "Live monitoring service is ready."
+
+        process = live_monitoring_process
+        if process is not None:
+            exit_code = process.poll()
+            if exit_code is not None:
+                return False, f"Live monitoring service exited with code {exit_code}."
+
+        time.sleep(0.15)
+
+    return False, last_error
+
+
+def start_live_monitoring_service(reason="runtime"):
+    global live_monitoring_process, live_monitoring_process_started_by_app
+
+    if is_live_monitoring_service_available():
+        return True, "Live monitoring service already available."
+
+    if tracked_live_monitoring_process_running():
+        return wait_for_live_monitoring_service()
+
+    try:
+        command = resolve_live_monitoring_start_command()
+    except Exception as exc:
+        return False, str(exc)
+
+    creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
+    try:
+        live_monitoring_process = subprocess.Popen(
+            command,
+            cwd=BASE_DIR,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            env=os.environ.copy(),
+            creationflags=creation_flags,
+        )
+        live_monitoring_process_started_by_app = True
+        print(
+            f"[INFO] Starting live monitoring service via Flask bootstrap "
+            f"(reason={reason}, port={LIVE_MONITORING_SIGNALING_PORT})"
+        )
+    except Exception as exc:
+        live_monitoring_process = None
+        live_monitoring_process_started_by_app = False
+        return False, f"Unable to start live monitoring service: {exc}"
+
+    return wait_for_live_monitoring_service()
+
+
+def ensure_live_monitoring_service_ready(reason="runtime", fail_hard=False):
+    if not LIVE_MONITORING_MANAGED:
+        return True, "Live monitoring service is managed externally."
+
+    with live_monitoring_process_lock:
+        if is_live_monitoring_service_available():
+            return True, "Live monitoring service already available."
+
+        if tracked_live_monitoring_process_running():
+            ok, message = wait_for_live_monitoring_service()
+        else:
+            ok, message = start_live_monitoring_service(reason=reason)
+
+    if not ok:
+        print(f"[WARNING] {message}")
+        if fail_hard:
+            return False, message
+    return ok, message
+
+
+def stop_managed_live_monitoring_service():
+    global live_monitoring_process, live_monitoring_process_started_by_app
+
+    with live_monitoring_process_lock:
+        process = live_monitoring_process
+        started_by_app = live_monitoring_process_started_by_app
+        live_monitoring_process = None
+        live_monitoring_process_started_by_app = False
+
+    if not started_by_app or process is None:
+        return
+
+    if process.poll() is not None:
+        return
+
+    try:
+        process.terminate()
+        process.wait(timeout=3)
+    except Exception:
+        try:
+            process.kill()
+        except Exception:
+            pass
+
+
+def should_bootstrap_live_monitoring_on_startup():
+    if not LIVE_MONITORING_AUTO_START:
+        return False
+
+    if not LIVE_MONITORING_MANAGED:
+        return False
+
+    if FLASK_DEBUG_MODE or DEV_AUTO_RELOAD:
+        return os.environ.get("WERKZEUG_RUN_MAIN") == "true"
+
+    return True
+
+
+atexit.register(stop_managed_live_monitoring_service)
 
 
 def resolve_live_monitoring_signaling_url():
@@ -6649,6 +7207,16 @@ def live_monitoring_token():
     role_name = current_role()
     if role_name not in {ROLE_FULL_ADMIN, ROLE_STAFF}:
         return jsonify({"status": "error", "message": "Live monitoring is unavailable for this role."}), 403
+
+    live_monitoring_ready, live_monitoring_message = ensure_live_monitoring_service_ready(
+        reason="token_request",
+        fail_hard=True,
+    )
+    if not live_monitoring_ready:
+        return jsonify({
+            "status": "error",
+            "message": live_monitoring_message,
+        }), 503
 
     issued_at = int(time.time())
     expires_at = issued_at + LIVE_MONITORING_TOKEN_TTL_SECONDS
@@ -7466,6 +8034,11 @@ def start_scan():
         sms_warning = sms_status.get("message", "SMS provider is unavailable. Scanning will continue without SMS delivery.")
         print(f"[WARNING] SMS provider not ready during scan start: {sms_warning}")
 
+    live_monitoring_ready, live_monitoring_message = ensure_live_monitoring_service_ready(
+        reason="scan_start",
+        fail_hard=False,
+    )
+
     ok, message = start_scan_capture()
     if not ok:
         payload = {"status": "failed", "message": message, "sms_auth": sms_status}
@@ -7503,6 +8076,8 @@ def start_scan():
     }
     if sms_warning:
         payload["sms_warning"] = sms_warning
+    if not live_monitoring_ready:
+        payload["live_monitoring_warning"] = live_monitoring_message
     return jsonify(payload)
 
 
@@ -7790,7 +8365,7 @@ def build_live_face_payload_from_tracks(face_tracks, frame_shape):
             "frame_height": int(frame_height),
             "stability": int(track.get("stability") or 0),
             "student_id": str(track.get("student_id") or "").strip(),
-            "liveness_ready": bool(track.get("liveness_ready", not LIVE_LIVENESS_ENABLED)),
+            "liveness_ready": bool(track.get("liveness_ready", not LIVE_SCAN_LIVENESS_ENABLED)),
             "liveness_motion_score": round(float(track.get("liveness_motion_score") or 0.0), 3),
             "liveness_pose_score": round(float(track.get("liveness_pose_score") or 0.0), 3),
             "liveness_parallax_score": round(float(track.get("liveness_parallax_score") or 0.0), 3),
@@ -7827,7 +8402,7 @@ def update_live_face_tracks(face_locations_small, scale_back, frame_shape, now_t
     if len(normalized_locations) > max(int(LIVE_RECOGNITION_MAX_TRACKED_FACES or 1), 1):
         normalized_locations = normalized_locations[: max(int(LIVE_RECOGNITION_MAX_TRACKED_FACES or 1), 1)]
 
-    liveness_config = resolve_live_liveness_profile_thresholds()
+    liveness_config = resolve_live_liveness_profile_thresholds() if LIVE_SCAN_LIVENESS_ENABLED else {}
     liveness_decay = min(max(float(LIVE_LIVENESS_SCORE_DECAY or 0.88), 0.5), 0.99)
     min_liveness_frames = max(int(liveness_config.get("min_track_frames") or 1), 1)
     min_motion_score = max(float(liveness_config.get("min_motion_score") or 0.0), 0.0)
@@ -7897,6 +8472,7 @@ def update_live_face_tracks(face_locations_small, scale_back, frame_shape, now_t
             aspect_ratio = float(face_width / max(face_height, 1.0))
             face_diagonal = max(float(np.hypot(face_width, face_height)), 1.0)
 
+            first_seen_ts = float(previous.get("first_seen_ts") or current_ts)
             previous_area = max(float(previous.get("area") or area or 1.0), 1.0)
             previous_aspect_ratio = max(float(previous.get("aspect_ratio") or aspect_ratio or 1.0), 0.01)
             motion_component = min(center_distance / face_diagonal, 1.5)
@@ -7907,11 +8483,9 @@ def update_live_face_tracks(face_locations_small, scale_back, frame_shape, now_t
             liveness_motion_score = max(float(previous.get("liveness_motion_score") or 0.0) * liveness_decay + motion_signal, 0.0)
             liveness_pose_score = max(float(previous.get("liveness_pose_score") or 0.0) * liveness_decay + pose_component, 0.0)
             liveness_frames = int(previous.get("liveness_frames") or 0) + 1
-            first_seen_ts = float(previous.get("first_seen_ts") or current_ts)
             track_age_seconds = max(current_ts - first_seen_ts, 0.0)
-
             liveness_ready = (
-                (not LIVE_LIVENESS_ENABLED)
+                (not LIVE_SCAN_LIVENESS_ENABLED)
                 or (
                     liveness_frames >= min_liveness_frames
                     and liveness_motion_score >= min_motion_score
@@ -7921,7 +8495,8 @@ def update_live_face_tracks(face_locations_small, scale_back, frame_shape, now_t
                     )
                 )
             )
-            if not LIVE_LIVENESS_ENABLED:
+
+            if not LIVE_SCAN_LIVENESS_ENABLED:
                 liveness_message = ""
             elif liveness_frames < min_liveness_frames:
                 liveness_message = "Liveness check required"
@@ -9037,6 +9612,82 @@ def prepare_live_encoding_frame(frame, face_locations):
     return resized_frame, resized_locations
 
 
+def build_live_encoding_variants(frame, low_light_hint=False):
+    variants = []
+    if frame is None or frame.size == 0:
+        return variants
+    variants.append(frame)
+    if not low_light_hint and not LIVE_RECOGNITION_LOW_LIGHT_ENCODING_RETRY_ENABLED:
+        return variants
+
+    try:
+        lab = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
+        l_channel, a_channel, b_channel = cv2.split(lab)
+        clip_limit = 2.6 if low_light_hint else 2.0
+        clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=(8, 8))
+        balanced = cv2.cvtColor(cv2.merge((clahe.apply(l_channel), a_channel, b_channel)), cv2.COLOR_LAB2BGR)
+        variants.append(balanced)
+
+        softened = cv2.GaussianBlur(balanced, (0, 0), 1.0 if low_light_hint else 0.85)
+        sharpened = cv2.addWeighted(balanced, 1.24 if low_light_hint else 1.18, softened, -0.24 if low_light_hint else -0.18, 0)
+        variants.append(sharpened)
+    except Exception:
+        pass
+    return variants
+
+
+def encode_live_face_locations(frame, face_locations, *, num_jitters=1, low_light_hint=False):
+    normalized_locations = [
+        _normalized_face_location(location)
+        for location in list(face_locations or [])
+    ]
+    normalized_locations = [location for location in normalized_locations if location]
+    if frame is None or frame.size == 0 or not normalized_locations:
+        return []
+
+    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    try:
+        batch_rows = face_recognition.face_encodings(
+            rgb_frame,
+            normalized_locations,
+            num_jitters=num_jitters,
+            model="small",
+        )
+    except Exception:
+        batch_rows = []
+
+    if len(batch_rows) == len(normalized_locations):
+        return list(batch_rows)
+
+    per_location_rows = [None] * len(normalized_locations)
+    variant_frames = build_live_encoding_variants(frame, low_light_hint=low_light_hint)
+    variant_rgbs = []
+    for variant_frame in variant_frames:
+        try:
+            variant_rgbs.append(cv2.cvtColor(variant_frame, cv2.COLOR_BGR2RGB))
+        except Exception:
+            continue
+    if not variant_rgbs:
+        variant_rgbs = [rgb_frame]
+
+    for index, location in enumerate(normalized_locations):
+        for variant_rgb in variant_rgbs:
+            try:
+                encoded_rows = face_recognition.face_encodings(
+                    variant_rgb,
+                    [location],
+                    num_jitters=num_jitters,
+                    model="small",
+                )
+            except Exception:
+                encoded_rows = []
+            if encoded_rows:
+                per_location_rows[index] = encoded_rows[0]
+                break
+
+    return per_location_rows
+
+
 def evaluate_live_recognition_match(match_result, confidence_pct, face_quality):
     candidate = match_result.get("candidate") or {}
     runner_up = match_result.get("runner_up")
@@ -9207,7 +9858,7 @@ def process_client_frame(frame_bytes):
         rgb_small = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
         rgb_full_for_blink = (
             cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            if LIVE_LIVENESS_ENABLED and (LIVE_LIVENESS_BLINK_ENABLED or LIVE_LIVENESS_LANDMARK_POSE_ENABLED)
+            if LIVE_SCAN_LIVENESS_ENABLED and (LIVE_LIVENESS_BLINK_ENABLED or LIVE_LIVENESS_LANDMARK_POSE_ENABLED)
             else None
         )
         
@@ -9217,21 +9868,27 @@ def process_client_frame(frame_bytes):
             number_of_times_to_upsample=0,
             model="hog",
         )
-        if len(face_locations_small) == 0 and scale < 0.75:
-            retry_scale = min(max(scale + 0.2, 0.65), 0.8)
-            if retry_scale > scale:
-                retry_frame = cv2.resize(frame, (0, 0), fx=retry_scale, fy=retry_scale, interpolation=cv2.INTER_LINEAR)
-                retry_rgb = cv2.cvtColor(retry_frame, cv2.COLOR_BGR2RGB)
-                retry_locations = face_recognition.face_locations(
-                    retry_rgb,
-                    number_of_times_to_upsample=0,
-                    model="hog",
-                )
-                if retry_locations:
-                    small_frame = retry_frame
-                    rgb_small = retry_rgb
-                    face_locations_small = retry_locations
-                    scale = retry_scale
+        retry_scale = min(max(float(SCAN_MULTI_FACE_RETRY_SCALE_PERCENT or 0) / 100.0, scale + 0.1), 0.82)
+        should_retry_multi_face_detection = len(face_locations_small) == 0
+        if len(face_locations_small) == 1:
+            frame_area = max(float(rgb_small.shape[0] * rgb_small.shape[1]), 1.0)
+            primary_face_area_ratio = float(_face_location_area(face_locations_small[0])) / frame_area
+            should_retry_multi_face_detection = (
+                primary_face_area_ratio <= float(SCAN_MULTI_FACE_RETRY_MAX_FACE_AREA_RATIO or 0.16)
+            )
+        if should_retry_multi_face_detection and retry_scale > (scale + 0.02):
+            retry_frame = cv2.resize(frame, (0, 0), fx=retry_scale, fy=retry_scale, interpolation=cv2.INTER_LINEAR)
+            retry_rgb = cv2.cvtColor(retry_frame, cv2.COLOR_BGR2RGB)
+            retry_locations = face_recognition.face_locations(
+                retry_rgb,
+                number_of_times_to_upsample=0,
+                model="hog",
+            )
+            if len(retry_locations) > len(face_locations_small):
+                small_frame = retry_frame
+                rgb_small = retry_rgb
+                face_locations_small = retry_locations
+                scale = retry_scale
         scale_back = 1.0 / scale if scale > 0 else 1.0
 
         if len(face_locations_small) == 0:
@@ -9273,10 +9930,17 @@ def process_client_frame(frame_bytes):
             push_not_registered_event(reason, 0.0)
             return True, f"Not ready: {reason}", payload
 
-        recognition_candidates = []
+        eligible_tracks = []
         liveness_holds = []
         required_stability = max(int(LIVE_RECOGNITION_TRACK_STABILITY_FRAMES or 1), 1)
-        max_candidates = max(int(LIVE_RECOGNITION_MAX_RECOGNITIONS_PER_FRAME or 1), 1)
+        base_candidate_limit = max(int(LIVE_RECOGNITION_MAX_RECOGNITIONS_PER_FRAME or 1), 1)
+        multi_face_candidate_limit = max(int(LIVE_RECOGNITION_MULTI_FACE_MAX_CANDIDATES or base_candidate_limit), base_candidate_limit)
+        max_candidates = (
+            min(multi_face_candidate_limit, max(int(LIVE_RECOGNITION_MAX_TRACKED_FACES or 1), 1))
+            if len(payload["faces"]) > 1
+            else base_candidate_limit
+        )
+        max_new_encodings = min(max(int(LIVE_RECOGNITION_MAX_NEW_ENCODINGS_PER_FRAME or 1), 1), max_candidates)
         ordered_tracks = sorted(
             face_tracks,
             key=lambda row: -float((row or {}).get("area") or 0.0),
@@ -9294,7 +9958,7 @@ def process_client_frame(frame_bytes):
             rotated_tracks = []
 
         for track in rotated_tracks:
-            if len(recognition_candidates) >= max_candidates:
+            if len(eligible_tracks) >= max_candidates:
                 break
             if int(track.get("stability") or 0) < required_stability:
                 continue
@@ -9304,75 +9968,56 @@ def process_client_frame(frame_bytes):
             if full_location is None:
                 continue
             face_quality = None
-            landmark_sample = sample_live_landmark_liveness(
-                track,
-                rgb_small=rgb_small,
-                face_location=track.get("small_location"),
-                now_ts=frame_now_ts,
-                rgb_full=rgb_full_for_blink,
-                face_location_full=full_location,
-            )
-            landmark_updates = landmark_sample.get("updates") or {}
-            if landmark_updates:
-                set_live_face_track_liveness_state(track.get("track_id"), **landmark_updates)
-                track.update(landmark_updates)
-            blink_liveness_gate = evaluate_live_blink_liveness(
-                track,
-                rgb_small=rgb_small,
-                face_location=track.get("small_location"),
-                now_ts=frame_now_ts,
-                rgb_full=rgb_full_for_blink,
-                face_location_full=full_location,
-                landmark_signature=landmark_sample.get("signature"),
-            )
-            blink_updates = blink_liveness_gate.get("updates") or {}
-            if blink_updates:
-                set_live_face_track_liveness_state(track.get("track_id"), **blink_updates)
-                track.update(blink_updates)
-            pose_landmark_gate = evaluate_live_landmark_pose_liveness(track, now_ts=frame_now_ts)
-
-            patch_liveness_gate = None
-            if LIVE_LIVENESS_ENABLED and LIVE_LIVENESS_PATCH_PARALLAX_ENABLED:
-                patch_liveness_gate = evaluate_live_patch_parallax_liveness(
+            if LIVE_SCAN_LIVENESS_ENABLED:
+                landmark_sample = sample_live_landmark_liveness(
                     track,
-                    frame,
-                    track.get("small_location"),
-                    scale_back=scale_back,
+                    rgb_small=rgb_small,
+                    face_location=track.get("small_location"),
                     now_ts=frame_now_ts,
+                    rgb_full=rgb_full_for_blink,
+                    face_location_full=full_location,
                 )
-                patch_updates = patch_liveness_gate.get("updates") or {}
-                if patch_updates:
-                    set_live_face_track_liveness_state(track.get("track_id"), **patch_updates)
-                    track.update(patch_updates)
-
-            liveness_gate = evaluate_live_track_liveness(track, face_quality=None, now_ts=frame_now_ts)
-            if liveness_gate.get("accepted") and not blink_liveness_gate.get("accepted"):
-                liveness_gate = blink_liveness_gate
-            if liveness_gate.get("accepted") and not pose_landmark_gate.get("accepted"):
-                liveness_gate = pose_landmark_gate
-            if liveness_gate.get("accepted") and patch_liveness_gate is not None and not patch_liveness_gate.get("accepted"):
-                liveness_gate = patch_liveness_gate
-            if (
-                liveness_gate.get("accepted")
-                and LIVE_LIVENESS_ENABLED
-                and LIVE_LIVENESS_TEXTURE_CHECK_ENABLED
-            ):
-                face_quality = resolve_live_track_face_quality(
+                landmark_updates = landmark_sample.get("updates") or {}
+                if landmark_updates:
+                    set_live_face_track_liveness_state(track.get("track_id"), **landmark_updates)
+                    track.update(landmark_updates)
+                blink_liveness_gate = evaluate_live_blink_liveness(
                     track,
-                    frame,
-                    track.get("small_location"),
-                    scale_back=scale_back,
+                    rgb_small=rgb_small,
+                    face_location=track.get("small_location"),
                     now_ts=frame_now_ts,
+                    rgb_full=rgb_full_for_blink,
+                    face_location_full=full_location,
+                    landmark_signature=landmark_sample.get("signature"),
                 )
-                texture_gate = evaluate_live_texture_liveness(face_quality)
-                if not texture_gate.get("accepted"):
-                    liveness_gate = texture_gate
-            if (
-                liveness_gate.get("accepted")
-                and LIVE_LIVENESS_ENABLED
-                and LIVE_LIVENESS_DISPLAY_CHECK_ENABLED
-            ):
-                if face_quality is None:
+                blink_updates = blink_liveness_gate.get("updates") or {}
+                if blink_updates:
+                    set_live_face_track_liveness_state(track.get("track_id"), **blink_updates)
+                    track.update(blink_updates)
+                pose_landmark_gate = evaluate_live_landmark_pose_liveness(track, now_ts=frame_now_ts)
+
+                patch_liveness_gate = None
+                if LIVE_LIVENESS_PATCH_PARALLAX_ENABLED:
+                    patch_liveness_gate = evaluate_live_patch_parallax_liveness(
+                        track,
+                        frame,
+                        track.get("small_location"),
+                        scale_back=scale_back,
+                        now_ts=frame_now_ts,
+                    )
+                    patch_updates = patch_liveness_gate.get("updates") or {}
+                    if patch_updates:
+                        set_live_face_track_liveness_state(track.get("track_id"), **patch_updates)
+                        track.update(patch_updates)
+
+                liveness_gate = evaluate_live_track_liveness(track, face_quality=None, now_ts=frame_now_ts)
+                if liveness_gate.get("accepted") and not blink_liveness_gate.get("accepted"):
+                    liveness_gate = blink_liveness_gate
+                if liveness_gate.get("accepted") and not pose_landmark_gate.get("accepted"):
+                    liveness_gate = pose_landmark_gate
+                if liveness_gate.get("accepted") and patch_liveness_gate is not None and not patch_liveness_gate.get("accepted"):
+                    liveness_gate = patch_liveness_gate
+                if liveness_gate.get("accepted") and LIVE_LIVENESS_TEXTURE_CHECK_ENABLED:
                     face_quality = resolve_live_track_face_quality(
                         track,
                         frame,
@@ -9380,31 +10025,42 @@ def process_client_frame(frame_bytes):
                         scale_back=scale_back,
                         now_ts=frame_now_ts,
                     )
-                display_gate = evaluate_live_display_liveness(
-                    track,
-                    frame,
-                    track.get("small_location"),
-                    face_quality=face_quality,
-                    scale_back=scale_back,
-                )
-                display_updates = display_gate.get("updates") or {}
-                if display_updates:
-                    set_live_face_track_liveness_state(track.get("track_id"), **display_updates)
-                    track.update(display_updates)
-                if not display_gate.get("accepted"):
-                    liveness_gate = display_gate
-            if (
-                liveness_gate.get("accepted")
-                and LIVE_LIVENESS_ENABLED
-                and LIVE_LIVENESS_AI_MODEL_ENABLED
-            ):
-                ai_gate = evaluate_live_ai_liveness(
-                    frame,
-                    track.get("small_location"),
-                    scale_back=scale_back,
-                )
-                if not ai_gate.get("accepted"):
-                    liveness_gate = ai_gate
+                    texture_gate = evaluate_live_texture_liveness(face_quality)
+                    if not texture_gate.get("accepted"):
+                        liveness_gate = texture_gate
+                if liveness_gate.get("accepted") and LIVE_LIVENESS_DISPLAY_CHECK_ENABLED:
+                    if face_quality is None:
+                        face_quality = resolve_live_track_face_quality(
+                            track,
+                            frame,
+                            track.get("small_location"),
+                            scale_back=scale_back,
+                            now_ts=frame_now_ts,
+                        )
+                    display_gate = evaluate_live_display_liveness(
+                        track,
+                        frame,
+                        track.get("small_location"),
+                        face_quality=face_quality,
+                        scale_back=scale_back,
+                    )
+                    display_updates = display_gate.get("updates") or {}
+                    if display_updates:
+                        set_live_face_track_liveness_state(track.get("track_id"), **display_updates)
+                        track.update(display_updates)
+                    if not display_gate.get("accepted"):
+                        liveness_gate = display_gate
+                if liveness_gate.get("accepted") and LIVE_LIVENESS_AI_MODEL_ENABLED:
+                    ai_gate = evaluate_live_ai_liveness(
+                        frame,
+                        track.get("small_location"),
+                        scale_back=scale_back,
+                    )
+                    if not ai_gate.get("accepted"):
+                        liveness_gate = ai_gate
+            else:
+                blink_liveness_gate = {"accepted": True, "blink_detected": False}
+                liveness_gate = {"accepted": True, "reason": "liveness_bypassed", "message": ""}
             if not liveness_gate.get("accepted"):
                 hold_message = str(liveness_gate.get("message") or "Liveness Check Required")
                 if blink_liveness_gate.get("blink_detected") and hold_message.lower().startswith("liveness check"):
@@ -9418,19 +10074,23 @@ def process_client_frame(frame_bytes):
                     last_confidence=0.0,
                 )
                 continue
-            recognition_candidates.append({
-                "track_id": int(track.get("track_id") or 0),
-                "small_location": track.get("small_location"),
-                "full_location": full_location,
-                "area": float(track.get("area") or 0.0),
-                "face_quality": dict(face_quality) if isinstance(face_quality, dict) else None,
-            })
+            queued_track = dict(track)
+            queued_track["track_id"] = int(track.get("track_id") or 0)
+            queued_track["small_location"] = track.get("small_location")
+            queued_track["full_location"] = full_location
+            queued_track["area"] = float(track.get("area") or 0.0)
+            queued_track["face_quality"] = (
+                dict(face_quality)
+                if isinstance(face_quality, dict)
+                else dict(track.get("face_quality") or {}) if isinstance(track.get("face_quality"), dict) else None
+            )
+            eligible_tracks.append(queued_track)
 
         if ordered_tracks:
             with scan_lock:
-                scan_state["face_track_cursor"] = (track_cursor + max(len(recognition_candidates), 1)) % len(ordered_tracks)
+                scan_state["face_track_cursor"] = (track_cursor + max(len(eligible_tracks), 1)) % len(ordered_tracks)
 
-        if not recognition_candidates:
+        if not eligible_tracks:
             if liveness_holds:
                 return True, liveness_holds[0], payload
             if len(payload["faces"]) > 1:
@@ -9438,40 +10098,80 @@ def process_client_frame(frame_bytes):
             return True, "Face detected", payload
 
         cached_face_encodings = {}
-        tracks_needing_encoding = []
-        for track in recognition_candidates:
+        recognition_candidates = []
+        uncached_tracks = []
+        for track in eligible_tracks:
             cached_encoding = get_cached_live_track_encoding(track, now_ts=frame_now_ts)
             if cached_encoding is None:
-                tracks_needing_encoding.append(track)
+                uncached_tracks.append(track)
                 continue
             cached_face_encodings[int(track.get("track_id") or 0)] = cached_encoding
+            recognition_candidates.append(track)
+
+        remaining_candidate_slots = max(max_candidates - len(recognition_candidates), 0)
+        tracks_needing_encoding = uncached_tracks[: min(max_new_encodings, remaining_candidate_slots)]
+        recognition_candidates.extend(tracks_needing_encoding)
 
         new_face_encodings = {}
         if tracks_needing_encoding:
             face_locations_full = [row["full_location"] for row in tracks_needing_encoding]
             encoding_frame, encoding_face_locations = prepare_live_encoding_frame(frame, face_locations_full)
-            rgb_encoding = cv2.cvtColor(encoding_frame, cv2.COLOR_BGR2RGB) if encoding_frame is not None and encoding_frame.size else None
-            face_encs = face_recognition.face_encodings(
-                rgb_encoding,
+            low_light_retry_hint = False
+            if LIVE_RECOGNITION_LOW_LIGHT_ENCODING_RETRY_ENABLED:
+                for track in tracks_needing_encoding:
+                    face_quality = track.get("face_quality")
+                    if not isinstance(face_quality, dict) or not face_quality:
+                        face_quality = resolve_live_track_face_quality(
+                            track,
+                            frame,
+                            track.get("small_location"),
+                            scale_back=scale_back,
+                            now_ts=frame_now_ts,
+                        )
+                        track["face_quality"] = dict(face_quality) if isinstance(face_quality, dict) else {}
+                    brightness = float((face_quality or {}).get("brightness") or 0.0)
+                    if brightness > 0.0 and brightness < float(LIVE_RECOGNITION_LOW_LIGHT_ENCODING_BRIGHTNESS):
+                        low_light_retry_hint = True
+                        break
+
+            face_encs = encode_live_face_locations(
+                encoding_frame,
                 encoding_face_locations,
                 num_jitters=LIVE_RECOGNITION_ENCODING_JITTERS,
-                model="small",
-            ) if rgb_encoding is not None else []
+                low_light_hint=low_light_retry_hint,
+            )
 
-            if not face_encs:
-                fallback_locations = [
-                    _normalized_face_location(row.get("small_location"))
-                    for row in tracks_needing_encoding
-                ]
-                fallback_locations = [row for row in fallback_locations if row]
-                face_encs = face_recognition.face_encodings(
-                    rgb_small,
+            if len(face_encs) < len(tracks_needing_encoding):
+                face_encs.extend([None] * (len(tracks_needing_encoding) - len(face_encs)))
+
+            missing_indices = [
+                index
+                for index, encoding_row in enumerate(face_encs[:len(tracks_needing_encoding)])
+                if encoding_row is None
+            ]
+            if missing_indices:
+                fallback_locations = []
+                fallback_index_map = []
+                for index in missing_indices:
+                    fallback_location = _normalized_face_location(tracks_needing_encoding[index].get("small_location"))
+                    if not fallback_location:
+                        continue
+                    fallback_index_map.append(index)
+                    fallback_locations.append(fallback_location)
+                fallback_face_encs = encode_live_face_locations(
+                    small_frame,
                     fallback_locations,
                     num_jitters=LIVE_RECOGNITION_ENCODING_JITTERS,
-                    model="small",
+                    low_light_hint=low_light_retry_hint,
                 ) if fallback_locations else []
+                for position, encoding_row in enumerate(fallback_face_encs):
+                    if position >= len(fallback_index_map):
+                        break
+                    face_encs[fallback_index_map[position]] = encoding_row
 
             for track, enc in zip(tracks_needing_encoding, face_encs):
+                if enc is None:
+                    continue
                 normalized_encoding = cache_live_track_encoding(track, enc, now_ts=frame_now_ts)
                 if normalized_encoding is None:
                     continue
@@ -9866,17 +10566,41 @@ def scan_events():
         since = max(int(request.args.get("since", "0")), 0)
     except (TypeError, ValueError):
         since = 0
+    return jsonify(build_scan_events_payload(since))
+
+
+def build_scan_events_payload(since=0):
+    try:
+        normalized_since = max(int(since), 0)
+    except (TypeError, ValueError):
+        normalized_since = 0
+
     with scan_lock:
-        events = [e for e in scan_state["events"] if e["id"] > since]
-        active = scan_state["active"]
-        session_mode = normalize_scan_session_mode(scan_state.get("session_mode", "auto"), default="auto")
-        liveness_profile = normalize_scan_liveness_profile(scan_state.get("liveness_profile", LIVE_LIVENESS_PROFILE))
-        model_status = str(scan_state.get("model_status") or "idle")
-        face_index_loading = bool(scan_state.get("face_index_loading"))
-        registered_faces = len(scan_state.get("known_students", []))
-        active_tracks = len(scan_state.get("face_tracks") or {})
+        payload = _build_scan_events_payload_locked(normalized_since)
+
     effective_session = resolve_gate_session(now_local())
-    return jsonify({
+    payload["effective_session"] = {
+        "session": effective_session.get("session", ""),
+        "gate_action": effective_session.get("gate_action", ""),
+        "verification_label": effective_session.get("verification_label", ""),
+        "status": effective_session.get("status", ""),
+    }
+    return payload
+
+
+def _build_scan_events_payload_locked(since=0):
+    events = [dict(e) for e in scan_state.get("events", []) if int(e.get("id") or 0) > since]
+    last_event_id = int(since)
+    if events:
+        last_event_id = max(int(row.get("id") or 0) for row in events)
+    active = bool(scan_state.get("active"))
+    session_mode = normalize_scan_session_mode(scan_state.get("session_mode", "auto"), default="auto")
+    liveness_profile = normalize_scan_liveness_profile(scan_state.get("liveness_profile", LIVE_LIVENESS_PROFILE))
+    model_status = str(scan_state.get("model_status") or "idle")
+    face_index_loading = bool(scan_state.get("face_index_loading"))
+    registered_faces = len(scan_state.get("known_students") or [])
+    active_tracks = len(scan_state.get("face_tracks") or {})
+    return {
         "events": events,
         "active": active,
         "scan_session_mode": session_mode,
@@ -9887,13 +10611,54 @@ def scan_events():
         "active_tracks": int(active_tracks),
         "session_mode_label": scan_session_mode_label(session_mode),
         "liveness_profile_label": scan_liveness_profile_label(liveness_profile),
-        "effective_session": {
-            "session": effective_session.get("session", ""),
-            "gate_action": effective_session.get("gate_action", ""),
-            "verification_label": effective_session.get("verification_label", ""),
-            "status": effective_session.get("status", ""),
-        },
-    })
+        "last_event_id": int(last_event_id),
+        "server_time": now_iso(),
+    }
+
+
+@app.route("/api/scan/stream")
+@require_permission("scan", api=True)
+def scan_events_stream():
+    try:
+        since = max(int(request.args.get("since", "0")), 0)
+    except (TypeError, ValueError):
+        since = 0
+
+    def generate(initial_since):
+        last_seen = int(initial_since)
+        yield "retry: 1200\n\n"
+        while True:
+            try:
+                payload = None
+                with scan_event_condition:
+                    payload = _build_scan_events_payload_locked(last_seen)
+                    if not payload.get("events"):
+                        scan_event_condition.wait(timeout=1.2)
+                        payload = _build_scan_events_payload_locked(last_seen)
+                    if payload.get("events"):
+                        last_seen = int(payload.get("last_event_id") or last_seen)
+
+                if payload and payload.get("events"):
+                    effective_session = resolve_gate_session(now_local())
+                    payload["effective_session"] = {
+                        "session": effective_session.get("session", ""),
+                        "gate_action": effective_session.get("gate_action", ""),
+                        "verification_label": effective_session.get("verification_label", ""),
+                        "status": effective_session.get("status", ""),
+                    }
+                    yield f"event: scan_event\ndata: {json.dumps(payload)}\n\n"
+                else:
+                    yield ": keep-alive\n\n"
+            except GeneratorExit:
+                break
+            except Exception:
+                time.sleep(1.2)
+
+    return Response(
+        stream_with_context(generate(since)),
+        mimetype="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.route("/api/scan/session-mode", methods=["GET", "POST"])
@@ -11102,17 +11867,208 @@ def build_face_capture_variants(img_np):
     return variants
 
 
+def _normalize_registration_face_location(location):
+    if not isinstance(location, (list, tuple)) or len(location) != 4:
+        return None
+    try:
+        top = int(round(float(location[0])))
+        right = int(round(float(location[1])))
+        bottom = int(round(float(location[2])))
+        left = int(round(float(location[3])))
+    except (TypeError, ValueError):
+        return None
+    if bottom <= top or right <= left:
+        return None
+    return (top, right, bottom, left)
+
+
+def _scale_face_location_to_image(location, source_shape, target_shape, padding_ratio=0.0):
+    normalized = _normalize_registration_face_location(location)
+    if normalized is None:
+        return None
+
+    source_height = max(int((source_shape or [0, 0])[0] or 0), 1)
+    source_width = max(int((source_shape or [0, 0])[1] or 0), 1)
+    target_height = max(int((target_shape or [0, 0])[0] or 0), 1)
+    target_width = max(int((target_shape or [0, 0])[1] or 0), 1)
+    scale_y = float(target_height) / float(source_height)
+    scale_x = float(target_width) / float(source_width)
+
+    top, right, bottom, left = normalized
+    scaled_top = float(top) * scale_y
+    scaled_right = float(right) * scale_x
+    scaled_bottom = float(bottom) * scale_y
+    scaled_left = float(left) * scale_x
+
+    if padding_ratio > 0.0:
+        width = max(scaled_right - scaled_left, 1.0)
+        height = max(scaled_bottom - scaled_top, 1.0)
+        pad_x = width * float(padding_ratio)
+        pad_y = height * float(padding_ratio)
+        scaled_top -= pad_y
+        scaled_bottom += pad_y
+        scaled_left -= pad_x
+        scaled_right += pad_x
+
+    scaled_top = max(0, min(target_height, int(round(scaled_top))))
+    scaled_right = max(0, min(target_width, int(round(scaled_right))))
+    scaled_bottom = max(0, min(target_height, int(round(scaled_bottom))))
+    scaled_left = max(0, min(target_width, int(round(scaled_left))))
+    if scaled_bottom <= scaled_top or scaled_right <= scaled_left:
+        return None
+    return (scaled_top, scaled_right, scaled_bottom, scaled_left)
+
+
+def _coerce_capture_pose_value(value):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _classify_capture_pose_bucket(yaw_value, pitch_value):
+    yaw = float(yaw_value or 0.0)
+    pitch = float(pitch_value or 0.0)
+
+    if yaw <= -0.24:
+        yaw_band = "right_profile"
+    elif yaw <= -0.09:
+        yaw_band = "right"
+    elif yaw >= 0.24:
+        yaw_band = "left_profile"
+    elif yaw >= 0.09:
+        yaw_band = "left"
+    else:
+        yaw_band = "center"
+
+    if pitch <= -0.16:
+        pitch_band = "up_high"
+    elif pitch <= -0.07:
+        pitch_band = "up"
+    elif pitch >= 0.16:
+        pitch_band = "down_low"
+    elif pitch >= 0.07:
+        pitch_band = "down"
+    else:
+        pitch_band = "level"
+    return f"{yaw_band}:{pitch_band}"
+
+
+def summarize_face_capture_pose_diversity(capture_meta):
+    yaw_values = []
+    pitch_values = []
+    bucket_counts = {}
+    for row in list(capture_meta or []):
+        if not isinstance(row, dict):
+            continue
+        yaw = _coerce_capture_pose_value(row.get("yaw"))
+        pitch = _coerce_capture_pose_value(row.get("pitch"))
+        if yaw is None and pitch is None:
+            continue
+        yaw = 0.0 if yaw is None else yaw
+        pitch = 0.0 if pitch is None else pitch
+        yaw_values.append(yaw)
+        pitch_values.append(pitch)
+        bucket = _classify_capture_pose_bucket(yaw, pitch)
+        bucket_counts[bucket] = int(bucket_counts.get(bucket, 0) or 0) + 1
+
+    yaw_span = max(yaw_values) - min(yaw_values) if yaw_values else 0.0
+    pitch_span = max(pitch_values) - min(pitch_values) if pitch_values else 0.0
+    unique_buckets = sorted(bucket_counts.keys())
+    return {
+        "sample_count": len(yaw_values),
+        "unique_bucket_count": len(unique_buckets),
+        "unique_buckets": unique_buckets,
+        "yaw_span": round(float(yaw_span), 6),
+        "pitch_span": round(float(pitch_span), 6),
+    }
+
+
+def validate_face_registration_diversity(face_encodings, capture_details):
+    metadata = build_face_registration_metadata(face_encodings)
+    capture_details = capture_details if isinstance(capture_details, dict) else {}
+    capture_profile = normalize_face_capture_profile(capture_details.get("capture_profile"))
+    pose_summary = summarize_face_capture_pose_diversity(capture_details.get("capture_meta", []))
+
+    min_pose_buckets = (
+        int(FACE_REGISTRATION_MIN_POSE_BUCKETS_SIMILAR)
+        if capture_profile == "similar_faces"
+        else int(FACE_REGISTRATION_MIN_POSE_BUCKETS_STANDARD)
+    )
+    min_pose_samples = 8 if capture_profile == "similar_faces" else 5
+    min_yaw_span = 0.24 if capture_profile == "similar_faces" else 0.18
+    min_pitch_span = 0.18 if capture_profile == "similar_faces" else 0.12
+    encoding_spread = float(metadata.get("face_encoding_spread") or 0.0)
+
+    if metadata.get("face_encoding_count", 0) >= 2 and encoding_spread < float(FACE_REGISTRATION_MIN_ENCODING_SPREAD):
+        return {
+            "ok": False,
+            "message": "The captures are too similar. Follow the guided angles more distinctly before saving.",
+            "details": {
+                "face_encoding_spread": round(encoding_spread, 6),
+                "min_encoding_spread": round(float(FACE_REGISTRATION_MIN_ENCODING_SPREAD), 6),
+                "pose_bucket_count": int(pose_summary.get("unique_bucket_count") or 0),
+                "pose_sample_count": int(pose_summary.get("sample_count") or 0),
+                "yaw_span": float(pose_summary.get("yaw_span") or 0.0),
+                "pitch_span": float(pose_summary.get("pitch_span") or 0.0),
+            },
+        }
+
+    if (
+        min_pose_buckets > 0
+        and int(pose_summary.get("sample_count") or 0) >= min_pose_samples
+    ):
+        unique_bucket_count = int(pose_summary.get("unique_bucket_count") or 0)
+        yaw_span = float(pose_summary.get("yaw_span") or 0.0)
+        pitch_span = float(pose_summary.get("pitch_span") or 0.0)
+        if unique_bucket_count < min_pose_buckets:
+            return {
+                "ok": False,
+                "message": "Need more face-angle variety across the guided sequence before saving.",
+                "details": {
+                    "pose_bucket_count": unique_bucket_count,
+                    "min_pose_bucket_count": int(min_pose_buckets),
+                    "pose_sample_count": int(pose_summary.get("sample_count") or 0),
+                    "yaw_span": yaw_span,
+                    "pitch_span": pitch_span,
+                    "face_encoding_spread": round(encoding_spread, 6),
+                },
+            }
+        if yaw_span < min_yaw_span and pitch_span < min_pitch_span:
+            return {
+                "ok": False,
+                "message": "Need clearer head-angle movement across the guided captures before saving.",
+                "details": {
+                    "pose_bucket_count": unique_bucket_count,
+                    "pose_sample_count": int(pose_summary.get("sample_count") or 0),
+                    "yaw_span": yaw_span,
+                    "pitch_span": pitch_span,
+                    "min_yaw_span": round(float(min_yaw_span), 6),
+                    "min_pitch_span": round(float(min_pitch_span), 6),
+                    "face_encoding_spread": round(encoding_spread, 6),
+                },
+            }
+
+    return {
+        "ok": True,
+        "metadata": metadata,
+        "pose_summary": pose_summary,
+    }
+
+
 def validate_face_capture_image(raw_face):
     try:
         img_b64 = raw_face.split(",", 1)[1]
         img_bytes = base64.b64decode(img_b64)
         img = Image.open(BytesIO(img_bytes)).convert("RGB")
-        img_np = np.array(img)
+        img_np_full = np.array(img)
     except Exception as exc:
         print(f"[WARNING] Face capture decode skipped: {exc}")
         return None
 
     try:
+        original_height, original_width = img_np_full.shape[:2]
+        img_np = img_np_full
         height, width = img_np.shape[:2]
         max_dimension = max(height, width)
         if max_dimension > 448:
@@ -11176,11 +12132,28 @@ def validate_face_capture_image(raw_face):
                 "sharpness": quality["sharpness"],
             }
 
-        enc_rows = face_recognition.face_encodings(
-            img_np,
-            known_face_locations=face_locations,
-            num_jitters=FACE_REGISTRATION_ENCODING_JITTERS,
+        full_resolution_location = _scale_face_location_to_image(
+            face_locations[0],
+            img_np.shape,
+            img_np_full.shape,
+            padding_ratio=0.08,
         )
+        enc_rows = []
+        if full_resolution_location is not None:
+            for candidate_img in build_face_capture_variants(img_np_full):
+                enc_rows = face_recognition.face_encodings(
+                    candidate_img,
+                    known_face_locations=[full_resolution_location],
+                    num_jitters=FACE_REGISTRATION_ENCODING_JITTERS,
+                )
+                if enc_rows:
+                    break
+        if not enc_rows:
+            enc_rows = face_recognition.face_encodings(
+                img_np,
+                known_face_locations=face_locations,
+                num_jitters=FACE_REGISTRATION_ENCODING_JITTERS,
+            )
         if not enc_rows:
             return {
                 "ok": False,
@@ -11639,6 +12612,7 @@ def api_students_reenroll():
 
 def resolve_students_export_logo_path():
     candidate_paths = [
+        os.path.join(app.root_path, "static", "DepED-Logo (1).png"),
         os.path.join(app.root_path, "static", "logo.png"),
         os.path.join(app.root_path, "static", "deped-logo.png"),
         os.path.join(app.root_path, "static", "favicon-32x32.png"),
@@ -11737,6 +12711,180 @@ def build_report_signatories(prepared_by_name=""):
         "approved_by_name": resolve_report_principal_name(),
         "approved_by_title": REPORT_PRINCIPAL_TITLE,
     }
+
+
+def resolve_pdf_export_brand_font_name():
+    if PDF_EXPORT_OLD_ENGLISH_FONT_NAME in pdfmetrics.getRegisteredFontNames():
+        return PDF_EXPORT_OLD_ENGLISH_FONT_NAME
+
+    for font_path in PDF_EXPORT_OLD_ENGLISH_FONT_PATHS:
+        if not os.path.exists(font_path):
+            continue
+        try:
+            pdfmetrics.registerFont(TTFont(PDF_EXPORT_OLD_ENGLISH_FONT_NAME, font_path))
+            return PDF_EXPORT_OLD_ENGLISH_FONT_NAME
+        except Exception:
+            continue
+
+    return "Times-Bold"
+
+
+def resolve_pdf_export_header_logo_path():
+    candidate_paths = [
+        os.path.join(app.root_path, "static", "DepED-Logo (1).png"),
+        os.path.join(app.root_path, "static", "deped-seal.png"),
+        os.path.join(app.root_path, "static", "deped-seal.jpg"),
+        os.path.join(app.root_path, "static", "deped-seal.jpeg"),
+        os.path.join(app.root_path, "static", "deped-logo.png"),
+        os.path.join(app.root_path, "static", "logo.png"),
+    ]
+    for path in candidate_paths:
+        if os.path.exists(path):
+            return path
+    return ""
+
+
+def build_pdf_export_logo_flowable(max_width=1.16 * inch, max_height=0.58 * inch):
+    logo_path = resolve_pdf_export_header_logo_path()
+    if not logo_path:
+        return None
+
+    logo_width = max_width
+    logo_height = max_height
+    try:
+        with Image.open(logo_path) as logo_image:
+            src_width, src_height = logo_image.size
+            if src_width and src_height:
+                ratio = min(float(max_width) / float(src_width), float(max_height) / float(src_height))
+                logo_width = max(src_width * ratio, 1)
+                logo_height = max(src_height * ratio, 1)
+    except Exception:
+        pass
+
+    logo_flowable = RLImage(logo_path, width=logo_width, height=logo_height)
+    logo_flowable.hAlign = "CENTER"
+    return logo_flowable
+
+
+def build_pdf_export_header_styles():
+    styles = getSampleStyleSheet()
+    brand_font_name = resolve_pdf_export_brand_font_name()
+    return {
+        "republic": ParagraphStyle(
+            "PdfExportHeaderRepublic",
+            parent=styles["Normal"],
+            fontName=brand_font_name,
+            fontSize=15.2,
+            leading=16.4,
+            alignment=TA_CENTER,
+            textColor=colors.HexColor("#111111"),
+        ),
+        "department": ParagraphStyle(
+            "PdfExportHeaderDepartment",
+            parent=styles["Normal"],
+            fontName=brand_font_name,
+            fontSize=14.6,
+            leading=15.8,
+            alignment=TA_CENTER,
+            textColor=colors.HexColor("#111111"),
+        ),
+        "region": ParagraphStyle(
+            "PdfExportHeaderRegion",
+            parent=styles["Normal"],
+            fontName="Helvetica-Bold",
+            fontSize=12.8,
+            leading=14.0,
+            alignment=TA_CENTER,
+            textColor=colors.HexColor("#1f2937"),
+        ),
+        "division": ParagraphStyle(
+            "PdfExportHeaderDivision",
+            parent=styles["Normal"],
+            fontName="Helvetica-Bold",
+            fontSize=10.7,
+            leading=11.8,
+            alignment=TA_CENTER,
+            textColor=colors.HexColor("#1f2937"),
+        ),
+        "district": ParagraphStyle(
+            "PdfExportHeaderDistrict",
+            parent=styles["Normal"],
+            fontName="Helvetica",
+            fontSize=10.2,
+            leading=11.2,
+            alignment=TA_CENTER,
+            textColor=colors.HexColor("#374151"),
+        ),
+        "school": ParagraphStyle(
+            "PdfExportHeaderSchool",
+            parent=styles["Normal"],
+            fontName="Helvetica-Bold",
+            fontSize=15.4,
+            leading=16.8,
+            alignment=TA_CENTER,
+            textColor=colors.HexColor("#1f2937"),
+        ),
+        "address": ParagraphStyle(
+            "PdfExportHeaderAddress",
+            parent=styles["Normal"],
+            fontName="Helvetica",
+            fontSize=10.4,
+            leading=11.5,
+            alignment=TA_CENTER,
+            textColor=colors.HexColor("#4b5563"),
+        ),
+        "report_title": ParagraphStyle(
+            "PdfExportHeaderReportTitle",
+            parent=styles["Normal"],
+            fontName="Helvetica-Bold",
+            fontSize=11.2,
+            leading=13.0,
+            alignment=TA_CENTER,
+            textColor=colors.HexColor("#111827"),
+        ),
+        "report_caption": ParagraphStyle(
+            "PdfExportHeaderReportCaption",
+            parent=styles["Normal"],
+            fontName="Helvetica",
+            fontSize=9.1,
+            leading=10.8,
+            alignment=TA_CENTER,
+            textColor=colors.HexColor("#4b5563"),
+        ),
+    }
+
+
+def build_pdf_export_header_block(document_title, header_caption=""):
+    styles = build_pdf_export_header_styles()
+    header_story = []
+    logo_flowable = build_pdf_export_logo_flowable()
+    if logo_flowable is not None:
+        header_story.append(logo_flowable)
+        header_story.append(Spacer(1, 0.03 * inch))
+
+    header_story.extend([
+        Paragraph(xml_escape(PDF_EXPORT_HEADER_REPUBLIC), styles["republic"]),
+        Paragraph(xml_escape(PDF_EXPORT_HEADER_DEPARTMENT), styles["department"]),
+        Spacer(1, 0.015 * inch),
+        Paragraph(xml_escape(PDF_EXPORT_HEADER_REGION), styles["region"]),
+        Paragraph(xml_escape(PDF_EXPORT_HEADER_DIVISION), styles["division"]),
+        Paragraph(xml_escape(PDF_EXPORT_HEADER_DISTRICT), styles["district"]),
+        Paragraph(xml_escape(PDF_EXPORT_HEADER_SCHOOL), styles["school"]),
+        Paragraph(xml_escape(PDF_EXPORT_HEADER_ADDRESS), styles["address"]),
+        Spacer(1, 0.06 * inch),
+        HRFlowable(width="100%", thickness=0.9, color=colors.HexColor("#4b5563")),
+        Spacer(1, 0.08 * inch),
+        Paragraph(xml_escape(str(document_title or "").strip()), styles["report_title"]),
+    ])
+
+    caption_text = str(header_caption or "").strip()
+    title_text = str(document_title or "").strip()
+    if caption_text and caption_text.lower() != title_text.lower():
+        header_story.append(Spacer(1, 0.02 * inch))
+        header_story.append(Paragraph(xml_escape(caption_text), styles["report_caption"]))
+
+    header_story.append(Spacer(1, 0.14 * inch))
+    return KeepTogether(header_story)
 
 
 def build_school_export_footer(canvas_obj, doc):
@@ -11865,7 +13013,7 @@ def build_school_export_styles():
             fontName="Helvetica",
             fontSize=9,
             leading=12,
-            alignment=TA_LEFT,
+            alignment=TA_CENTER,
             textColor=colors.black,
         ),
         "note": ParagraphStyle(
@@ -11897,15 +13045,7 @@ def build_school_export_document(document_title, header_caption, metadata_items,
     doc.export_footer_title = footer_title
 
     styles = build_school_export_styles()
-    story = []
-    story.append(Paragraph(xml_escape(document_title), styles["header_title"]))
-    story.append(Spacer(1, 0.06 * inch))
-    story.append(Paragraph("Cawitan High School", styles["subtitle"]))
-    story.append(Paragraph("Cawitan, Sta. Catalina, Negros Oriental", styles["subtitle"]))
-    story.append(Paragraph(xml_escape(header_caption), styles["subtitle"]))
-    story.append(Spacer(1, 0.12 * inch))
-    story.append(HRFlowable(width="100%", thickness=1.2, color=colors.black))
-    story.append(Spacer(1, 0.16 * inch))
+    story = [build_pdf_export_header_block(document_title, header_caption)]
 
     metadata_rows = []
     items = list(metadata_items or [])
@@ -11978,13 +13118,23 @@ def build_school_export_table(data, col_widths, styles, span_empty_row=False):
 
 def build_report_signature_markup(label, name, title=""):
     safe_label = xml_escape(str(label or "").strip() or "Signature")
-    safe_name = xml_escape(str(name or "").strip() or "Pending")
-    safe_title = xml_escape(str(title or "").strip())
-    title_line = f"<br/>{safe_title}" if safe_title else ""
+    raw_name = str(name or "").strip()
+    raw_title = str(title or "").strip()
+    display_lines = []
+    normalized_name = raw_name.casefold()
+    normalized_title = raw_title.casefold()
+
+    if raw_name and normalized_name != "admin" and normalized_name != normalized_title:
+        display_lines.append(xml_escape(raw_name))
+    if raw_title and normalized_title != normalized_name:
+        display_lines.append(xml_escape(raw_title))
+    if not display_lines:
+        display_lines.append(xml_escape(raw_title or raw_name or "Pending"))
+
     return (
         f"<b>{safe_label}</b><br/><br/><br/>"
         "______________________________<br/>"
-        f"{safe_name}{title_line}"
+        + "<br/>".join(display_lines)
     )
 
 
@@ -12012,8 +13162,7 @@ def build_report_signature_footer_block(styles, signatories=None):
             colWidths=[4.35 * inch, 4.35 * inch],
             style=TableStyle([
                 ("VALIGN", (0, 0), (-1, -1), "BOTTOM"),
-                ("ALIGN", (0, 0), (0, 0), "LEFT"),
-                ("ALIGN", (1, 0), (1, 0), "LEFT"),
+                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
                 ("LEFTPADDING", (0, 0), (-1, -1), 0),
                 ("RIGHTPADDING", (0, 0), (-1, -1), 0),
                 ("TOPPADDING", (0, 0), (-1, -1), 0),
@@ -12131,7 +13280,7 @@ def build_students_plain_export_styles():
             fontName="Helvetica",
             fontSize=9,
             leading=12,
-            alignment=TA_LEFT,
+            alignment=TA_CENTER,
             textColor=colors.black,
         ),
         "note": ParagraphStyle(
@@ -12533,13 +13682,7 @@ def build_students_plain_export_pdf(export_payload, signatories):
     doc.export_title = "Official Student Records Report"
     doc.export_subject = f"Student records export - {export_payload['scope_label']}"
 
-    story = [
-        Paragraph("Official Student Records Report", styles["title"]),
-        Spacer(1, 0.06 * inch),
-        Paragraph("Cawitan High School", styles["subtitle"]),
-        Paragraph(f"School Year: {xml_escape(school_year_label)}", styles["subtitle"]),
-        Spacer(1, 0.14 * inch),
-    ]
+    story = [build_pdf_export_header_block("Official Student Records Report")]
 
     metadata_items = [
         ("Generated At", generated_at_label),
@@ -13661,6 +14804,15 @@ def save_face_registration(student_id, is_update=False):
     if err_message:
         return api_error(err_message, 400, err_field, err_extra)
 
+    diversity_gate = validate_face_registration_diversity(face_encodings, capture_details)
+    if not diversity_gate.get("ok"):
+        return api_error(
+            diversity_gate.get("message") or "The guided captures need more variation before saving.",
+            400,
+            "faces",
+            diversity_gate.get("details") or {},
+        )
+
     db_centroids, db_students = load_face_index_from_db(
         allow_legacy_fallback=False,
         prefer_current_roster=True,
@@ -13691,7 +14843,8 @@ def save_face_registration(student_id, is_update=False):
             },
         )
 
-    face_metadata = build_face_registration_metadata(face_encodings)
+    face_metadata = diversity_gate.get("metadata") if isinstance(diversity_gate.get("metadata"), dict) else build_face_registration_metadata(face_encodings)
+    pose_summary = diversity_gate.get("pose_summary") if isinstance(diversity_gate.get("pose_summary"), dict) else summarize_face_capture_pose_diversity(capture_details.get("capture_meta", []))
 
     update_doc = {
         "face_data": faces_array,
@@ -13699,6 +14852,10 @@ def save_face_registration(student_id, is_update=False):
         "face_capture_profile": capture_details.get("capture_profile", "standard") if isinstance(capture_details, dict) else "standard",
         "face_capture_count": int(face_metadata.get("face_encoding_count") or len(faces_array)),
         "face_capture_meta": capture_details.get("capture_meta", []) if isinstance(capture_details, dict) else [],
+        "face_pose_bucket_count": int(pose_summary.get("unique_bucket_count") or 0),
+        "face_pose_sample_count": int(pose_summary.get("sample_count") or 0),
+        "face_pose_yaw_span": float(pose_summary.get("yaw_span") or 0.0),
+        "face_pose_pitch_span": float(pose_summary.get("pitch_span") or 0.0),
         "profile_photo": faces_array[0] if faces_array else "",
         "face_registered": True,
         "face_updated_at": now_local(),
@@ -14456,12 +15613,14 @@ def sms_logs_page():
         "failed_count": logs_collection.count_documents({**query, "status": sms_status_mongo_filter("failed")}),
     }
     sms_template = get_attendance_sms_template_payload()
+    sms_notification_settings = get_attendance_sms_notification_settings_payload()
 
     return render_template(
         "sms_logs.html",
         logs=logs,
         stats=stats,
         sms_template=sms_template,
+        sms_notification_settings=sms_notification_settings,
         sms_template_variables=ATTENDANCE_SMS_TEMPLATE_VARIABLES,
         filters=filters_payload,
         pagination=pagination,
@@ -14526,6 +15685,66 @@ def sms_logs_template_update():
             "default_template": saved_template.get("default_template", ""),
             "max_length": saved_template.get("max_length", SMS_TEMPLATE_MAX_LENGTH),
             "variables": saved_template.get("variables", list(ATTENDANCE_SMS_TEMPLATE_VARIABLES)),
+        }
+    )
+
+
+@app.route("/sms-logs/notifications", methods=["POST"])
+@require_permission("logs", api=True)
+def sms_logs_notification_settings_update():
+    if request.is_json:
+        payload = request.get_json(silent=True) or {}
+        raw_enabled = payload.get("enabled")
+    else:
+        raw_enabled = request.form.get("enabled")
+
+    actor_username = session.get("admin", "system")
+    actor_role = session.get("role", "System")
+
+    try:
+        saved_settings = save_attendance_sms_notification_settings(
+            raw_enabled,
+            actor_username=actor_username,
+            actor_role=actor_role,
+        )
+    except ValueError as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 400
+    except Exception as exc:
+        log_audit_event(
+            action="sms.notifications.update",
+            outcome="failed",
+            severity="warn",
+            target_type="system_setting",
+            target_id=ATTENDANCE_SMS_NOTIFICATION_SETTINGS_KEY,
+            details={"error": str(exc)},
+        )
+        return jsonify({"status": "error", "message": "Failed to update SMS notification setting."}), 500
+
+    enabled = bool(saved_settings.get("enabled"))
+    status_message = (
+        "Attendance SMS notifications enabled."
+        if enabled
+        else "Attendance SMS notifications disabled. Events will still be recorded in SMS Logs."
+    )
+    log_audit_event(
+        action="sms.notifications.update",
+        outcome="success",
+        severity="info",
+        target_type="system_setting",
+        target_id=ATTENDANCE_SMS_NOTIFICATION_SETTINGS_KEY,
+        details={
+            "enabled": enabled,
+            "updated_by": actor_username,
+        },
+    )
+    return jsonify(
+        {
+            "status": "ok",
+            "message": status_message,
+            "enabled": enabled,
+            "status_label": saved_settings.get("status_label", "Enabled" if enabled else "Disabled"),
+            "updated_at": saved_settings.get("updated_at", ""),
+            "updated_by": saved_settings.get("updated_by", ""),
         }
     )
 
@@ -14665,6 +15884,38 @@ def sms_logs_resend(id):
     message = original.get("message", "")
     if not parent_contact or not message:
         return jsonify({"status": "error", "message": "Missing recipient or message content."}), 400
+
+    if not attendance_sms_notifications_enabled():
+        log_skipped_sms(
+            student_id=original.get("student_id", ""),
+            student_name=original.get("name", ""),
+            parent_contact=parent_contact,
+            message=f"Attendance SMS notifications are disabled. Resend not sent for {original.get('name') or original.get('student_id') or 'Unknown student'}.",
+            reason="notifications_disabled",
+            sms_type=original.get("type", "transactional"),
+            metadata={
+                "context": "sms_resend",
+                "resent_from": str(original.get("_id")),
+                "school_year": normalize_school_year_value(original.get("school_year")),
+                "notifications_enabled": False,
+            },
+        )
+        log_audit_event(
+            action="sms.resend",
+            outcome="blocked",
+            severity="info",
+            target_type="sms_log",
+            target_id=id,
+            details={"reason": "notifications_disabled"},
+        )
+        return jsonify({
+            "status": "ok",
+            "message": "Attendance SMS notifications are disabled. Resend was recorded but not sent.",
+            "sms_status": "DISABLED",
+            "provider_message_id": "",
+            "error": "",
+            "timestamp": now_iso(),
+        })
 
     sms_result = send_sms(
         parent_contact,
@@ -15489,7 +16740,7 @@ def api_eto_list():
     date_filter = request.args.get("date", "").strip()
     student_q = request.args.get("q", "").strip()
     limit = min(int(request.args.get("limit", 50)), 200)
-    school_year = request.args.get("school_year", "").strip()
+    school_year = resolve_selected_school_year(request.args.get("school_year", ""))
 
     query = {}
     if status_filter in ("pending", "approved", "denied"):
@@ -15527,7 +16778,7 @@ def api_eto_approve(request_id):
         return jsonify({"status": "error", "message": "Invalid request ID."}), 400
 
     # Get school year from request or use current
-    school_year = request.args.get("school_year", "") or request.form.get("school_year", "")
+    school_year = resolve_selected_school_year(request.args.get("school_year", "") or request.form.get("school_year", ""))
     eto_collection, _, _ = get_early_timeout_requests_storage(school_year)
     
     eto = eto_collection.find_one({"_id": oid})
@@ -15609,7 +16860,7 @@ def api_eto_deny(request_id):
         return jsonify({"status": "error", "message": "Invalid request ID."}), 400
 
     # Get school year from request or use current
-    school_year = request.args.get("school_year", "") or request.form.get("school_year", "")
+    school_year = resolve_selected_school_year(request.args.get("school_year", "") or request.form.get("school_year", ""))
     eto_collection, _, _ = get_early_timeout_requests_storage(school_year)
     
     eto = eto_collection.find_one({"_id": oid})
@@ -15668,6 +16919,7 @@ def api_eto_delete(request_id):
 def admin_calendar():
     return render_template(
         "admin_calendar.html",
+        school_year_start_month=SCHOOL_YEAR_START_MONTH,
         **sidebar_context("calendar", resolve_selected_school_year(request.args.get("school_year", "")))
     )
 
@@ -15712,12 +16964,12 @@ def api_get_calendar_events():
     
     start_date = request.args.get("start")
     end_date = request.args.get("end")
-    school_year = request.args.get("school_year", "").strip()
+    school_year = resolve_selected_school_year(request.args.get("school_year", ""))
     
     # Get the appropriate storage collection based on school year
     calendar_collection, _, _ = get_calendar_events_storage(school_year)
     
-    query = {}
+    query = {"school_year": school_year}
     if start_date or end_date:
         date_q = {}
         if start_date: date_q["$gte"] = start_date
@@ -15739,12 +16991,12 @@ def api_create_calendar_event():
         return jsonify({"status": "error", "message": "Unauthorized"}), 401
         
     payload = request.json or {}
-    date_str = payload.get("date")
-    type_str = payload.get("type", "holiday")
-    title = payload.get("title", "")
-    special_cond = payload.get("special_condition", "")
+    date_str = str(payload.get("date") or "").strip()
+    type_str = str(payload.get("type", "holiday") or "holiday").strip()
+    title = str(payload.get("title", "") or "").strip()
+    special_cond = str(payload.get("special_condition", "") or "").strip()
     custom_schedule = payload.get("custom_schedule")
-    school_year = payload.get("school_year", "").strip()
+    school_year = normalize_school_year_value(payload.get("school_year", ""))
     
     if not date_str:
         return jsonify({"status": "error", "message": "Date is required"}), 400
@@ -15785,11 +17037,12 @@ def api_update_calendar_event(event_id):
         return jsonify({"status": "error", "message": "Unauthorized"}), 401
         
     payload = request.json or {}
-    type_str = payload.get("type", "holiday")
-    title = payload.get("title", "")
-    special_cond = payload.get("special_condition", "")
+    date_str = str(payload.get("date") or "").strip()
+    type_str = str(payload.get("type", "holiday") or "holiday").strip()
+    title = str(payload.get("title", "") or "").strip()
+    special_cond = str(payload.get("special_condition", "") or "").strip()
     custom_schedule = payload.get("custom_schedule")
-    school_year = payload.get("school_year", "").strip()
+    school_year = normalize_school_year_value(payload.get("school_year", ""))
     
     # First, try to find the event in active collection, then archive collections
     from bson import ObjectId
@@ -15798,31 +17051,20 @@ def api_update_calendar_event(event_id):
     except Exception:
         return jsonify({"status": "error", "message": "Invalid event ID"}), 400
     
-    # Find the event across all collections to determine its school year
-    event_doc = None
-    target_collection = None
-    
-    # Check current school year collection first
-    current_collection, _, _ = get_calendar_events_storage("")
-    event_doc = current_collection.find_one({"_id": oid})
-    if event_doc:
-        target_collection = current_collection
-    else:
-        # Check archive collections by trying different school years
-        # For now, we'll search the main calendar_events as fallback
-        event_doc = calendar_events.find_one({"_id": oid})
-        if event_doc:
-            target_collection = calendar_events
-    
+    event_doc, source_collection, _is_archived = find_record_in_active_or_archive(calendar_events, calendar_events_archive, oid)
     if not event_doc:
         return jsonify({"status": "error", "message": "Event not found"}), 404
+
+    event_date_str = date_str or str(event_doc.get("date") or "").strip()
+    if not event_date_str:
+        return jsonify({"status": "error", "message": "Date is required"}), 400
     
     # Use the event's school year or derive from date
     event_school_year = school_year or event_doc.get("school_year")
-    if not event_school_year and event_doc.get("date"):
+    if not event_school_year and event_date_str:
         from datetime import datetime
         try:
-            event_date = datetime.strptime(event_doc["date"], "%Y-%m-%d")
+            event_date = datetime.strptime(event_date_str, "%Y-%m-%d")
             event_school_year = get_school_year_for_date(event_date)
         except ValueError:
             event_school_year = get_current_school_year_label()
@@ -15831,6 +17073,7 @@ def api_update_calendar_event(event_id):
     calendar_collection, _, _ = get_calendar_events_storage(event_school_year)
     
     update_data = {
+        "date": event_date_str,
         "type": type_str,
         "title": title,
         "special_condition": special_cond,
@@ -15838,19 +17081,28 @@ def api_update_calendar_event(event_id):
     }
     if custom_schedule:
         update_data["custom_schedule"] = custom_schedule
-    
-    # Unset custom_schedule if it is not provided
-    if not custom_schedule:
-        calendar_collection.update_one({"_id": oid}, {"$unset": {"custom_schedule": ""}})
-        update_data.pop("custom_schedule", None)
-        
-    res = calendar_collection.update_one(
-        {"_id": oid},
-        {"$set": update_data}
-    )
-    if res.matched_count == 0:
-        return jsonify({"status": "error", "message": "Event not found"}), 404
-        
+
+    updated_doc = dict(event_doc)
+    updated_doc.update(update_data)
+    if custom_schedule:
+        updated_doc["custom_schedule"] = custom_schedule
+    else:
+        updated_doc.pop("custom_schedule", None)
+
+    try:
+        if calendar_collection == source_collection:
+            update_ops = {"$set": update_data}
+            if not custom_schedule:
+                update_ops["$unset"] = {"custom_schedule": ""}
+            res = calendar_collection.update_one({"_id": oid}, update_ops)
+            if res.matched_count == 0:
+                return jsonify({"status": "error", "message": "Event not found"}), 404
+        else:
+            calendar_collection.insert_one(updated_doc)
+            source_collection.delete_one({"_id": oid})
+    except DuplicateKeyError:
+        return jsonify({"status": "error", "message": "An event already exists for this date."}), 400
+
     return jsonify({"status": "ok", "message": "Event updated"})
 
 
@@ -15865,22 +17117,9 @@ def api_delete_calendar_event(event_id):
     except Exception:
         return jsonify({"status": "error", "message": "Invalid event ID"}), 400
     
-    # Find the event across all collections to determine its school year
-    event_doc = None
-    
-    # Check current school year collection first
-    current_collection, _, _ = get_calendar_events_storage("")
-    event_doc = current_collection.find_one({"_id": oid})
+    event_doc, source_collection, _is_archived = find_record_in_active_or_archive(calendar_events, calendar_events_archive, oid)
     if event_doc:
-        res = current_collection.delete_one({"_id": oid})
-        if res.deleted_count == 0:
-            return jsonify({"status": "error", "message": "Event not found"}), 404
-        return jsonify({"status": "ok", "message": "Event deleted"})
-    
-    # Check archive collections by trying the main calendar_events as fallback
-    event_doc = calendar_events.find_one({"_id": oid})
-    if event_doc:
-        res = calendar_events.delete_one({"_id": oid})
+        res = source_collection.delete_one({"_id": oid})
         if res.deleted_count == 0:
             return jsonify({"status": "error", "message": "Event not found"}), 404
         return jsonify({"status": "ok", "message": "Event deleted"})
@@ -15919,6 +17158,16 @@ if __name__ == "__main__":
 
     scheme = "https" if ssl_context else "http"
     print(f"[INFO] Starting Flask server on {scheme}://{FLASK_HOST}:{FLASK_PORT} (debug={debug_mode}, auto_reload={use_reloader})")
+
+    if should_bootstrap_live_monitoring_on_startup():
+        live_monitoring_ready, live_monitoring_message = ensure_live_monitoring_service_ready(
+            reason="app_start",
+            fail_hard=False,
+        )
+        if live_monitoring_ready:
+            print(f"[INFO] {live_monitoring_message}")
+        else:
+            print(f"[WARNING] {live_monitoring_message}")
 
     app.run(
         host=FLASK_HOST,

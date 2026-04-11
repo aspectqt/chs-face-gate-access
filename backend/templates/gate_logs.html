@@ -136,12 +136,12 @@
                 </select>
               </div>
               <div>
-                <label class="block text-[10px] uppercase font-bold text-slate-400 mb-1 ml-1">Session</label>
+                <label class="block text-[10px] uppercase font-bold text-slate-400 mb-1 ml-1">Gate Action</label>
                 <select name="session"
                   class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition">
-                  <option value="">All Sessions</option>
-                  <option value="Morning" {% if filters.session=='Morning' %}selected{% endif %}>Morning</option>
-                  <option value="Afternoon" {% if filters.session=='Afternoon' %}selected{% endif %}>Afternoon</option>
+                  <option value="">All Actions</option>
+                  <option value="IN" {% if filters.session=='IN' %}selected{% endif %}>Verified In</option>
+                  <option value="OUT" {% if filters.session=='OUT' %}selected{% endif %}>Verified Out</option>
                 </select>
               </div>
               <div class="flex items-end gap-2">

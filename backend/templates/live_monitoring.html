@@ -670,11 +670,13 @@
         };
         window.liveGateMonitoringActivityConfig = {
             endpoint: '/scan_events',
+            streamEndpoint: '/api/scan/stream',
+            realtimeEnabled: true,
             pollIntervalMs: 360,
             limit: 5
         };
     </script>
     <script src="{{ url_for('static', filename='live_gate_monitoring.js', v='20260404a') }}"></script>
-    <script src="{{ url_for('static', filename='live_monitoring_activity.js', v='20260404b') }}"></script>
+    <script src="{{ url_for('static', filename='live_monitoring_activity.js', v='20260411a') }}"></script>
 </body>
 </html>

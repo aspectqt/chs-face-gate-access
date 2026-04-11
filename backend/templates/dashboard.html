@@ -221,7 +221,9 @@
         }
 
         #scanFrame:fullscreen,
-        #scanFrame:-webkit-full-screen {
+        #scanFrame:-webkit-full-screen,
+        #scanFrame:-moz-full-screen,
+        #scanFrame:-ms-fullscreen {
             background: #020617;
             display: flex;
             align-items: center;
@@ -235,7 +237,9 @@
         }
 
         #scanFrame:fullscreen #videoFeed,
-        #scanFrame:-webkit-full-screen #videoFeed {
+        #scanFrame:-webkit-full-screen #videoFeed,
+        #scanFrame:-moz-full-screen #videoFeed,
+        #scanFrame:-ms-fullscreen #videoFeed {
             width: min(95vw, 1500px);
             height: min(88vh, 880px);
             object-fit: cover;
@@ -243,7 +247,9 @@
         }
 
         #scanFrame:fullscreen #scanPlaceholder,
-        #scanFrame:-webkit-full-screen #scanPlaceholder {
+        #scanFrame:-webkit-full-screen #scanPlaceholder,
+        #scanFrame:-moz-full-screen #scanPlaceholder,
+        #scanFrame:-ms-fullscreen #scanPlaceholder {
             width: min(95vw, 1500px);
             height: min(88vh, 880px);
         }
@@ -381,24 +387,32 @@
         }
 
         #scanFrame:fullscreen .scan-status-hud,
-        #scanFrame:-webkit-full-screen .scan-status-hud {
+        #scanFrame:-webkit-full-screen .scan-status-hud,
+        #scanFrame:-moz-full-screen .scan-status-hud,
+        #scanFrame:-ms-fullscreen .scan-status-hud {
             top: clamp(1rem, 2.4vh, 1.55rem);
             right: clamp(1rem, 2.4vh, 1.55rem);
             width: min(46vw, 44rem);
         }
 
         #scanFrame:fullscreen #scanStateBadge,
-        #scanFrame:-webkit-full-screen #scanStateBadge {
+        #scanFrame:-webkit-full-screen #scanStateBadge,
+        #scanFrame:-moz-full-screen #scanStateBadge,
+        #scanFrame:-ms-fullscreen #scanStateBadge {
             font-size: clamp(0.78rem, 1.25vw, 1.05rem) !important;
         }
 
         #scanFrame:fullscreen #status,
-        #scanFrame:-webkit-full-screen #status {
+        #scanFrame:-webkit-full-screen #status,
+        #scanFrame:-moz-full-screen #status,
+        #scanFrame:-ms-fullscreen #status {
             font-size: clamp(1rem, 1.74vw, 1.5rem) !important;
         }
 
         #scanFrame:fullscreen #scanEventBadge,
-        #scanFrame:-webkit-full-screen #scanEventBadge {
+        #scanFrame:-webkit-full-screen #scanEventBadge,
+        #scanFrame:-moz-full-screen #scanEventBadge,
+        #scanFrame:-ms-fullscreen #scanEventBadge {
             font-size: clamp(0.72rem, 1.18vw, 1rem) !important;
         }
 
@@ -2662,10 +2676,6 @@
                         class="mt-4 hidden rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
                     </div>
                 </div>
-                <div class="flex items-center justify-end border-t border-slate-200 bg-slate-50 px-6 py-4">
-                    <button id="notificationModalCloseFooter" type="button"
-                        class="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700">Close</button>
-                </div>
             </div>
         </div>
     </div>
@@ -3939,7 +3949,7 @@
         function scanFullscreenSupported() {
             return Boolean(
                 scanFrame
-                && (scanFrame.requestFullscreen || scanFrame.webkitRequestFullscreen || scanFrame.msRequestFullscreen)
+                && (scanFrame.requestFullscreen || scanFrame.webkitRequestFullscreen || scanFrame.mozRequestFullScreen || scanFrame.msRequestFullscreen)
             );
         }
 
@@ -3947,6 +3957,7 @@
             return (
                 document.fullscreenElement === scanFrame
                 || document.webkitFullscreenElement === scanFrame
+                || document.mozFullScreenElement === scanFrame
                 || document.msFullscreenElement === scanFrame
             );
         }
@@ -3973,6 +3984,8 @@
                         await scanFrame.requestFullscreen();
                     } else if (scanFrame.webkitRequestFullscreen) {
                         scanFrame.webkitRequestFullscreen();
+                    } else if (scanFrame.mozRequestFullScreen) {
+                        scanFrame.mozRequestFullScreen();
                     } else if (scanFrame.msRequestFullscreen) {
                         scanFrame.msRequestFullscreen();
                     }
@@ -3980,6 +3993,8 @@
                     await document.exitFullscreen();
                 } else if (document.webkitExitFullscreen) {
                     document.webkitExitFullscreen();
+                } else if (document.mozCancelFullScreen) {
+                    document.mozCancelFullScreen();
                 } else if (document.msExitFullscreen) {
                     document.msExitFullscreen();
                 }
@@ -5072,7 +5087,8 @@
         });
         document.addEventListener('fullscreenchange', updateScanFullscreenButton);
         document.addEventListener('webkitfullscreenchange', updateScanFullscreenButton);
-       document.addEventListener('msfullscreenchange', updateScanFullscreenButton);
+        document.addEventListener('mozfullscreenchange', updateScanFullscreenButton);
+        document.addEventListener('msfullscreenchange', updateScanFullscreenButton);
         window.addEventListener('resize', () => {
             if ((!scanFaceOverlayCanvas || scanFaceOverlayCanvas.classList.contains('hidden')) && scanRenderedFaceTracks.size === 0) return;
             resizeScanFaceOverlayCanvas();
@@ -5085,6 +5101,12 @@
             }, 40);
         });
         document.addEventListener('webkitfullscreenchange', () => {
+            setTimeout(() => {
+                resizeScanFaceOverlayCanvas();
+                startTrackedFaceOverlayLoop();
+            }, 40);
+        });
+        document.addEventListener('mozfullscreenchange', () => {
             setTimeout(() => {
                 resizeScanFaceOverlayCanvas();
                 startTrackedFaceOverlayLoop();
@@ -5827,7 +5849,6 @@
         const notificationModalBackdrop = document.getElementById('notificationModalBackdrop');
         const notificationModalPanel = document.getElementById('notificationModalPanel');
         const notificationModalClose = document.getElementById('notificationModalClose');
-        const notificationModalCloseFooter = document.getElementById('notificationModalCloseFooter');
         const notificationModalEyebrow = document.getElementById('notificationModalEyebrow');
         const notificationModalTitle = document.getElementById('notificationModalTitle');
         const notificationModalTimestamp = document.getElementById('notificationModalTimestamp');
@@ -6274,9 +6295,8 @@
             if (opened) closeMenu(alertsButton, alertsDropdown);
         });
 
-        notificationModalClose.addEventListener('click', closeNotificationModal);
-        notificationModalCloseFooter.addEventListener('click', closeNotificationModal);
-        notificationModalBackdrop.addEventListener('click', closeNotificationModal);
+        notificationModalClose?.addEventListener('click', closeNotificationModal);
+        notificationModalBackdrop?.addEventListener('click', closeNotificationModal);
 
         window.addEventListener('click', e => {
             if (alertsEnabled && alertsButton && alertsDropdown && !alertsButton.contains(e.target) && !alertsDropdown.contains(e.target)) {

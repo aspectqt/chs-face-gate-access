@@ -252,6 +252,8 @@ def ensure_indexes():
     _safe_create_index(system_settings, [("key", ASCENDING)], unique=True)
     _safe_create_index(calendar_events, [("date", ASCENDING)], unique=True)
     _safe_create_index(calendar_events, [("school_year", ASCENDING), ("date", ASCENDING)])
+    _safe_create_index(calendar_events_archive, [("date", ASCENDING)], unique=True)
+    _safe_create_index(calendar_events_archive, [("school_year", ASCENDING), ("date", ASCENDING)])
     _safe_create_index(early_timeout_requests, [("student_id", ASCENDING), ("date", ASCENDING)])
     _safe_create_index(early_timeout_requests, [("status", ASCENDING), ("requested_at", DESCENDING)])
     _safe_create_index(early_timeout_requests, [("school_year", ASCENDING), ("requested_at", DESCENDING)])
