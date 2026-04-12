@@ -59,6 +59,19 @@
       : "light";
   }
 
+  function getForcedTheme() {
+    return normalizeTheme(
+      docEl.getAttribute("data-theme-lock")
+      || window.__FORCED_THEME
+      || document.body?.dataset.themeLock
+      || ""
+    );
+  }
+
+  function themeLocked() {
+    return Boolean(getForcedTheme());
+  }
+
   function broadcastSchoolYearSelection(label) {
     try {
       const normalized = String(label || "").trim();
@@ -95,7 +108,7 @@
   }
 
   function chooseInitialTheme() {
-    return getLocalTheme() || getServerTheme() || getSystemTheme();
+    return getForcedTheme() || getLocalTheme() || getServerTheme() || getSystemTheme();
   }
 
   function hideUnauthorizedSidebarLinks() {
@@ -140,6 +153,16 @@
       const moonIcon = btn.querySelector('[data-theme-icon="moon"]');
       const labelEl = btn.querySelector("[data-theme-label]");
       const darkMode = theme === "dark";
+      const locked = themeLocked();
+
+      btn.classList.toggle("hidden", locked);
+      btn.disabled = locked;
+      btn.setAttribute("aria-hidden", locked ? "true" : "false");
+      if (locked) {
+        btn.setAttribute("tabindex", "-1");
+      } else {
+        btn.removeAttribute("tabindex");
+      }
 
       btn.setAttribute("aria-pressed", darkMode ? "true" : "false");
       btn.dataset.themeState = darkMode ? "dark" : "light";
@@ -157,7 +180,7 @@
   }
 
   async function persistThemeToServer(theme) {
-    if (!isAuthenticatedPage()) return;
+    if (!isAuthenticatedPage() || themeLocked()) return;
     try {
       const res = await fetch("/api/profile/theme", {
         method: "PUT",
@@ -174,11 +197,16 @@
 
   function applyTheme(theme, options = {}) {
     const { saveLocal = true, persistRemote = false, emit = true } = options;
-    const resolvedTheme = normalizeTheme(theme) || "light";
+    const forcedTheme = getForcedTheme();
+    const resolvedTheme = forcedTheme || normalizeTheme(theme) || "light";
     currentTheme = resolvedTheme;
     docEl.setAttribute("data-theme", resolvedTheme);
+    if (forcedTheme && document.body) {
+      document.body.dataset.userTheme = forcedTheme;
+      document.body.dataset.themeLock = forcedTheme;
+    }
 
-    if (saveLocal) {
+    if (saveLocal && !forcedTheme) {
       try {
         window.localStorage.setItem(STORAGE_KEY, resolvedTheme);
       } catch (_err) {
@@ -192,6 +220,10 @@
   }
 
   function toggleTheme() {
+    if (themeLocked()) {
+      applyTheme(getForcedTheme() || "light", { saveLocal: false, persistRemote: false, emit: true });
+      return;
+    }
     const nextTheme = currentTheme === "dark" ? "light" : "dark";
     applyTheme(nextTheme, { saveLocal: true, persistRemote: true, emit: true });
   }
@@ -806,7 +838,7 @@
   }
 
   async function syncThemeFromServerIfNeeded() {
-    if (!isAuthenticatedPage() || getServerTheme()) return;
+    if (!isAuthenticatedPage() || getServerTheme() || themeLocked()) return;
     try {
       const res = await fetch("/api/profile/theme", { method: "GET" });
       const payload = await res.json().catch(() => ({}));

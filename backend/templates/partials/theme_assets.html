@@ -1,4 +1,8 @@
 <meta name="csrf-token" content="{{ csrf_token() }}">
+{% set _forced_theme = theme_forced|default('')|lower %}
+{% if _forced_theme not in ['light', 'dark'] and session.get('role') == 'Staff' %}
+  {% set _forced_theme = 'light' %}
+{% endif %}
 <script>
   (function () {
     window.AppPermissions = {
@@ -11,13 +15,20 @@
     };
     var VALID = { light: true, dark: true };
     var serverTheme = "{{ current_theme|default('')|lower }}";
+    var forcedTheme = {{ _forced_theme|tojson }};
     var localTheme = "";
     try {
       localTheme = window.localStorage.getItem("chs_theme_preference") || "";
     } catch (_err) {}
     var systemTheme = (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) ? "dark" : "light";
-    var initialTheme = VALID[localTheme] ? localTheme : (VALID[serverTheme] ? serverTheme : systemTheme);
+    var initialTheme = VALID[forcedTheme] ? forcedTheme : (VALID[localTheme] ? localTheme : (VALID[serverTheme] ? serverTheme : systemTheme));
+    if (VALID[forcedTheme]) {
+      document.documentElement.setAttribute("data-theme-lock", forcedTheme);
+    } else {
+      document.documentElement.removeAttribute("data-theme-lock");
+    }
     document.documentElement.setAttribute("data-theme", initialTheme);
+    window.__FORCED_THEME = VALID[forcedTheme] ? forcedTheme : "";
     window.__SERVER_THEME = VALID[serverTheme] ? serverTheme : "";
   })();
 </script>

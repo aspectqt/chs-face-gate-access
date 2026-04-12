@@ -4,6 +4,10 @@
     const streamEndpoint = String(config.streamEndpoint || "/api/scan/stream").trim() || "/api/scan/stream";
     const realtimeEnabled = config.realtimeEnabled !== false;
     const pollIntervalMs = Math.max(Number(config.pollIntervalMs) || 400, 200);
+    const streamHealthyPollIntervalMs = Math.max(
+        Number(config.streamHealthyPollIntervalMs) || Math.max(pollIntervalMs * 5, 1500),
+        1000
+    );
     const displayLimit = Math.max(Number(config.limit) || 5, 1);
     const processedHistoryLimit = 300;
     const streamReconnectMs = 1400;
@@ -18,12 +22,16 @@
     }
 
     const processedEventIds = [];
+    const pendingEntries = new Map();
+    let pendingEntryOrder = [];
     let lastEventId = 0;
     let pollTimer = null;
+    let activePollIntervalMs = 0;
     let requestInFlight = false;
     let activityStream = null;
     let streamReconnectTimer = null;
     let streamConnected = false;
+    let renderFrame = 0;
 
     function escapeHtml(value) {
         return String(value ?? "")
@@ -174,6 +182,17 @@
         return item;
     }
 
+    function normalizeActivityEntry(entry) {
+        return {
+            student_id: String(entry?.student_id || "").trim(),
+            student_name: String(entry?.student_name || entry?.name || "").trim(),
+            name: String(entry?.name || entry?.student_name || "").trim(),
+            gate_action: normalizeAction(entry?.gate_action || "IN"),
+            time: String(entry?.time || "").trim(),
+            timestamp: String(entry?.timestamp || "").trim(),
+        };
+    }
+
     function normalizeFeed() {
         const seenStudentIds = new Set();
         Array.from(feed.children).forEach((node) => {
@@ -201,35 +220,83 @@
         updateFeedState();
     }
 
-    function upsertActivityEntry(entry) {
-        if (!entry || !entry.student_id) {
+    function scheduleActivityFlush() {
+        if (renderFrame) {
             return;
         }
 
-        const studentId = String(entry.student_id || "").trim();
-        if (!studentId) {
+        renderFrame = requestAnimationFrame(() => {
+            renderFrame = 0;
+            flushActivityEntries();
+        });
+    }
+
+    function flushActivityEntries() {
+        if (!pendingEntryOrder.length) {
             return;
         }
 
         const previousPositions = captureItemPositions();
-        const existingNode = Array.from(feed.children).find((node) => {
-            return node instanceof HTMLElement && node.dataset.studentId === studentId;
+        const orderedEntries = [];
+        const seenStudentIds = new Set();
+
+        pendingEntryOrder.forEach((studentId) => {
+            if (!studentId || seenStudentIds.has(studentId)) {
+                return;
+            }
+
+            const entry = pendingEntries.get(studentId);
+            if (!entry || !entry.student_id) {
+                return;
+            }
+
+            seenStudentIds.add(studentId);
+            orderedEntries.push(entry);
         });
 
-        if (existingNode instanceof HTMLElement) {
-            existingNode.remove();
+        pendingEntries.clear();
+        pendingEntryOrder = [];
+
+        if (!orderedEntries.length) {
+            return;
         }
 
-        const item = createActivityItem(entry);
-        item.classList.add("live-monitor-activity-enter");
-        feed.prepend(item);
-
-        if (feed.children.length > displayLimit) {
-            const overflowNode = feed.children[displayLimit];
-            if (overflowNode instanceof HTMLElement) {
-                animateOverflowExit(overflowNode);
-                overflowNode.remove();
+        const currentNodes = new Map();
+        Array.from(feed.children).forEach((node) => {
+            if (!(node instanceof HTMLElement)) {
+                return;
             }
+            const studentId = String(node.dataset.studentId || "").trim();
+            if (studentId) {
+                currentNodes.set(studentId, node);
+            }
+        });
+
+        orderedEntries.forEach((entry) => {
+            const existingNode = currentNodes.get(entry.student_id);
+            if (existingNode instanceof HTMLElement) {
+                existingNode.remove();
+            }
+        });
+
+        const fragment = document.createDocumentFragment();
+        const enteringNodes = [];
+        for (let index = orderedEntries.length - 1; index >= 0; index -= 1) {
+            const item = createActivityItem(orderedEntries[index]);
+            item.classList.add("live-monitor-activity-enter");
+            fragment.appendChild(item);
+            enteringNodes.push(item);
+        }
+
+        feed.prepend(fragment);
+
+        while (feed.children.length > displayLimit) {
+            const overflowNode = feed.lastElementChild;
+            if (!(overflowNode instanceof HTMLElement)) {
+                break;
+            }
+            animateOverflowExit(overflowNode);
+            overflowNode.remove();
         }
 
         updateFeedState();
@@ -237,13 +304,32 @@
         requestAnimationFrame(() => {
             animateLayoutShift(previousPositions);
             requestAnimationFrame(() => {
-                item.classList.remove("live-monitor-activity-enter");
-                item.classList.add("live-monitor-activity-highlight");
-                window.setTimeout(() => {
-                    item.classList.remove("live-monitor-activity-highlight");
-                }, 1500);
+                enteringNodes.forEach((item) => {
+                    item.classList.remove("live-monitor-activity-enter");
+                    item.classList.add("live-monitor-activity-highlight");
+                    window.setTimeout(() => {
+                        item.classList.remove("live-monitor-activity-highlight");
+                    }, 1500);
+                });
             });
         });
+    }
+
+    function upsertActivityEntry(entry) {
+        if (!entry || !entry.student_id) {
+            return;
+        }
+
+        const normalizedEntry = normalizeActivityEntry(entry);
+        if (!normalizedEntry.student_id) {
+            return;
+        }
+
+        if (!pendingEntries.has(normalizedEntry.student_id)) {
+            pendingEntryOrder.push(normalizedEntry.student_id);
+        }
+        pendingEntries.set(normalizedEntry.student_id, normalizedEntry);
+        scheduleActivityFlush();
     }
 
     function processEvents(events) {
@@ -251,7 +337,16 @@
             return;
         }
 
-        events.forEach((eventPayload) => {
+        const orderedEvents = [...events].sort((left, right) => {
+            const leftId = Number(left?.id || 0);
+            const rightId = Number(right?.id || 0);
+            if (leftId !== rightId) {
+                return leftId - rightId;
+            }
+            return String(left?.timestamp || "").localeCompare(String(right?.timestamp || ""));
+        });
+
+        orderedEvents.forEach((eventPayload) => {
             const eventId = Number(eventPayload?.id || 0);
             if (eventId > 0) {
                 if (processedEventIds.includes(eventId)) {
@@ -332,18 +427,22 @@
             window.clearInterval(pollTimer);
             pollTimer = null;
         }
+        activePollIntervalMs = 0;
     }
 
-    function startPolling() {
-        if (pollTimer) {
+    function startPolling(intervalMs = pollIntervalMs) {
+        const normalizedInterval = Math.max(Number(intervalMs) || pollIntervalMs, 200);
+        if (pollTimer && activePollIntervalMs === normalizedInterval) {
             return;
         }
 
+        stopPolling();
+        activePollIntervalMs = normalizedInterval;
         normalizeFeed();
         void pollActivityEvents();
         pollTimer = window.setInterval(() => {
             void pollActivityEvents();
-        }, pollIntervalMs);
+        }, normalizedInterval);
     }
 
     function stopStream() {
@@ -375,12 +474,13 @@
 
     function connectStream() {
         if (!realtimeEnabled || !streamEndpoint || !("EventSource" in window)) {
-            startPolling();
+            startPolling(pollIntervalMs);
             return false;
         }
 
         stopStream();
         normalizeFeed();
+        startPolling(pollIntervalMs);
 
         try {
             const stream = new EventSource(buildStreamUrl());
@@ -388,7 +488,7 @@
 
             stream.onopen = () => {
                 streamConnected = true;
-                stopPolling();
+                startPolling(streamHealthyPollIntervalMs);
             };
 
             stream.addEventListener("scan_event", (event) => {
@@ -397,7 +497,7 @@
                 }
 
                 streamConnected = true;
-                stopPolling();
+                startPolling(streamHealthyPollIntervalMs);
                 const payload = JSON.parse(String(event?.data || "{}"));
                 processPayload(payload);
             });
@@ -408,17 +508,14 @@
                 }
 
                 stopStream();
-                startPolling();
+                startPolling(pollIntervalMs);
                 scheduleStreamReconnect();
             };
 
-            if (!streamConnected) {
-                startPolling();
-            }
             return true;
         } catch (error) {
             console.error("[LiveMonitoringActivity] Failed to open activity stream:", error);
-            startPolling();
+            startPolling(pollIntervalMs);
             scheduleStreamReconnect();
             return false;
         }
@@ -427,6 +524,10 @@
     window.addEventListener("beforeunload", () => {
         stopPolling();
         stopStream();
+        if (renderFrame) {
+            cancelAnimationFrame(renderFrame);
+            renderFrame = 0;
+        }
         if (streamReconnectTimer) {
             window.clearTimeout(streamReconnectTimer);
             streamReconnectTimer = null;

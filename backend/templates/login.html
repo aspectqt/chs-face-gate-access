@@ -3,11 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>CHS Gate Access | Login</title>
+    <title>CHS Gate System | Login</title>
     <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32x32.png') }}">
     <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon-16x16.png') }}">
     <link rel="shortcut icon" href="{{ url_for('static', filename='favicon-32x32.png') }}">
     <script src="https://cdn.tailwindcss.com"></script>
+    {% set theme_forced = 'light' %}
     {% include 'partials/theme_assets.html' %}
     <style>
         body.login-page {
@@ -183,7 +184,7 @@
     </style>
 </head>
 <body class="login-page min-h-screen" data-authenticated="0" data-user-theme="">
-    <main class="min-h-screen flex items-center justify-center px-4 py-10">
+    <main class="min-h-screen flex items-center justify-center px-4 py-4 sm:py-6">
         <section class="app-content-card login-shell-card w-full max-w-md">
             <div class="login-divider px-7 py-6 text-center">
                 <div class="mx-auto flex w-fit items-center gap-4">
@@ -302,7 +303,7 @@
             </div>
 
             <div class="px-7 pb-6 text-center">
-                <p class="login-footer text-xs">&copy; {{ current_year }} CHS Gate Access System</p>
+                <p class="login-footer text-xs">&copy; {{ current_year }} CHS Gate System</p>
             </div>
         </section>
     </main>

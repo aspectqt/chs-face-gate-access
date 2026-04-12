@@ -65,6 +65,38 @@ class AppSmokeTests(unittest.TestCase):
                 self.assertEqual(response.status_code, 200)
                 self.assertIn("text/html", response.content_type)
 
+    def test_login_page_renders_with_original_deped_logo_layout(self):
+        client = self.app_module.app.test_client()
+
+        response = client.get("/login")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("text/html", response.content_type)
+
+        html = response.get_data(as_text=True)
+        self.assertIn("deped-logo.png", html)
+        self.assertIn("logo.png", html)
+        self.assertIn("CHS Gate System | Login", html)
+        self.assertIn('var forcedTheme = "light";', html)
+        self.assertIn("Forgot Password?", html)
+        self.assertIn("Sign In", html)
+
+    def test_staff_pages_force_light_theme_while_admin_pages_keep_theme_unlocked(self):
+        staff_client = self.make_client(username="staff_user", role=self.app_module.ROLE_STAFF)
+        admin_client = self.make_client()
+
+        staff_dashboard = staff_client.get("/dashboard")
+        self.assertEqual(staff_dashboard.status_code, 200)
+        staff_dashboard_html = staff_dashboard.get_data(as_text=True)
+        self.assertIn('var forcedTheme = "light";', staff_dashboard_html)
+
+        staff_students = staff_client.get("/students")
+        self.assertEqual(staff_students.status_code, 200)
+        self.assertIn('var forcedTheme = "light";', staff_students.get_data(as_text=True))
+
+        admin_dashboard = admin_client.get("/dashboard")
+        self.assertEqual(admin_dashboard.status_code, 200)
+        self.assertIn('var forcedTheme = "";', admin_dashboard.get_data(as_text=True))
+
     def test_help_guide_page_surfaces_guides_navigation_and_faqs(self):
         client = self.make_client()
 
@@ -108,6 +140,7 @@ class AppSmokeTests(unittest.TestCase):
         html = response.get_data(as_text=True)
         self.assertIn("Recent Student Activity", html)
         self.assertIn("/api/scan/stream", html)
+        self.assertIn("streamHealthyPollIntervalMs", html)
         self.assertIn("live_monitoring_activity.js", html)
 
     def test_live_monitoring_token_bootstraps_service_before_issuing_token(self):
@@ -194,6 +227,20 @@ class AppSmokeTests(unittest.TestCase):
             self.assertIn("smsNotificationsEnabled: false", page_html)
         finally:
             self.restore_sms_notification_settings_doc(original_doc)
+
+    def test_sms_logs_page_surfaces_reorganized_template_editor(self):
+        client = self.make_client()
+
+        response = client.get("/sms-logs")
+        self.assertEqual(response.status_code, 200)
+
+        html = response.get_data(as_text=True)
+        self.assertIn("Attendance SMS Template", html)
+        self.assertIn("Message Content", html)
+        self.assertIn("Live Preview", html)
+        self.assertIn("templatePreviewText()", html)
+        self.assertNotIn("Dynamic Variables", html)
+        self.assertIn("Load Default", html)
 
     def test_log_attendance_records_skipped_sms_log_when_notifications_disabled(self):
         original_doc = self.get_sms_notification_settings_doc()
@@ -390,6 +437,45 @@ class AppSmokeTests(unittest.TestCase):
         finally:
             if response is not None:
                 response.close()
+            with self.app_module.scan_event_condition:
+                self.app_module.scan_state["events"] = original_events
+                self.app_module.scan_state["event_counter"] = original_counter
+
+    def test_scan_events_snapshot_returns_verified_activity_entries_for_feed_recovery(self):
+        client = self.make_client()
+        with self.app_module.scan_event_condition:
+            original_events = [dict(row) for row in self.app_module.scan_state.get("events", [])]
+            original_counter = int(self.app_module.scan_state.get("event_counter") or 0)
+
+        try:
+            pushed_event = self.app_module.push_scan_event("verified", {
+                "student_id": "POLL-TEST-001",
+                "name": "Polling Recovery Student",
+                "gate_action": "OUT",
+                "time": "8:20 AM",
+                "feed_update": True,
+                "activity_entry": {
+                    "student_id": "POLL-TEST-001",
+                    "student_name": "Polling Recovery Student",
+                    "gate_action": "OUT",
+                    "time": "8:20 AM",
+                    "timestamp": self.app_module.now_iso(),
+                },
+            })
+
+            response = client.get(
+                f"/scan_events?since={max(int(pushed_event.get('id') or 1) - 1, 0)}"
+            )
+            self.assertEqual(response.status_code, 200)
+
+            payload = response.get_json()
+            self.assertEqual(payload["last_event_id"], int(pushed_event["id"]))
+            self.assertEqual(len(payload["events"]), 1)
+            self.assertEqual(payload["events"][0]["type"], "verified")
+            self.assertTrue(payload["events"][0]["feed_update"])
+            self.assertEqual(payload["events"][0]["activity_entry"]["student_name"], "Polling Recovery Student")
+            self.assertEqual(payload["events"][0]["activity_entry"]["gate_action"], "OUT")
+        finally:
             with self.app_module.scan_event_condition:
                 self.app_module.scan_state["events"] = original_events
                 self.app_module.scan_state["event_counter"] = original_counter
