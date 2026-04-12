@@ -1,4 +1,6 @@
 import importlib
+import os
+import tempfile
 import unittest
 import uuid
 from bson.objectid import ObjectId
@@ -64,6 +66,201 @@ class AppSmokeTests(unittest.TestCase):
                 response = client.get(route)
                 self.assertEqual(response.status_code, 200)
                 self.assertIn("text/html", response.content_type)
+
+    def test_send_email_message_normalizes_grouped_gmail_app_password_before_login(self):
+        env_file_content = "\n".join([
+            "SMTP_HOST=smtp.gmail.com",
+            "SMTP_PORT=587",
+            "SMTP_USERNAME=aprilbryancordova@gmail.com",
+            "SMTP_PASSWORD=ssvi tdqn gxjs tolq",
+            "SMTP_FROM=aprilbryancordova@gmail.com",
+            "SMTP_USE_TLS=1",
+            "SMTP_USE_SSL=0",
+        ])
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            env_path = os.path.join(temp_dir, ".env")
+            with open(env_path, "w", encoding="utf-8") as env_file:
+                env_file.write(env_file_content)
+
+            with patch.object(self.app_module, "ENV_FILE_PATH", env_path), patch.object(
+                self.app_module.smtplib,
+                "SMTP",
+            ) as smtp_mock, patch.object(
+                self.app_module.smtplib,
+                "SMTP_SSL",
+            ) as smtp_ssl_mock:
+                server = smtp_mock.return_value.__enter__.return_value
+                settings = self.app_module.smtp_settings()
+                success, error = self.app_module.send_email_message(
+                    subject="Password Reset",
+                    body_text="Reset body",
+                    recipients=["student@example.com"],
+                )
+
+        self.assertEqual(settings["password"], "ssvitdqngxjstolq")
+        self.assertTrue(success)
+        self.assertEqual(error, "")
+        smtp_ssl_mock.assert_not_called()
+        smtp_mock.assert_called_once_with("smtp.gmail.com", 587, timeout=20)
+        server.starttls.assert_called_once()
+        server.login.assert_called_once_with("aprilbryancordova@gmail.com", "ssvitdqngxjstolq")
+        server.send_message.assert_called_once()
+
+    def test_smtp_settings_use_latest_env_file_values_for_gmail_runtime_config(self):
+        env_overrides = {
+            "SMTP_HOST": "outdated.example.com",
+            "SMTP_PORT": "2525",
+            "SMTP_USERNAME": "stale@example.com",
+            "SMTP_PASSWORD": "stale-password",
+            "SMTP_FROM": "stale@example.com",
+            "SMTP_USE_TLS": "0",
+            "SMTP_USE_SSL": "0",
+        }
+        env_file_content = "\n".join([
+            "SMTP_HOST=smtp.gmail.com",
+            "SMTP_PORT=465",
+            "SMTP_USERNAME=runtime.mailer@gmail.com",
+            "SMTP_PASSWORD=abcd efgh ijkl mnop",
+            "SMTP_FROM=runtime.mailer@gmail.com",
+            "SMTP_USE_TLS=0",
+            "SMTP_USE_SSL=1",
+        ])
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            env_path = os.path.join(temp_dir, ".env")
+            with open(env_path, "w", encoding="utf-8") as env_file:
+                env_file.write(env_file_content)
+
+            with patch.object(self.app_module, "ENV_FILE_PATH", env_path), patch.dict(
+                self.app_module.os.environ,
+                env_overrides,
+                clear=False,
+            ):
+                settings = self.app_module.smtp_settings()
+
+        self.assertEqual(settings["host"], "smtp.gmail.com")
+        self.assertEqual(settings["port"], 465)
+        self.assertEqual(settings["username"], "runtime.mailer@gmail.com")
+        self.assertEqual(settings["password"], "abcdefghijklmnop")
+        self.assertEqual(settings["sender"], "runtime.mailer@gmail.com")
+        self.assertTrue(settings["use_ssl"])
+        self.assertFalse(settings["use_tls"])
+
+    def test_forgot_password_request_sends_reset_email_for_registered_user(self):
+        email = f"reset-{uuid.uuid4().hex[:10]}@example.com"
+        username = f"reset_user_{uuid.uuid4().hex[:8]}"
+        user_id = self.app_module.users.insert_one({
+            "username": username,
+            "password": "placeholder",
+            "role": self.app_module.ROLE_FULL_ADMIN,
+            "fullName": "Reset Test User",
+            "email": email,
+            "phone": "09171234567",
+            "address": "Test Address",
+            "bio": "",
+            "createdAt": self.app_module.now_iso(),
+            "updatedAt": self.app_module.now_iso(),
+        }).inserted_id
+        self.app_module.password_reset_tokens.delete_many({"email": email})
+
+        try:
+            client = self.app_module.app.test_client()
+            with client.session_transaction() as session_data:
+                session_data[self.app_module.CSRF_SESSION_KEY] = "forgot-password-csrf"
+            with patch.object(
+                self.app_module,
+                "smtp_configuration_error",
+                return_value="",
+            ), patch.object(
+                self.app_module,
+                "PASSWORD_RESET_RATE_LIMIT_ENABLED",
+                False,
+            ), patch.object(
+                self.app_module,
+                "send_email_message",
+                return_value=(True, ""),
+            ) as send_email_mock:
+                response = client.post(
+                    "/api/auth/forgot-password/request",
+                    json={"email": email},
+                    headers={self.app_module.CSRF_HEADER_NAME: "forgot-password-csrf"},
+                )
+
+            self.assertEqual(response.status_code, 200)
+            payload = response.get_json()
+            self.assertEqual(payload["status"], "ok")
+            self.assertIn("Password reset link has been sent", payload["message"])
+            send_email_mock.assert_called_once()
+            send_kwargs = send_email_mock.call_args.kwargs
+            self.assertEqual(send_kwargs["subject"], "CHS Gate Access Password Reset")
+            self.assertEqual(send_kwargs["recipients"], [email])
+            self.assertIn("/reset-password?token=", send_kwargs["body_text"])
+
+            token_doc = self.app_module.password_reset_tokens.find_one({"email": email, "used": False})
+            self.assertIsNotNone(token_doc)
+            self.assertEqual(token_doc["user_id"], user_id)
+        finally:
+            self.app_module.password_reset_tokens.delete_many({"email": email})
+            self.app_module.users.delete_one({"_id": user_id})
+
+    def test_profile_update_api_persists_user_changes(self):
+        username = f"profile_user_{uuid.uuid4().hex[:8]}"
+        email = f"profile-{uuid.uuid4().hex[:10]}@example.com"
+        user_id = self.app_module.users.insert_one({
+            "username": username,
+            "password": "placeholder",
+            "role": self.app_module.ROLE_FULL_ADMIN,
+            "fullName": "Original User",
+            "email": email,
+            "phone": "09171234567",
+            "address": "Old Address",
+            "bio": "Old bio",
+            "twoFactorEnabled": False,
+            "createdAt": self.app_module.now_iso(),
+            "updatedAt": self.app_module.now_iso(),
+        }).inserted_id
+
+        try:
+            client = self.make_client(username=username, role=self.app_module.ROLE_FULL_ADMIN)
+            csrf_headers = {self.app_module.CSRF_HEADER_NAME: "test-csrf-token"}
+            updated_email = f"updated-{uuid.uuid4().hex[:10]}@example.com"
+            response = client.put(
+                "/api/profile",
+                json={
+                    "fullName": "Updated Admin User",
+                    "email": updated_email,
+                    "phone": "09987654321",
+                    "address": "Updated Address",
+                    "bio": "Updated biography",
+                    "twoFactorEnabled": True,
+                    "removeAvatar": False,
+                },
+                headers=csrf_headers,
+            )
+
+            self.assertEqual(response.status_code, 200)
+            payload = response.get_json()
+            self.assertEqual(payload["status"], "ok")
+            self.assertEqual(payload["profile"]["email"], updated_email)
+            self.assertEqual(payload["profile"]["fullName"], "Updated Admin User")
+            self.assertTrue(payload["profile"]["twoFactorEnabled"])
+
+            saved_user = self.app_module.users.find_one({"_id": user_id})
+            self.assertEqual(saved_user["email"], updated_email)
+            self.assertEqual(saved_user["fullName"], "Updated Admin User")
+            self.assertEqual(saved_user["phone"], "09987654321")
+            self.assertEqual(saved_user["address"], "Updated Address")
+            self.assertEqual(saved_user["bio"], "Updated biography")
+            self.assertTrue(saved_user["twoFactorEnabled"])
+
+            get_response = client.get("/api/profile")
+            self.assertEqual(get_response.status_code, 200)
+            get_payload = get_response.get_json()
+            self.assertEqual(get_payload["profile"]["email"], updated_email)
+            self.assertEqual(get_payload["profile"]["address"], "Updated Address")
+        finally:
+            self.app_module.users.delete_one({"_id": user_id})
 
     def test_login_page_renders_with_original_deped_logo_layout(self):
         client = self.app_module.app.test_client()
@@ -2333,6 +2530,126 @@ class AppSmokeTests(unittest.TestCase):
                 self.app_module.scan_state["known_encodings"] = original_encodings
                 self.app_module.scan_state["known_students"] = original_students
                 self.app_module.scan_state["model_status"] = original_model_status
+
+    def test_process_client_frame_reuses_cached_match_results_for_stable_tracks(self):
+        student_id = f"CACHEMATCH-{uuid.uuid4().hex[:10]}"
+        student = {"student_id": student_id, "name": "Cached Match Student"}
+        with self.app_module.scan_lock:
+            original_active = self.app_module.scan_state.get("active")
+            original_encodings = self.app_module.scan_state.get("known_encodings")
+            original_students = self.app_module.scan_state.get("known_students")
+            original_model_status = self.app_module.scan_state.get("model_status")
+            original_face_tracks = dict(self.app_module.scan_state.get("face_tracks") or {})
+            original_pending = dict(self.app_module.scan_state.get("pending_recognition") or {})
+            original_track_id = self.app_module.scan_state.get("next_face_track_id")
+            original_cursor = self.app_module.scan_state.get("face_track_cursor")
+            original_faces_payload = list(self.app_module.scan_state.get("last_faces_payload") or [])
+            self.app_module.scan_state["active"] = True
+            self.app_module.scan_state["known_encodings"] = self.app_module.np.array(
+                [[0.19] * 128],
+                dtype=self.app_module.np.float64,
+            )
+            self.app_module.scan_state["known_students"] = [student]
+            self.app_module.scan_state["model_status"] = "ready"
+            self.app_module.scan_state["face_tracks"] = {}
+            self.app_module.scan_state["pending_recognition"] = {}
+            self.app_module.scan_state["next_face_track_id"] = 1
+            self.app_module.scan_state["face_track_cursor"] = 0
+            self.app_module.scan_state["last_faces_payload"] = []
+
+        frame = self.app_module.np.zeros((240, 320, 3), dtype=self.app_module.np.uint8)
+        cached_ts = self.app_module.time.time()
+        cached_tracks = [{
+            "track_id": 1,
+            "stability": 2,
+            "next_attempt_ts": 0.0,
+            "small_location": (0, 40, 40, 0),
+            "full_location": (0, 80, 80, 0),
+            "area": 3200.0,
+            "student_id": "",
+            "last_result": "",
+            "last_confidence": 0.0,
+            "face_quality": {},
+            "face_quality_ts": 0.0,
+            "last_encoding": self.app_module.np.array([0.19] * 128, dtype=self.app_module.np.float64),
+            "last_encoding_ts": cached_ts,
+            "last_match_result": {
+                "recognized": True,
+                "student": dict(student),
+                "confidence": 99.4,
+                "distance": 0.19,
+                "candidate": {
+                    "student": dict(student),
+                    "best_distance": 0.19,
+                },
+                "reason": "match",
+            },
+            "last_match_ts": cached_ts,
+            "last_match_encoding_ts": cached_ts,
+            "liveness_motion_component": 0.0,
+            "liveness_area_component": 0.0,
+            "liveness_pose_component": 0.0,
+        }]
+
+        try:
+            with ExitStack() as stack:
+                stack.enter_context(patch.object(self.app_module.cv2, "imdecode", return_value=frame))
+                stack.enter_context(patch.object(self.app_module.cv2, "cvtColor", return_value=frame))
+                stack.enter_context(patch.object(
+                    self.app_module.face_recognition,
+                    "face_locations",
+                    return_value=[(0, 40, 40, 0)],
+                ))
+                face_encodings_mock = stack.enter_context(patch.object(
+                    self.app_module.face_recognition,
+                    "face_encodings",
+                    return_value=[],
+                ))
+                face_distance_mock = stack.enter_context(patch.object(
+                    self.app_module.face_recognition,
+                    "face_distance",
+                    side_effect=AssertionError("face_distance should not run when a stable cached match is available"),
+                ))
+                stack.enter_context(patch.object(self.app_module, "update_live_face_tracks", return_value=cached_tracks))
+                stack.enter_context(patch.object(self.app_module, "measure_live_face_quality", return_value={
+                    "brightness": 121.0,
+                    "contrast": 24.0,
+                    "sharpness": 19.0,
+                    "texture": 12.1,
+                    "highlights": 0.02,
+                    "area_ratio": 0.06,
+                }))
+                stack.enter_context(patch.object(self.app_module, "should_suppress_recent_live_scan", return_value=False))
+                stack.enter_context(patch.object(
+                    self.app_module,
+                    "track_pending_live_recognition",
+                    return_value={"confirmed": True, "observed_frames": 1, "required_frames": 1},
+                ))
+                stack.enter_context(patch.object(self.app_module, "LIVE_RECOGNITION_TRACK_STABILITY_FRAMES", 1))
+                verified_mock = stack.enter_context(patch.object(
+                    self.app_module,
+                    "handle_verified_student",
+                    return_value={"student_id": student_id, "gate_action": "IN"},
+                ))
+                success, message, payload = self.app_module.process_client_frame(b"frame")
+
+            self.assertTrue(success)
+            self.assertIn("Verified", message)
+            self.assertEqual(len(payload.get("faces") or []), 1)
+            verified_mock.assert_called_once()
+            face_encodings_mock.assert_not_called()
+            face_distance_mock.assert_not_called()
+        finally:
+            with self.app_module.scan_lock:
+                self.app_module.scan_state["active"] = original_active
+                self.app_module.scan_state["known_encodings"] = original_encodings
+                self.app_module.scan_state["known_students"] = original_students
+                self.app_module.scan_state["model_status"] = original_model_status
+                self.app_module.scan_state["face_tracks"] = original_face_tracks
+                self.app_module.scan_state["pending_recognition"] = original_pending
+                self.app_module.scan_state["next_face_track_id"] = original_track_id
+                self.app_module.scan_state["face_track_cursor"] = original_cursor
+                self.app_module.scan_state["last_faces_payload"] = original_faces_payload
 
     def test_process_client_frame_bypasses_anti_spoofing_checks(self):
         student_id = f"BYPASS-{uuid.uuid4().hex[:10]}"

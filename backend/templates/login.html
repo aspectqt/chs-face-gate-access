@@ -355,9 +355,11 @@
     const passwordInput = document.getElementById('password');
     const togglePassword = document.getElementById('togglePassword');
     const clientError = document.getElementById('clientError');
+    const serverError = document.getElementById('serverError');
     const loginButton = document.getElementById('loginButton');
     const loginButtonText = document.getElementById('loginButtonText');
     const loginSpinner = document.getElementById('loginSpinner');
+    const DASHBOARD_WELCOME_STORAGE_KEY = 'chsDashboardWelcomePending';
 
     const forgotModal = document.getElementById('forgotPasswordModal');
     const forgotBackdrop = document.getElementById('forgotPasswordBackdrop');
@@ -379,6 +381,14 @@
             field.removeAttribute('readonly');
         }, { once: true });
     });
+
+    if (serverError) {
+        try {
+            window.sessionStorage.removeItem(DASHBOARD_WELCOME_STORAGE_KEY);
+        } catch (_error) {
+            // Ignore storage access issues and allow login flow to continue.
+        }
+    }
 
     function showClientError(message) {
         clientError.textContent = message;
@@ -430,6 +440,15 @@
             event.preventDefault();
             showClientError('Username and password are required.');
             return;
+        }
+
+        try {
+            window.sessionStorage.setItem(DASHBOARD_WELCOME_STORAGE_KEY, JSON.stringify({
+                issuedAt: Date.now(),
+                source: 'login',
+            }));
+        } catch (_error) {
+            // Ignore storage access issues and allow login flow to continue.
         }
 
         loginButton.disabled = true;

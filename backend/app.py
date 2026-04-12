@@ -29,7 +29,7 @@ from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-from dotenv import load_dotenv
+from dotenv import load_dotenv, dotenv_values
 from face_matching import (
     build_face_registration_metadata,
     build_student_face_index,
@@ -116,12 +116,12 @@ except Exception:
 # ENVIRONMENT
 # =====================================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-load_dotenv(os.path.join(BASE_DIR, ".env"))
+ENV_FILE_PATH = os.path.join(BASE_DIR, ".env")
+load_dotenv(ENV_FILE_PATH)
 db = client[DB_NAME]
 
 
-def env_int(name, default, minimum=None, maximum=None):
-    raw = os.getenv(name, str(default))
+def coerce_env_int(raw, default, minimum=None, maximum=None, name="value"):
     try:
         value = int(raw)
     except (TypeError, ValueError):
@@ -133,6 +133,11 @@ def env_int(name, default, minimum=None, maximum=None):
     if maximum is not None and value > maximum:
         value = maximum
     return value
+
+
+def env_int(name, default, minimum=None, maximum=None):
+    raw = os.getenv(name, str(default))
+    return coerce_env_int(raw, default, minimum=minimum, maximum=maximum, name=name)
 
 
 def env_float(name, default, minimum=None, maximum=None):
@@ -150,9 +155,33 @@ def env_float(name, default, minimum=None, maximum=None):
     return value
 
 
+def coerce_env_bool(raw, default=False):
+    if raw is None:
+        raw = str(int(bool(default)))
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
 def env_bool(name, default=False):
     raw = os.getenv(name, str(int(bool(default))))
-    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+    return coerce_env_bool(raw, default)
+
+
+def runtime_setting_value(*names, default=""):
+    env_file_values = {}
+    if ENV_FILE_PATH and os.path.exists(ENV_FILE_PATH):
+        try:
+            env_file_values = dotenv_values(ENV_FILE_PATH) or {}
+        except Exception:
+            env_file_values = {}
+
+    for name in names:
+        file_value = env_file_values.get(name)
+        if file_value is not None and str(file_value).strip():
+            return str(file_value)
+        env_value = os.getenv(name, "")
+        if str(env_value).strip():
+            return str(env_value)
+    return str(default)
 
 HTTPS_ENABLED = env_bool("HTTPS_ENABLED", False)
 FORCE_HTTPS = env_bool("FORCE_HTTPS", HTTPS_ENABLED)
@@ -712,35 +741,64 @@ def build_password_reset_link(token):
     return url_for("reset_password", token=token, _external=True)
 
 
+def normalize_smtp_password(password, username="", sender=""):
+    password_value = str(password or "")
+    if not password_value:
+        return ""
+
+    trimmed_password = password_value.strip()
+    account_candidates = (
+        str(username or "").strip().lower(),
+        str(sender or "").strip().lower(),
+    )
+    is_gmail_account = any(candidate.endswith("@gmail.com") for candidate in account_candidates if candidate)
+    if not is_gmail_account:
+        return trimmed_password
+
+    compact_password = re.sub(r"[\s-]+", "", trimmed_password)
+    # Gmail app passwords are often pasted in grouped blocks; normalize them before SMTP login.
+    if re.fullmatch(r"[A-Za-z0-9\s-]+", trimmed_password) and len(compact_password) == 16:
+        return compact_password
+    return trimmed_password
+
+
 def smtp_settings():
     smtp_host = (
-        os.getenv("SMTP_HOST", "").strip()
-        or os.getenv("MAIL_SERVER", "").strip()
-        or os.getenv("EMAIL_HOST", "").strip()
+        runtime_setting_value("SMTP_HOST", "MAIL_SERVER", "EMAIL_HOST").strip()
     )
-    smtp_port = env_int("SMTP_PORT", env_int("MAIL_PORT", 587, minimum=1, maximum=65535), minimum=1, maximum=65535)
+    smtp_port = coerce_env_int(
+        runtime_setting_value("SMTP_PORT", "MAIL_PORT", default="587"),
+        587,
+        minimum=1,
+        maximum=65535,
+        name="SMTP_PORT",
+    )
     smtp_username = (
-        os.getenv("SMTP_USERNAME", "").strip()
-        or os.getenv("MAIL_USERNAME", "").strip()
-        or os.getenv("EMAIL_HOST_USER", "").strip()
-        or os.getenv("EMAIL_ADDRESS", "").strip()
-        or os.getenv("GMAIL_ADDRESS", "").strip()
+        runtime_setting_value(
+            "SMTP_USERNAME",
+            "MAIL_USERNAME",
+            "EMAIL_HOST_USER",
+            "EMAIL_ADDRESS",
+            "GMAIL_ADDRESS",
+        ).strip()
     )
     smtp_password = (
-        os.getenv("SMTP_PASSWORD", "")
-        or os.getenv("MAIL_PASSWORD", "")
-        or os.getenv("EMAIL_HOST_PASSWORD", "")
-        or os.getenv("EMAIL_APP_PASSWORD", "")
-        or os.getenv("GMAIL_APP_PASSWORD", "")
+        runtime_setting_value(
+            "SMTP_PASSWORD",
+            "MAIL_PASSWORD",
+            "EMAIL_HOST_PASSWORD",
+            "EMAIL_APP_PASSWORD",
+            "GMAIL_APP_PASSWORD",
+        )
     )
     smtp_from = (
-        os.getenv("SMTP_FROM", "").strip()
-        or os.getenv("MAIL_DEFAULT_SENDER", "").strip()
+        runtime_setting_value("SMTP_FROM", "MAIL_DEFAULT_SENDER").strip()
         or smtp_username
     )
-    smtp_security = os.getenv("SMTP_SECURITY", "").strip().lower()
-    smtp_use_ssl = env_bool("SMTP_USE_SSL", False)
-    smtp_use_tls = env_bool("SMTP_USE_TLS", True)
+    smtp_password = normalize_smtp_password(smtp_password, smtp_username, smtp_from)
+    smtp_security = runtime_setting_value("SMTP_SECURITY", default="").strip().lower()
+    smtp_use_ssl = coerce_env_bool(runtime_setting_value("SMTP_USE_SSL", default="0"), False)
+    smtp_use_tls = coerce_env_bool(runtime_setting_value("SMTP_USE_TLS", default="1"), True)
 
     if smtp_security == "ssl":
         smtp_use_ssl = True
@@ -757,7 +815,7 @@ def smtp_settings():
 
     if not smtp_host and smtp_username.lower().endswith("@gmail.com"):
         smtp_host = "smtp.gmail.com"
-        if not os.getenv("SMTP_PORT", "").strip():
+        if not runtime_setting_value("SMTP_PORT", "MAIL_PORT", default="").strip():
             smtp_port = 587
             smtp_use_ssl = False
             smtp_use_tls = True
@@ -8284,6 +8342,66 @@ def cache_live_track_encoding(track, encoding, now_ts=None):
     return normalized_encoding
 
 
+def get_cached_live_track_match_result(track, now_ts=None):
+    row = track if isinstance(track, dict) else {}
+    cached_match = row.get("last_match_result")
+    if not isinstance(cached_match, dict) or not cached_match:
+        return None
+
+    current_ts = float(now_ts if now_ts is not None else time.time())
+    cached_match_ts = float(row.get("last_match_ts") or 0.0)
+    cache_window = max(float(LIVE_RECOGNITION_ENCODING_CACHE_SECONDS or 0.0), 0.05)
+    if (current_ts - cached_match_ts) > cache_window:
+        return None
+    if not _live_track_cache_is_stable(row):
+        return None
+
+    cached_match_encoding_ts = float(row.get("last_match_encoding_ts") or 0.0)
+    cached_encoding_ts = float(row.get("last_encoding_ts") or 0.0)
+    if cached_encoding_ts <= 0.0 or abs(cached_match_encoding_ts - cached_encoding_ts) > 1e-6:
+        return None
+
+    return cached_match
+
+
+def cache_live_track_match_result(track, match_result, now_ts=None):
+    if not isinstance(match_result, dict) or not match_result:
+        return None
+
+    row = track if isinstance(track, dict) else {}
+    cached_encoding_ts = float(row.get("last_encoding_ts") or 0.0)
+    if cached_encoding_ts <= 0.0:
+        return None
+
+    candidate = match_result.get("candidate")
+    runner_up = match_result.get("runner_up")
+    normalized_match = {
+        "recognized": bool(match_result.get("recognized")),
+        "student": dict(match_result.get("student") or {}) if isinstance(match_result.get("student"), dict) else match_result.get("student"),
+        "confidence": float(match_result.get("confidence") or 0.0),
+        "distance": float(match_result.get("distance") or 0.0),
+        "score_margin": float(match_result.get("score_margin") or 0.0),
+        "distance_margin": float(match_result.get("distance_margin") or 0.0),
+        "reason": str(match_result.get("reason") or ""),
+        "candidate": dict(candidate) if isinstance(candidate, dict) else candidate,
+        "runner_up": dict(runner_up) if isinstance(runner_up, dict) else runner_up,
+    }
+
+    current_ts = float(now_ts if now_ts is not None else time.time())
+    updates = {
+        "last_match_result": normalized_match,
+        "last_match_ts": float(current_ts),
+        "last_match_encoding_ts": float(cached_encoding_ts),
+    }
+    if isinstance(track, dict):
+        track.update(updates)
+
+    track_id = row.get("track_id")
+    if track_id not in (None, ""):
+        set_live_face_track_liveness_state(track_id, **updates)
+    return normalized_match
+
+
 def upscale_face_locations(face_locations, scale_back, frame_shape):
     frame_height = max(int((frame_shape or [0, 0])[0] or 0), 1)
     frame_width = max(int((frame_shape or [0, 0])[1] or 0), 1)
@@ -10205,7 +10323,10 @@ def process_client_frame(frame_bytes):
                 continue
             encoded_track_ids.add(int(track_id or 0))
             face_location_small = track.get("small_location")
-            if legacy_flat_index:
+            cached_match_result = get_cached_live_track_match_result(track, now_ts=frame_now_ts)
+            if cached_match_result is not None:
+                match_result = cached_match_result
+            elif legacy_flat_index:
                 distances = face_recognition.face_distance(db_encodings, enc)
                 if len(distances) > 0:
                     best_idx = int(np.argmin(distances))
@@ -10229,6 +10350,7 @@ def process_client_frame(frame_bytes):
                     }
                 else:
                     match_result = {"recognized": False, "candidate": None, "reason": "no_face_index", "confidence": 0.0}
+                cache_live_track_match_result(track, match_result, now_ts=frame_now_ts)
             else:
                 match_result = match_face_probe(
                     enc,
@@ -10241,6 +10363,9 @@ def process_client_frame(frame_bytes):
                     margin_threshold=RECOGNITION_MARGIN_THRESHOLD,
                     min_support_count=RECOGNITION_MIN_SUPPORT_COUNT,
                 )
+                cache_live_track_match_result(track, match_result, now_ts=frame_now_ts)
+            if not isinstance(match_result, dict):
+                match_result = {"recognized": False, "candidate": None, "reason": "no_face_index", "confidence": 0.0}
 
             if match_result.get("recognized"):
                 candidate = match_result.get("student") or {}
@@ -10414,18 +10539,17 @@ def process_client_frame(frame_bytes):
 def process_scan_frame():
     """
     Endpoint to receive and process frames from client device camera.
-    Expects multipart/form-data with 'frame' file field.
+    Accepts either multipart/form-data with a 'frame' file field or a raw image body.
     """
     try:
-        if 'frame' not in request.files:
-            return jsonify({"status": "error", "message": "No frame data provided"}), 400
-        
-        frame_file = request.files['frame']
-        if frame_file.filename == '':
-            return jsonify({"status": "error", "message": "Empty frame"}), 400
-        
-        # Read frame bytes
-        frame_bytes = frame_file.read()
+        frame_bytes = b""
+        frame_file = request.files.get('frame')
+        if frame_file is not None:
+            if frame_file.filename == '':
+                return jsonify({"status": "error", "message": "Empty frame"}), 400
+            frame_bytes = frame_file.read()
+        else:
+            frame_bytes = request.get_data(cache=False)
         if not frame_bytes:
             return jsonify({"status": "error", "message": "No frame content"}), 400
         

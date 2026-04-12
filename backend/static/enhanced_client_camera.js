@@ -825,24 +825,39 @@ class EnhancedClientCamera {
                 return null;
             }
 
-            // Get or create canvas
+            // Reuse the same capture canvas between frames to avoid repeated DOM allocation.
+            let targetCanvas = null;
             if (typeof canvas === 'string') {
-                this.canvas = document.getElementById(canvas);
+                targetCanvas = document.getElementById(canvas);
             } else if (canvas) {
-                this.canvas = canvas;
+                targetCanvas = canvas;
+            } else if (this.canvas) {
+                targetCanvas = this.canvas;
             } else {
-                this.canvas = document.createElement('canvas');
+                targetCanvas = document.createElement('canvas');
+            }
+            if (!targetCanvas) return null;
+            if (this.canvas !== targetCanvas) {
+                this.canvas = targetCanvas;
+                this.canvasContext = null;
             }
 
             // Set canvas size to match video
-            this.canvas.width = videoWidth;
-            this.canvas.height = videoHeight;
+            if (this.canvas.width !== videoWidth || this.canvas.height !== videoHeight) {
+                this.canvas.width = videoWidth;
+                this.canvas.height = videoHeight;
+            }
 
             // Get 2D context
-            this.canvasContext = this.canvas.getContext('2d');
+            if (!this.canvasContext) {
+                this.canvasContext = this.canvas.getContext('2d', {
+                    alpha: false,
+                    desynchronized: true,
+                }) || this.canvas.getContext('2d');
+            }
 
             // Draw current video frame to canvas
-            this.canvasContext.drawImage(this.videoElement, 0, 0);
+            this.canvasContext.drawImage(this.videoElement, 0, 0, videoWidth, videoHeight);
 
             return this.canvas;
 
@@ -883,7 +898,10 @@ class EnhancedClientCamera {
                             this.uploadCanvas.height = targetHeight;
                         }
                         if (!this.uploadCanvasContext) {
-                            this.uploadCanvasContext = this.uploadCanvas.getContext('2d');
+                            this.uploadCanvasContext = this.uploadCanvas.getContext('2d', {
+                                alpha: false,
+                                desynchronized: true,
+                            }) || this.uploadCanvas.getContext('2d');
                         }
                         this.uploadCanvasContext.drawImage(sourceCanvas, 0, 0, targetWidth, targetHeight);
                         exportCanvas = this.uploadCanvas;

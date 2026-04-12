@@ -32,6 +32,79 @@
             letter-spacing: -0.01em;
         }
 
+        .dashboard-welcome-notice {
+            position: fixed;
+            left: 50%;
+            top: 50%;
+            z-index: 68;
+            display: flex;
+            justify-content: center;
+            width: min(calc(100vw - 1.5rem), 64rem);
+            opacity: 0;
+            pointer-events: none;
+            transform: translate(-50%, calc(-50% - 16px)) scale(0.96);
+            transition:
+                opacity 220ms ease,
+                transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+        }
+
+        body.dashboard-page.staff-dashboard .dashboard-welcome-notice {
+            top: 50%;
+        }
+
+        .dashboard-welcome-notice.is-visible {
+            opacity: 1;
+            transform: translate(-50%, -50%) scale(1);
+        }
+
+        .dashboard-welcome-notice.is-hiding {
+            opacity: 0;
+            transform: translate(-50%, calc(-50% - 10px)) scale(0.98);
+        }
+
+        .dashboard-welcome-card {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            max-width: 100%;
+            padding: 0;
+            border: none;
+            background: transparent;
+            box-shadow: none;
+            backdrop-filter: none;
+        }
+
+        .dashboard-welcome-orb {
+            display: none;
+        }
+
+        .dashboard-welcome-text {
+            margin: 0;
+            color: #15803d;
+            font-size: clamp(1.45rem, 2vw, 2rem);
+            font-weight: 800;
+            line-height: 1.2;
+            letter-spacing: -0.025em;
+            text-align: center;
+            text-wrap: balance;
+            text-shadow:
+                0 2px 16px rgba(255, 255, 255, 0.95),
+                0 1px 2px rgba(21, 128, 61, 0.14);
+        }
+
+        html[data-theme="dark"] .dashboard-welcome-card {
+            background: transparent;
+            border: none;
+            box-shadow: none;
+        }
+
+        html[data-theme="dark"] .dashboard-welcome-text {
+            color: #4ade80;
+            text-shadow:
+                0 2px 18px rgba(15, 23, 42, 0.92),
+                0 1px 2px rgba(20, 83, 45, 0.45);
+        }
+
         .dashboard-shell {
             min-width: 0;
             flex: 1 1 auto;
@@ -1774,6 +1847,12 @@
             color: rgb(253 164 175);
         }
 
+        @media (prefers-reduced-motion: reduce) {
+            .dashboard-welcome-notice {
+                transition: none;
+            }
+        }
+
         #gateConsoleCard .gate-console-divider {
             padding-bottom: 1rem;
         }
@@ -1857,6 +1936,23 @@
                 top: 0.75rem;
                 right: 0.85rem;
             }
+
+            .dashboard-welcome-notice {
+                top: 50%;
+                width: min(calc(100vw - 1rem), 40rem);
+            }
+
+            body.dashboard-page.staff-dashboard .dashboard-welcome-notice {
+                top: 50%;
+            }
+
+            .dashboard-welcome-card {
+                padding: 0;
+            }
+
+            .dashboard-welcome-text {
+                font-size: clamp(1.2rem, 5vw, 1.55rem);
+            }
         }
     </style>
 </head>
@@ -1873,6 +1969,12 @@
         <span class="sr-only">Logout</span>
     </a>
     {% endif %}
+    <div id="dashboardWelcomeNotice" class="dashboard-welcome-notice" aria-live="polite" aria-atomic="true" aria-hidden="true">
+        <div class="dashboard-welcome-card">
+            <span class="dashboard-welcome-orb" aria-hidden="true"></span>
+            <p id="dashboardWelcomeText" class="dashboard-welcome-text"></p>
+        </div>
+    </div>
     <div class="flex h-full w-full min-w-0">
 
         <div class="{% if is_staff_dashboard %}hidden {% endif %}shrink-0">
@@ -3130,9 +3232,17 @@
         const scanActivityTrashDock = document.getElementById('scanActivityTrashDock');
         const scanActivityTrashTarget = document.getElementById('scanActivityTrashTarget');
         const alertsSummaryCount = document.getElementById('alertsSummaryCount');
+        const dashboardWelcomeNotice = document.getElementById('dashboardWelcomeNotice');
+        const dashboardWelcomeText = document.getElementById('dashboardWelcomeText');
+        const dashboardRole = {{ current_role|tojson }};
+        const DASHBOARD_WELCOME_STORAGE_KEY = 'chsDashboardWelcomePending';
+        const DASHBOARD_WELCOME_MAX_AGE_MS = 3 * 60 * 1000;
+        const DASHBOARD_WELCOME_MIN_VISIBLE_MS = 2200;
+        const DASHBOARD_WELCOME_MAX_VISIBLE_MS = 3800;
         let scanPollingTimer = null;
         let scanEventsRequestInFlight = false;
         let lastEventId = 0;
+        const SCAN_EVENT_POLL_INTERVAL_MS = 180;
         let isScanning = false;
         let audioCtx = null;
         let scanSessionMode = 'auto';
@@ -3163,6 +3273,47 @@
         const SCAN_ACTIVITY_TRASH_OUTRO_MS = 460;
         const PROCESSED_SCAN_EVENT_HISTORY_LIMIT = 120;
         const VOICE_FEEDBACK_HISTORY_LIMIT = 40;
+        const VERIFICATION_VOICE_LANG = 'en-US';
+        const VERIFICATION_VOICE_RATE = 0.94;
+        const VERIFICATION_VOICE_PITCH = 0.88;
+        const VERIFICATION_VOICE_VOLUME = 1.0;
+        const VERIFICATION_VOICE_PRIMARY_HINTS = [
+            /microsoft guy/i,
+            /microsoft david/i,
+            /microsoft mark/i,
+            /google uk english male/i,
+            /google us english/i,
+            /\bguy\b/i,
+            /\bdavid\b/i,
+            /\bmark\b/i,
+            /\bbrian\b/i,
+            /\bchristopher\b/i,
+            /\bjames\b/i,
+            /\bryan\b/i,
+            /\bdaniel\b/i,
+            /\balex\b/i,
+            /\bfred\b/i,
+            /\bralph\b/i,
+            /\baaron\b/i,
+        ];
+        const VERIFICATION_VOICE_AVOID_HINTS = [
+            /microsoft aria/i,
+            /microsoft jenny/i,
+            /google uk english female/i,
+            /\bsamantha\b/i,
+            /\bzira\b/i,
+            /\bava\b/i,
+            /\bserena\b/i,
+            /\bmoira\b/i,
+            /\bkaren\b/i,
+            /\blibby\b/i,
+            /\bellie\b/i,
+            /\bamy\b/i,
+            /\bemma\b/i,
+            /\bsonia\b/i,
+            /\bjoanna\b/i,
+            /\bivy\b/i,
+        ];
         const SCAN_FACE_BOX_COLOR = '#6fefff';
         const SCAN_FACE_BOX_ACCENT_COLOR = '#ecfdff';
         const SCAN_FACE_BOX_GLOW_COLOR = 'rgba(111, 239, 255, 0.34)';
@@ -3180,6 +3331,11 @@
         const voiceFeedbackQueue = [];
         const spokenVoiceKeys = [];
         let isSpeakingVerification = false;
+        let preferredVerificationVoice = null;
+        let verificationVoiceListenerBound = false;
+        let dashboardWelcomeHideTimer = null;
+        let dashboardWelcomeShownAt = 0;
+        let dashboardWelcomePlayed = false;
 
         // School year variables for disabling scanning console
         const selectedSchoolYear = "{{ selected_school_year }}";
@@ -4010,16 +4166,225 @@
             return String(evt.voice_key || `${evt.student_id || ''}:${evt.gate_action || ''}:${evt.timestamp || evt.id || ''}`).trim();
         }
 
+        function normalizeVoiceFeedbackText(text) {
+            return String(text || '')
+                .replace(/\bIN\b/g, 'in')
+                .replace(/\bOUT\b/g, 'out')
+                .replace(/\s+/g, ' ')
+                .trim();
+        }
+
+        function scoreVerificationVoice(voice) {
+            if (!voice) return Number.NEGATIVE_INFINITY;
+
+            const name = String(voice.name || '');
+            const lang = String(voice.lang || '').toLowerCase();
+            let score = 0;
+
+            if (lang === VERIFICATION_VOICE_LANG.toLowerCase()) {
+                score += 70;
+            } else if (lang.startsWith('en-')) {
+                score += 50;
+            } else if (lang.startsWith('en')) {
+                score += 35;
+            }
+            if (/natural|neural/.test(name)) score += 45;
+            if (/online/.test(name)) score += 12;
+            if (/male/.test(name)) score += 34;
+            if (/female/.test(name)) score -= 34;
+            if (voice.localService) score += 10;
+            if (voice.default) score += 6;
+            if (VERIFICATION_VOICE_PRIMARY_HINTS.some((pattern) => pattern.test(name))) score += 80;
+            if (VERIFICATION_VOICE_AVOID_HINTS.some((pattern) => pattern.test(name))) score -= 40;
+            if (/child|junior/.test(name)) score -= 20;
+
+            return score;
+        }
+
+        function loadPreferredVerificationVoice() {
+            if (!('speechSynthesis' in window)) return null;
+
+            const voices = Array.from(window.speechSynthesis.getVoices() || []).filter(Boolean);
+            if (!voices.length) {
+                preferredVerificationVoice = null;
+                return null;
+            }
+
+            preferredVerificationVoice = voices
+                .slice()
+                .sort((left, right) => scoreVerificationVoice(right) - scoreVerificationVoice(left))[0]
+                || voices.find((voice) => voice.default)
+                || voices[0]
+                || null;
+
+            return preferredVerificationVoice;
+        }
+
+        function primeVerificationVoiceEngine() {
+            if (!('speechSynthesis' in window)) return;
+
+            loadPreferredVerificationVoice();
+            if (verificationVoiceListenerBound) return;
+
+            verificationVoiceListenerBound = true;
+            const refreshVoices = () => {
+                loadPreferredVerificationVoice();
+            };
+
+            if (typeof window.speechSynthesis.addEventListener === 'function') {
+                window.speechSynthesis.addEventListener('voiceschanged', refreshVoices);
+            } else if (typeof window.speechSynthesis.onvoiceschanged !== 'function') {
+                window.speechSynthesis.onvoiceschanged = refreshVoices;
+            }
+        }
+
+        function buildVoiceFeedbackUtterance(text) {
+            const utterance = new SpeechSynthesisUtterance(text);
+            const selectedVoice = loadPreferredVerificationVoice();
+
+            if (selectedVoice) {
+                utterance.voice = selectedVoice;
+                utterance.lang = selectedVoice.lang || VERIFICATION_VOICE_LANG;
+                if (selectedVoice.voiceURI) {
+                    utterance.voiceURI = selectedVoice.voiceURI;
+                }
+            } else {
+                utterance.lang = VERIFICATION_VOICE_LANG;
+            }
+
+            utterance.rate = VERIFICATION_VOICE_RATE;
+            utterance.pitch = VERIFICATION_VOICE_PITCH;
+            utterance.volume = VERIFICATION_VOICE_VOLUME;
+            return utterance;
+        }
+
+        function clearDashboardWelcomeHideTimer() {
+            if (dashboardWelcomeHideTimer) {
+                window.clearTimeout(dashboardWelcomeHideTimer);
+                dashboardWelcomeHideTimer = null;
+            }
+        }
+
+        function showDashboardWelcomeNotice(message) {
+            if (!dashboardWelcomeNotice || !dashboardWelcomeText) return;
+            clearDashboardWelcomeHideTimer();
+            dashboardWelcomeShownAt = Date.now();
+            dashboardWelcomeText.textContent = String(message || '').trim();
+            dashboardWelcomeNotice.setAttribute('aria-hidden', 'false');
+            dashboardWelcomeNotice.classList.remove('is-hiding', 'is-visible');
+            void dashboardWelcomeNotice.offsetWidth;
+            dashboardWelcomeNotice.classList.add('is-visible');
+        }
+
+        function hideDashboardWelcomeNotice({ immediate = false } = {}) {
+            if (!dashboardWelcomeNotice) return;
+            clearDashboardWelcomeHideTimer();
+
+            if (immediate) {
+                dashboardWelcomeNotice.classList.remove('is-visible', 'is-hiding');
+                dashboardWelcomeNotice.setAttribute('aria-hidden', 'true');
+                return;
+            }
+
+            dashboardWelcomeNotice.classList.remove('is-visible');
+            dashboardWelcomeNotice.classList.add('is-hiding');
+            window.setTimeout(() => {
+                if (!dashboardWelcomeNotice.classList.contains('is-visible')) {
+                    dashboardWelcomeNotice.classList.remove('is-hiding');
+                    dashboardWelcomeNotice.setAttribute('aria-hidden', 'true');
+                }
+            }, 260);
+        }
+
+        function scheduleDashboardWelcomeHide(delay = DASHBOARD_WELCOME_MAX_VISIBLE_MS) {
+            clearDashboardWelcomeHideTimer();
+            dashboardWelcomeHideTimer = window.setTimeout(() => {
+                dashboardWelcomeHideTimer = null;
+                hideDashboardWelcomeNotice();
+            }, Math.max(160, Number(delay) || DASHBOARD_WELCOME_MAX_VISIBLE_MS));
+        }
+
+        function resolveDashboardWelcomeMessage() {
+            const normalizedRole = String(dashboardRole || '').trim().toLowerCase();
+            if (normalizedRole.includes('admin')) {
+                return 'Welcome back, Admin. System is ready.';
+            }
+            return 'Welcome back, sir. System is ready.';
+        }
+
+        function consumePendingDashboardWelcome() {
+            try {
+                const raw = window.sessionStorage.getItem(DASHBOARD_WELCOME_STORAGE_KEY);
+                if (!raw) return false;
+                window.sessionStorage.removeItem(DASHBOARD_WELCOME_STORAGE_KEY);
+
+                let payload = {};
+                try {
+                    payload = JSON.parse(raw) || {};
+                } catch (_error) {
+                    payload = {};
+                }
+
+                const issuedAt = Number(payload.issuedAt || 0);
+                return !issuedAt || (Date.now() - issuedAt) <= DASHBOARD_WELCOME_MAX_AGE_MS;
+            } catch (_error) {
+                return false;
+            }
+        }
+
+        function cameFromLoginPage() {
+            const referrer = String(document.referrer || '').trim();
+            if (!referrer) return false;
+
+            try {
+                const referrerUrl = new URL(referrer, window.location.origin);
+                return referrerUrl.origin === window.location.origin && /\/login\/?$/.test(referrerUrl.pathname);
+            } catch (_error) {
+                return false;
+            }
+        }
+
+        function shouldPlayDashboardWelcome() {
+            if (dashboardWelcomePlayed) return false;
+            if (consumePendingDashboardWelcome()) return true;
+            return cameFromLoginPage();
+        }
+
+        function playDashboardWelcome() {
+            if (!shouldPlayDashboardWelcome()) return;
+            dashboardWelcomePlayed = true;
+
+            const message = resolveDashboardWelcomeMessage();
+            showDashboardWelcomeNotice(message);
+            scheduleDashboardWelcomeHide(DASHBOARD_WELCOME_MAX_VISIBLE_MS);
+
+            if (!('speechSynthesis' in window)) {
+                return;
+            }
+
+            try {
+                primeVerificationVoiceEngine();
+                const utterance = buildVoiceFeedbackUtterance(message);
+                utterance.onend = utterance.onerror = () => {
+                    const elapsed = Date.now() - dashboardWelcomeShownAt;
+                    const remainingVisibleMs = Math.max(DASHBOARD_WELCOME_MIN_VISIBLE_MS - elapsed, 0);
+                    scheduleDashboardWelcomeHide(remainingVisibleMs + 220);
+                };
+                window.speechSynthesis.cancel();
+                window.speechSynthesis.speak(utterance);
+            } catch (error) {
+                console.debug('Dashboard welcome voice failed:', error?.message || error);
+            }
+        }
+
         function processVoiceFeedbackQueue() {
             if (isSpeakingVerification || !voiceFeedbackQueue.length || !('speechSynthesis' in window) || !isScanning) return;
             const nextItem = voiceFeedbackQueue.shift();
             if (!nextItem || !nextItem.text) return;
 
             isSpeakingVerification = true;
-            const utterance = new SpeechSynthesisUtterance(nextItem.text);
-            utterance.rate = 1.0;
-            utterance.pitch = 1.0;
-            utterance.volume = 1.0;
+            primeVerificationVoiceEngine();
+            const utterance = buildVoiceFeedbackUtterance(nextItem.text);
             utterance.onend = utterance.onerror = () => {
                 isSpeakingVerification = false;
                 window.setTimeout(processVoiceFeedbackQueue, 80);
@@ -4028,7 +4393,7 @@
         }
 
         function queueVoiceFeedback(text, voiceKey = '') {
-            const normalizedText = String(text || '').trim();
+            const normalizedText = normalizeVoiceFeedbackText(text);
             const normalizedKey = String(voiceKey || '').trim();
             if (!normalizedText || !('speechSynthesis' in window)) return;
             if (normalizedKey && spokenVoiceKeys.includes(normalizedKey)) return;
@@ -4172,6 +4537,8 @@
                 'scan-activity-announce',
             );
         }
+
+        primeVerificationVoiceEngine();
 
         function triggerScanActivityTrashInteraction(batchSize = 1) {
             if (!scanActivityTrashDock || prefersReducedScanActivityMotion()) return;
@@ -4757,12 +5124,22 @@
             }
         }
 
+        function shouldPollScanEventsImmediately(message) {
+            const normalizedMessage = String(message || '').trim();
+            return (
+                /^Verified\b/i.test(normalizedMessage)
+                || /^No reliable match\b/i.test(normalizedMessage)
+                || /^Face\(s\) not encoded$/i.test(normalizedMessage)
+                || /^No face index$/i.test(normalizedMessage)
+            );
+        }
+
         function startPollingEvents() {
             if (scanPollingTimer) return;
             void pollScanEventsOnce();
             scanPollingTimer = setInterval(() => {
                 void pollScanEventsOnce();
-            }, 180);
+            }, SCAN_EVENT_POLL_INTERVAL_MS);
         }
 
         function stopPollingEvents() {
@@ -4832,14 +5209,16 @@
                     return;
                 }
 
-                const formData = new FormData();
-                formData.append('frame', frameBlob, 'frame.jpg');
                 requestController = new AbortController();
                 scanFrameAbortController = requestController;
 
                 const response = await fetch('/process_scan_frame', {
                     method: 'POST',
-                    body: formData,
+                    body: frameBlob,
+                    headers: {
+                        'Content-Type': frameBlob.type || 'image/jpeg',
+                    },
+                    cache: 'no-store',
                     signal: requestController.signal,
                 });
                 if (!isScanning) return;
@@ -4864,7 +5243,9 @@
                     if (!processorBusy) {
                         applyScanProcessingFeedback(payload.message || '');
                     }
-                    void pollScanEventsOnce();
+                    if (shouldPollScanEventsImmediately(scanMessage)) {
+                        void pollScanEventsOnce();
+                    }
                 }
 
                 if (processorBusy || !response.ok) {
@@ -5001,6 +5382,7 @@
 
         startBtn.addEventListener('click', async () => {
             if (isScanning) return;
+            primeVerificationVoiceEngine();
 
             // Check if previous year is selected
             if (isPreviousYearSelected()) {
@@ -6553,6 +6935,9 @@
 
         // Instant Start Logic for Gate Scanning
         window.addEventListener('load', () => {
+            window.setTimeout(() => {
+                playDashboardWelcome();
+            }, 120);
             const allowScannerHashAutoStart = {{ 'true' if is_staff_dashboard else 'false' }};
             if (window.location.hash === '#gate-scanning') {
                 setTimeout(() => {
