@@ -8,6 +8,11 @@ services:
     plan: starter
     region: singapore
     numInstances: 1
+    maxShutdownDelaySeconds: 120
+    buildFilter:
+      paths:
+        - backend/**
+        - render.yaml
     healthCheckPath: /login
     disk:
       name: avatars
@@ -100,7 +105,12 @@ services:
     plan: starter
     region: singapore
     numInstances: 1
-    buildCommand: npm ci
+    maxShutdownDelaySeconds: 60
+    buildFilter:
+      paths:
+        - backend/**
+        - render.yaml
+    buildCommand: npm ci --omit=dev
     startCommand: LIVE_MONITORING_SIGNALING_PORT=$PORT node live_monitor_server.js
     healthCheckPath: /healthz
     envVars:
