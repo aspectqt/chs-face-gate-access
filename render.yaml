@@ -1,0 +1,117 @@
+services:
+  - type: web
+    name: chs-gate-web
+    runtime: docker
+    rootDir: backend
+    dockerfilePath: ./backend/Dockerfile.render
+    dockerContext: ./backend
+    plan: starter
+    region: singapore
+    numInstances: 1
+    healthCheckPath: /login
+    disk:
+      name: avatars
+      mountPath: /app/static/avatars
+      sizeGB: 5
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: FLASK_DEBUG
+        value: "0"
+      - key: FORCE_HTTPS
+        value: "1"
+      - key: HTTPS_ENABLED
+        value: "0"
+      - key: TRUST_PROXY_HEADERS
+        value: "1"
+      - key: PREFERRED_URL_SCHEME
+        value: https
+      - key: APP_BASE_URL
+        sync: false
+      - key: SESSION_COOKIE_SECURE
+        value: "1"
+      - key: PASSWORD_RESET_DEV_LINK_FALLBACK
+        value: "0"
+      - key: ENABLE_BACKGROUND_JOBS
+        value: "1"
+      - key: LIVE_MONITORING_MANAGED
+        value: "0"
+      - key: LIVE_MONITORING_AUTO_START
+        value: "0"
+      - key: LIVE_MONITORING_CHANNEL
+        value: main-gate
+      - key: FLASK_SECRET_KEY
+        generateValue: true
+      - key: LIVE_MONITORING_TOKEN_SECRET
+        fromService:
+          type: web
+          name: chs-gate-live-monitor
+          envVarKey: LIVE_MONITORING_TOKEN_SECRET
+      - key: LIVE_MONITORING_SIGNALING_URL
+        fromService:
+          type: web
+          name: chs-gate-live-monitor
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: MONGODB_URI
+        sync: false
+      - key: MONGODB_DB_NAME
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_USERNAME
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+      - key: SMTP_USE_TLS
+        sync: false
+      - key: SMTP_USE_SSL
+        sync: false
+      - key: PHILSMS_BASE_URL
+        sync: false
+      - key: PHILSMS_API_TOKEN
+        sync: false
+      - key: PHILSMS_SENDER_ID
+        sync: false
+      - key: PHILSMS_SEND_PATH
+        sync: false
+      - key: PHILSMS_MESSAGE_TYPE
+        sync: false
+      - key: PHILSMS_USER_AGENT
+        sync: false
+      - key: PHILSMS_TIMEOUT_SECONDS
+        sync: false
+      - key: PHILSMS_MAX_RETRIES
+        sync: false
+      - key: PHILSMS_BACKOFF_SECONDS
+        sync: false
+      - key: PHILSMS_BALANCE_PATH
+        sync: false
+      - key: TEST_SMS_RECIPIENT
+        sync: false
+
+  - type: web
+    name: chs-gate-live-monitor
+    runtime: node
+    rootDir: backend
+    plan: starter
+    region: singapore
+    numInstances: 1
+    buildCommand: npm ci
+    startCommand: LIVE_MONITORING_SIGNALING_PORT=$PORT node live_monitor_server.js
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: LIVE_MONITORING_CHANNEL
+        value: main-gate
+      - key: LIVE_MONITORING_TOKEN_SECRET
+        generateValue: true
+      - key: LIVE_MONITORING_ALLOWED_ORIGINS
+        fromService:
+          type: web
+          name: chs-gate-web
+          envVarKey: RENDER_EXTERNAL_URL
