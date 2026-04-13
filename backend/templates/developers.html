@@ -216,6 +216,9 @@
 
         <div class="mt-4 grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4">
           {% for dev in developers %}
+          {% set support_subject = "CHS Gate Support Request" %}
+          {% set support_body = "Hello " ~ dev.name ~ ",\n\nI need assistance with the CHS Gate system.\n\nModule/Page:\nIssue/Concern:\n\nThank you." %}
+          {% set compose_link = "mailto:" ~ dev.email ~ "?subject=" ~ (support_subject|urlencode) ~ "&body=" ~ (support_body|urlencode) %}
           <article class="app-content-card group relative overflow-hidden p-5 transition duration-300 hover:-translate-y-1 hover:border-emerald-200 hover:shadow-md">
             <div class="absolute -top-10 -right-10 h-24 w-24 rounded-full bg-emerald-200/30 blur-2xl transition duration-300 group-hover:bg-emerald-200/45"></div>
             <div class="relative">
@@ -240,15 +243,21 @@
                 <p class="mt-1 text-sm text-slate-600 leading-relaxed min-h-[72px]">{{ dev.contribution }}</p>
               </div>
 
-              <div class="mt-4 flex items-center justify-between gap-2">
-                <a href="mailto:{{ dev.email }}" class="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 hover:text-emerald-700">
+              <div class="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <a href="{{ compose_link }}" class="inline-flex w-fit items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 hover:text-emerald-700">
                   <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-emerald-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M3 7.5A2.5 2.5 0 015.5 5h13A2.5 2.5 0 0121 7.5v9a2.5 2.5 0 01-2.5 2.5h-13A2.5 2.5 0 013 16.5v-9Z" />
                     <path stroke-linecap="round" stroke-linejoin="round" d="m3 8 9 6 9-6" />
                   </svg>
                   Contact
                 </a>
-                <span class="text-[11px] font-medium text-slate-500 truncate">{{ dev.email }}</span>
+                <a
+                  href="{{ compose_link }}"
+                  class="text-[11px] font-medium text-slate-500 transition hover:text-emerald-700 break-all sm:ml-auto sm:max-w-[16rem] sm:text-right"
+                  aria-label="Compose an email to {{ dev.name }}"
+                >
+                  {{ dev.email }}
+                </a>
               </div>
             </div>
           </article>
