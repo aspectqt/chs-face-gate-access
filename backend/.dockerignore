@@ -1,0 +1,13 @@
+.env
+.venv
+venv
+node_modules
+__pycache__
+.pytest_cache
+certs
+tests
+scripts
+*.pyc
+*.pyo
+*.pyd
+*.log

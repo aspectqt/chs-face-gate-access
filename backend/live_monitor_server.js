@@ -30,6 +30,38 @@ const io = new Server(server, {
   transports: ["websocket", "polling"],
 });
 
+server.on("request", (req, res) => {
+  if (res.writableEnded || res.headersSent) {
+    return;
+  }
+
+  const requestPath = String(req.url || "").split("?", 1)[0];
+  if (requestPath.startsWith("/socket.io/")) {
+    return;
+  }
+
+  if (requestPath === "/" || requestPath === "/healthz") {
+    const protocol = isHttpsServer(server) ? "https" : "http";
+    const payload = JSON.stringify({
+      status: "ok",
+      service: "live-monitoring-signaling",
+      protocol,
+      channel: DEFAULT_CHANNEL,
+      publishers: publisherByChannel.size,
+      viewers: Array.from(viewersByChannel.values()).reduce((count, viewers) => count + viewers.size, 0),
+    });
+    res.statusCode = 200;
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.setHeader("Cache-Control", "no-store");
+    res.end(payload);
+    return;
+  }
+
+  res.statusCode = 404;
+  res.setHeader("Content-Type", "text/plain; charset=utf-8");
+  res.end("Not Found");
+});
+
 io.use((socket, next) => {
   try {
     const authToken = String(socket.handshake.auth?.token || socket.handshake.query?.token || "").trim();
