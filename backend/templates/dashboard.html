@@ -2724,13 +2724,13 @@
     </div>
 
     <!-- NOTIFICATION MODAL -->
-    <div id="notificationModal" class="fixed inset-0 z-[75] hidden" aria-hidden="true">
+    <div id="notificationModal" class="app-modal-shell fixed inset-0 z-[75] hidden" aria-hidden="true">
         <div id="notificationModalBackdrop" class="modal-backdrop-blur absolute inset-0 bg-slate-950/45"></div>
         <div class="absolute inset-0 flex items-center justify-center p-3 sm:p-5">
             <div id="notificationModalPanel"
                 class="relative flex max-h-[calc(100vh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl"
                 role="dialog" aria-modal="true" aria-labelledby="notificationModalTitle">
-                <div class="border-b border-slate-200 bg-gradient-to-r from-slate-50 to-white px-6 py-5">
+                <div class="app-modal-header border-b border-slate-200 bg-gradient-to-r from-slate-50 to-white px-6 py-5">
                     <div class="flex items-start justify-between gap-4">
                         <div>
                             <p id="notificationModalEyebrow"
@@ -2741,7 +2741,7 @@
                             <p id="notificationModalTimestamp" class="mt-1 text-sm text-slate-500">-</p>
                         </div>
                         <button id="notificationModalClose" type="button"
-                            class="rounded-xl border border-slate-200 bg-white p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+                            class="app-modal-close rounded-xl border border-slate-200 bg-white p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
                             aria-label="Close notification">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
                                 stroke="currentColor" stroke-width="2">
@@ -2783,13 +2783,13 @@
     </div>
 
     <!-- PROFILE MODAL -->
-    <div id="profileModal" class="fixed inset-0 z-[70] hidden" aria-hidden="true">
+    <div id="profileModal" class="app-modal-shell fixed inset-0 z-[70] hidden" aria-hidden="true">
         <div id="profileModalBackdrop" class="modal-backdrop-blur absolute inset-0 bg-black/50"></div>
         <div class="absolute inset-0 p-2 sm:p-4 md:p-6 flex items-start md:items-center justify-center overflow-y-auto">
             <div id="profileModalPanel"
                 class="w-full max-w-4xl rounded-3xl border border-slate-200 bg-white shadow-2xl overflow-hidden max-h-[calc(100vh-1rem)] sm:max-h-[calc(100vh-2rem)] md:max-h-[calc(100vh-3rem)] flex flex-col"
                 role="dialog" aria-modal="true" aria-labelledby="profileModalTitle">
-                <div class="border-b border-slate-200 bg-gradient-to-r from-slate-50 to-white px-6 py-5">
+                <div class="app-modal-header border-b border-slate-200 bg-gradient-to-r from-slate-50 to-white px-6 py-5">
                     <div class="flex items-start justify-between gap-4">
                         <div>
                             <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Account Profile
@@ -2806,7 +2806,7 @@
                                 <p id="profileLastUpdated" class="text-xs font-medium text-slate-700">-</p>
                             </div>
                             <button id="profileModalClose" type="button"
-                                class="rounded-lg border border-slate-200 bg-white p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                                class="app-modal-close rounded-lg border border-slate-200 bg-white p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
                                 aria-label="Close modal">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
                                     stroke="currentColor" stroke-width="2">
@@ -3074,17 +3074,17 @@
     </div>
 
     {% if can_manage_users %}
-    <div id="staffDeleteModal" class="fixed inset-0 z-[85] hidden bg-slate-950/45 p-4">
+    <div id="staffDeleteModal" class="app-modal-shell fixed inset-0 z-[85] hidden bg-slate-950/45 p-4">
         <div class="flex min-h-full items-center justify-center">
-            <div class="w-full max-w-md rounded-3xl border border-slate-200 bg-white shadow-2xl">
-                <div class="border-b border-slate-200 px-6 py-5">
+            <div class="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-slate-200 bg-white shadow-2xl">
+                <div class="app-modal-header border-b border-slate-200 px-6 py-5">
                     <div class="flex items-start justify-between gap-4">
                         <div>
                             <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-rose-500">Confirm Delete</p>
                             <h2 class="mt-2 text-xl font-semibold text-slate-900">Delete Staff Account</h2>
                             <p class="mt-2 text-sm text-slate-500">This permanently removes the Staff account.</p>
                         </div>
-                        <button type="button" class="rounded-xl border border-slate-200 bg-white p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700" data-close-staff-modal="staffDeleteModal" aria-label="Close delete modal">
+                        <button type="button" class="app-modal-close rounded-xl border border-slate-200 bg-white p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700" data-close-staff-modal="staffDeleteModal" aria-label="Close delete modal">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
                             </svg>
@@ -3103,17 +3103,17 @@
         </div>
     </div>
 
-    <div id="staffPasswordModal" class="fixed inset-0 z-[85] hidden bg-slate-950/45 p-4">
+    <div id="staffPasswordModal" class="app-modal-shell fixed inset-0 z-[85] hidden bg-slate-950/45 p-4">
         <div class="flex min-h-full items-center justify-center">
-            <div class="w-full max-w-lg rounded-3xl border border-slate-200 bg-white shadow-2xl">
-                <div class="border-b border-slate-200 px-6 py-5">
+            <div class="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-3xl border border-slate-200 bg-white shadow-2xl">
+                <div class="app-modal-header border-b border-slate-200 px-6 py-5">
                     <div class="flex items-start justify-between gap-4">
                         <div>
                             <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-500">Staff Password</p>
                             <h2 class="mt-2 text-xl font-semibold text-slate-900">Reset / Change Password</h2>
                             <p class="mt-2 text-sm text-slate-500">Set a new password for <span id="staffPasswordName" class="font-semibold text-slate-700">this staff account</span>.</p>
                         </div>
-                        <button type="button" class="rounded-xl border border-slate-200 bg-white p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700" data-close-staff-modal="staffPasswordModal" aria-label="Close password modal">
+                        <button type="button" class="app-modal-close rounded-xl border border-slate-200 bg-white p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700" data-close-staff-modal="staffPasswordModal" aria-label="Close password modal">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
                             </svg>

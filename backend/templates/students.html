@@ -321,7 +321,7 @@
   </div>
 </div>
 
-<div id="schoolYearModal" class="modal modal-backdrop-blur hidden fixed inset-0 z-[90] bg-black/55 p-3 sm:p-4 flex items-center justify-center" data-overlay>
+<div id="schoolYearModal" class="app-modal-shell modal modal-backdrop-blur hidden fixed inset-0 z-[90] bg-black/55 p-3 sm:p-4 flex items-center justify-center" data-overlay>
   <div class="w-full max-w-lg rounded-3xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/20">
     <div class="border-b border-slate-200 bg-gradient-to-r from-slate-900 via-slate-800 to-emerald-900 px-5 py-4 text-white sm:px-6">
       <div class="flex items-start justify-between gap-4">
@@ -359,7 +359,7 @@
   </div>
 </div>
 
-<div id="addModal" class="modal modal-backdrop-blur hidden fixed inset-0 z-[90] bg-black/55 p-3 sm:p-4 flex items-center justify-center" data-overlay>
+<div id="addModal" class="app-modal-shell modal modal-backdrop-blur hidden fixed inset-0 z-[90] bg-black/55 p-3 sm:p-4 flex items-center justify-center" data-overlay>
   <div class="w-full max-w-4xl rounded-3xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/20 max-h-[90vh] overflow-y-auto">
     <div class="sticky top-0 z-10 border-b border-slate-200 bg-gradient-to-r from-slate-900 via-slate-800 to-emerald-900 px-5 py-4 text-white sm:px-6">
       <div class="flex items-start justify-between gap-4">
@@ -398,7 +398,7 @@
         </button>
       </div>
 
-      <section id="addManualPanel" class="rounded-2xl border border-slate-200 bg-gradient-to-br from-white via-slate-50 to-emerald-50/40 p-4 sm:p-5">
+      <section id="addManualPanel" class="app-modal-surface-accent rounded-2xl border border-slate-200 bg-gradient-to-br from-white via-slate-50 to-emerald-50/40 p-4 sm:p-5">
         <div class="mb-4">
           <h4 class="text-sm font-semibold text-slate-900">Manual Student Entry</h4>
           <p class="mt-1 text-xs text-slate-500">Fill out all required details. Validation is checked before saving.</p>
@@ -552,7 +552,7 @@
   </div>
 </div>
 
-<div id="reenrollModal" class="modal modal-backdrop-blur hidden fixed inset-0 z-[91] bg-black/55 p-3 sm:p-4 flex items-center justify-center" data-overlay>
+<div id="reenrollModal" class="app-modal-shell modal modal-backdrop-blur hidden fixed inset-0 z-[91] bg-black/55 p-3 sm:p-4 flex items-center justify-center" data-overlay>
   <div class="w-full max-w-6xl rounded-3xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/20 max-h-[92vh] overflow-y-auto">
     <div class="sticky top-0 z-10 border-b border-slate-200 bg-gradient-to-r from-slate-900 via-slate-800 to-emerald-900 px-5 py-4 text-white sm:px-6">
       <div class="flex items-start justify-between gap-4">
@@ -624,7 +624,7 @@
   </div>
 </div>
 
-<div id="reenrollAssignModal" class="modal modal-backdrop-blur hidden fixed inset-0 z-[93] bg-black/60 p-3 sm:p-4 flex items-center justify-center" data-overlay>
+<div id="reenrollAssignModal" class="app-modal-shell modal modal-backdrop-blur hidden fixed inset-0 z-[93] bg-black/60 p-3 sm:p-4 flex items-center justify-center" data-overlay>
   <div class="w-full max-w-lg rounded-3xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/25 max-h-[90vh] overflow-y-auto">
     <div class="sticky top-0 z-10 border-b border-slate-200 bg-gradient-to-r from-slate-900 via-slate-800 to-emerald-900 px-5 py-4 text-white sm:px-6">
       <div class="flex items-start justify-between gap-4">
@@ -689,7 +689,7 @@
   </div>
 </div>
 
-<div id="addSectionModal" class="modal modal-backdrop-blur hidden fixed inset-0 z-[91] bg-black/55 p-3 sm:p-4 flex items-center justify-center" data-overlay>
+<div id="addSectionModal" class="app-modal-shell modal modal-backdrop-blur hidden fixed inset-0 z-[91] bg-black/55 p-3 sm:p-4 flex items-center justify-center" data-overlay>
   <div class="w-full max-w-lg rounded-3xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/20 max-h-[90vh] overflow-y-auto">
     <div class="sticky top-0 z-10 border-b border-slate-200 bg-gradient-to-r from-slate-900 via-slate-800 to-emerald-900 px-5 py-4 text-white sm:px-6">
       <div class="flex items-start justify-between gap-4">
@@ -735,11 +735,11 @@
   </div>
 </div>
 
-<div id="editModal" class="modal modal-backdrop-blur hidden fixed inset-0 z-[90] bg-black/50 p-4 flex items-center justify-center" data-overlay>
+<div id="editModal" class="app-modal-shell modal modal-backdrop-blur hidden fixed inset-0 z-[90] bg-black/50 p-4 flex items-center justify-center" data-overlay>
   <div class="bg-white w-full max-w-2xl rounded-2xl max-h-[85vh] overflow-y-auto">
-    <div class="sticky top-0 bg-white border-b px-5 py-4 flex justify-between items-center">
+    <div class="app-modal-header sticky top-0 bg-white border-b px-5 py-4 flex justify-between items-center">
       <h3 class="text-lg font-semibold">Edit Student</h3>
-      <button data-close="editModal" class="text-slate-500 hover:text-slate-700">&times;</button>
+      <button data-close="editModal" class="app-modal-close text-slate-500 hover:text-slate-700" aria-label="Close edit student modal">&times;</button>
     </div>
     <form id="editForm" class="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
       <input type="hidden" name="_id">
@@ -771,11 +771,11 @@
   </div>
 </div>
 
-<div id="deleteModal" class="modal modal-backdrop-blur hidden fixed inset-0 z-[92] bg-black/50 p-4 flex items-center justify-center" data-overlay>
+<div id="deleteModal" class="app-modal-shell modal modal-backdrop-blur hidden fixed inset-0 z-[92] bg-black/50 p-4 flex items-center justify-center" data-overlay>
   <div class="bg-white w-full max-w-md rounded-2xl max-h-[85vh] overflow-y-auto">
-    <div class="border-b px-5 py-4 flex justify-between items-center">
+    <div class="app-modal-header border-b px-5 py-4 flex justify-between items-center">
       <h3 class="text-lg font-semibold text-rose-700">Delete Student</h3>
-      <button data-close="deleteModal" class="text-slate-500 hover:text-slate-700 text-2xl leading-none">&times;</button>
+      <button data-close="deleteModal" class="app-modal-close text-slate-500 hover:text-slate-700 text-2xl leading-none" aria-label="Close delete student modal">&times;</button>
     </div>
     <div class="p-5 space-y-4">
       <p class="text-sm text-slate-700">Are you sure you want to delete this student?</p>
@@ -789,16 +789,16 @@
   </div>
 </div>
 
-<div id="studentsExportModal" class="modal modal-backdrop-blur hidden fixed inset-0 z-[94] bg-black/55 p-3 sm:p-4 flex items-center justify-center" data-overlay>
+<div id="studentsExportModal" class="app-modal-shell modal modal-backdrop-blur hidden fixed inset-0 z-[94] bg-black/55 p-3 sm:p-4 flex items-center justify-center" data-overlay>
   <div class="w-full max-w-3xl rounded-3xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/20 max-h-[90vh] overflow-y-auto">
-    <div class="sticky top-0 z-10 border-b border-slate-200 bg-white px-5 py-4 sm:px-6">
+    <div class="app-modal-header sticky top-0 z-10 border-b border-slate-200 bg-white px-5 py-4 sm:px-6">
       <div class="flex items-start justify-between gap-4">
         <div>
           <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">PDF Export</p>
           <h3 class="mt-1 text-xl font-semibold leading-tight text-slate-900">Export Student Records</h3>
           <p class="mt-1 text-xs text-slate-500">Choose the exact scope first, then download or print a plain black-and-white PDF.</p>
         </div>
-        <button data-close="studentsExportModal" class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-100 hover:text-slate-700" aria-label="Close export modal">
+        <button data-close="studentsExportModal" class="app-modal-close inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-100 hover:text-slate-700" aria-label="Close export modal">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
           </svg>
@@ -900,14 +900,14 @@
   </div>
 </div>
 
-<div id="faceModal" class="modal modal-backdrop-blur hidden fixed inset-0 z-[95] bg-black/60 p-3 sm:p-4 flex items-center justify-center" data-overlay>
+<div id="faceModal" class="app-modal-shell modal modal-backdrop-blur hidden fixed inset-0 z-[95] bg-black/60 p-3 sm:p-4 flex items-center justify-center" data-overlay>
   <div id="faceModalShell" class="relative flex w-full max-w-5xl flex-col overflow-hidden rounded-[28px] bg-white shadow-[0_28px_90px_rgba(15,23,42,0.22)]">
-    <div class="sticky top-0 bg-white border-b px-5 py-4 flex justify-between items-center">
+    <div class="app-modal-header sticky top-0 bg-white border-b px-5 py-4 flex justify-between items-center">
       <div>
         <h3 id="faceTitle" class="text-lg font-semibold">Register Face</h3>
         <p id="faceSubtitle" class="text-xs text-slate-500"></p>
       </div>
-      <button data-close="faceModal" class="text-slate-500 hover:text-slate-700 text-2xl leading-none">&times;</button>
+      <button data-close="faceModal" class="app-modal-close text-slate-500 hover:text-slate-700 text-2xl leading-none" aria-label="Close face registration modal">&times;</button>
     </div>
     <div id="faceSavingOverlay" class="hidden fixed inset-0 z-[140] items-center justify-center bg-slate-950/28 px-4 backdrop-blur-sm">
       <div class="flex w-full max-w-sm flex-col items-center gap-3 rounded-3xl bg-white px-6 py-5 text-center shadow-2xl shadow-slate-900/20 ring-1 ring-slate-200">
@@ -1004,15 +1004,15 @@
   </div>
 </div>
 
-<div id="captureGalleryModal" class="modal modal-backdrop-blur hidden fixed inset-0 z-[96] bg-black/60 p-3 sm:p-4 flex items-center justify-center" data-overlay>
+<div id="captureGalleryModal" class="app-modal-shell modal modal-backdrop-blur hidden fixed inset-0 z-[96] bg-black/60 p-3 sm:p-4 flex items-center justify-center" data-overlay>
   <div class="relative flex w-full max-w-4xl flex-col overflow-hidden rounded-[26px] bg-white shadow-[0_28px_90px_rgba(15,23,42,0.22)]">
-    <div class="border-b border-slate-200 px-5 py-4 flex items-center justify-between gap-3">
+    <div class="app-modal-header border-b border-slate-200 px-5 py-4 flex items-center justify-between gap-3">
       <div>
         <p class="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-400">Captured Frames</p>
         <h3 class="mt-1 text-lg font-semibold text-slate-900">Accepted Face Images</h3>
         <p id="captureGallerySubtitle" class="mt-1 text-xs text-slate-500">Captured images from the oval guide appear here.</p>
       </div>
-      <button data-close="captureGalleryModal" class="text-slate-500 hover:text-slate-700 text-2xl leading-none">&times;</button>
+      <button data-close="captureGalleryModal" class="app-modal-close text-slate-500 hover:text-slate-700 text-2xl leading-none" aria-label="Close captured images modal">&times;</button>
     </div>
     <div class="max-h-[72vh] overflow-y-auto px-4 py-4 sm:px-5 sm:py-5">
       <div id="captureGrid" class="capture-grid-gallery"></div>

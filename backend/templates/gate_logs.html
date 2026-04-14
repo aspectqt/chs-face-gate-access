@@ -261,18 +261,18 @@
         x-cloak
         x-show="pdfExportModalOpen"
         x-transition
-        class="modal-backdrop-blur fixed inset-0 z-[940] bg-black/55 p-3 sm:p-4 flex items-center justify-center"
+        class="app-modal-shell modal-backdrop-blur fixed inset-0 z-[940] bg-black/55 p-3 sm:p-4 flex items-center justify-center"
         @click.self="pdfExportCloseModal()"
         @keydown.escape.window="if (pdfExportModalOpen) pdfExportCloseModal()">
         <div class="w-full max-w-3xl rounded-3xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/20 max-h-[90vh] overflow-y-auto">
-          <div class="sticky top-0 z-10 border-b border-slate-200 bg-white px-5 py-4 sm:px-6">
+          <div class="app-modal-header sticky top-0 z-10 border-b border-slate-200 bg-white px-5 py-4 sm:px-6">
             <div class="flex items-start justify-between gap-4">
               <div>
                 <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">PDF Export</p>
                 <h3 class="mt-1 text-xl font-semibold leading-tight text-slate-900">Export Gate Logs</h3>
                 <p class="mt-1 text-xs text-slate-500">Choose the scope first, then download the generated PDF directly or send it to print.</p>
               </div>
-              <button type="button" @click="pdfExportCloseModal()" class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-100 hover:text-slate-700" aria-label="Close export modal">
+              <button type="button" @click="pdfExportCloseModal()" class="app-modal-close inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-100 hover:text-slate-700" aria-label="Close export modal">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
                 </svg>
@@ -411,11 +411,12 @@
       </div>
 
       <div x-cloak x-show="detailOpen" x-transition
-        class="modal-backdrop-blur fixed inset-0 bg-black/50 p-4 flex items-center justify-center z-[950]" @click.self="closeDetails()">
+        class="app-modal-shell modal-backdrop-blur fixed inset-0 bg-black/50 p-4 flex items-center justify-center z-[950]" @click.self="closeDetails()">
           <div class="bg-white w-full max-w-lg rounded-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
-            <div class="border-b px-5 py-4 flex justify-between items-center sticky top-0 bg-white z-10">
+            <div class="app-modal-header border-b px-5 py-4 flex justify-between items-center sticky top-0 bg-white z-10">
               <h3 class="text-lg font-semibold text-slate-800">Gate Log Details</h3>
-              <button type="button" class="text-slate-500 hover:text-slate-700 text-2xl leading-none"
+              <button type="button" class="app-modal-close text-slate-500 hover:text-slate-700 text-2xl leading-none"
+                aria-label="Close gate log details"
                 @click="closeDetails()">&times;</button>
             </div>
             <div class="p-5">
@@ -458,11 +459,12 @@
         </div>
 
         <div x-cloak x-show="deleteOpen" x-transition
-          class="modal-backdrop-blur fixed inset-0 bg-black/50 p-4 flex items-center justify-center z-[960]" @click.self="closeDelete()">
+          class="app-modal-shell modal-backdrop-blur fixed inset-0 bg-black/50 p-4 flex items-center justify-center z-[960]" @click.self="closeDelete()">
           <div class="bg-white w-full max-w-md rounded-2xl max-h-[85vh] overflow-y-auto">
-            <div class="border-b px-5 py-4 flex justify-between items-center">
+            <div class="app-modal-header border-b px-5 py-4 flex justify-between items-center">
               <h3 class="text-lg font-semibold text-rose-700">Delete Gate Log</h3>
-              <button type="button" class="text-slate-500 hover:text-slate-700 text-2xl leading-none"
+              <button type="button" class="app-modal-close text-slate-500 hover:text-slate-700 text-2xl leading-none"
+                aria-label="Close delete gate log modal"
                 @click="closeDelete()">&times;</button>
             </div>
             <div class="p-5 space-y-4">
@@ -483,11 +485,12 @@
         </div>
 
         <div x-cloak x-show="correctionOpen" x-transition
-          class="modal-backdrop-blur fixed inset-0 bg-black/50 p-4 flex items-center justify-center z-[970]" @click.self="closeCorrection()">
+          class="app-modal-shell modal-backdrop-blur fixed inset-0 bg-black/50 p-4 flex items-center justify-center z-[970]" @click.self="closeCorrection()">
           <div class="bg-white w-full max-w-lg rounded-2xl max-h-[90vh] overflow-y-auto">
-            <div class="border-b px-5 py-4 flex justify-between items-center">
+            <div class="app-modal-header border-b px-5 py-4 flex justify-between items-center">
               <h3 class="text-lg font-semibold text-amber-700">Request Attendance Correction</h3>
-              <button type="button" class="text-slate-500 hover:text-slate-700 text-2xl leading-none"
+              <button type="button" class="app-modal-close text-slate-500 hover:text-slate-700 text-2xl leading-none"
+                aria-label="Close attendance correction modal"
                 @click="closeCorrection()">&times;</button>
             </div>
             <div class="p-5 space-y-4">

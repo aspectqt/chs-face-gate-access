@@ -145,11 +145,11 @@
 
             <!-- Modals -->
             <!-- New Request Modal -->
-            <div x-cloak x-show="modals.newRequest" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" @click.self="modals.newRequest = false">
-                <div class="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden" x-transition.scale>
-                    <div class="border-b p-5 flex justify-between items-center">
+            <div x-cloak x-show="modals.newRequest" class="app-modal-shell fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" @click.self="modals.newRequest = false">
+                <div class="bg-white w-full max-w-md max-h-[90vh] rounded-2xl shadow-2xl overflow-hidden" x-transition.scale>
+                    <div class="app-modal-header border-b p-5 flex justify-between items-center">
                         <h3 class="text-lg font-bold">New Early Time-Out</h3>
-                        <button @click="modals.newRequest = false" class="text-slate-400 hover:text-slate-600">&times;</button>
+                        <button @click="modals.newRequest = false" class="app-modal-close text-slate-400 hover:text-slate-600" aria-label="Close new early time-out modal">&times;</button>
                     </div>
                     <form @submit.prevent="submitRequest()" class="p-5 space-y-4">
                         <div>
@@ -183,11 +183,11 @@
             </div>
 
             <!-- View/Review Modal -->
-            <div x-cloak x-show="modals.view" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" @click.self="modals.view = false">
-                <div class="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden" x-transition.scale>
-                    <div class="border-b p-5 flex justify-between items-center">
+            <div x-cloak x-show="modals.view" class="app-modal-shell fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" @click.self="modals.view = false">
+                <div class="bg-white w-full max-w-md max-h-[90vh] rounded-2xl shadow-2xl overflow-hidden" x-transition.scale>
+                    <div class="app-modal-header border-b p-5 flex justify-between items-center">
                         <h3 class="text-lg font-bold">Request Details</h3>
-                        <button @click="modals.view = false" class="text-slate-400 hover:text-slate-600">&times;</button>
+                        <button @click="modals.view = false" class="app-modal-close text-slate-400 hover:text-slate-600" aria-label="Close early time-out request details">&times;</button>
                     </div>
                     <template x-if="selectedRequest">
                         <div class="p-5 space-y-4">
@@ -253,14 +253,14 @@
             </div>
 
             <!-- Approve / Deny Confirmation Modal -->
-            <div x-cloak x-show="modals.confirm" class="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/55 backdrop-blur-sm" @click.self="closeActionModal()">
-                <div class="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl" x-transition.scale>
-                    <div class="border-b border-slate-200 px-5 py-4 flex items-center justify-between gap-3">
+            <div x-cloak x-show="modals.confirm" class="app-modal-shell fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/55 backdrop-blur-sm" @click.self="closeActionModal()">
+                <div class="w-full max-w-md max-h-[90vh] overflow-hidden rounded-2xl bg-white shadow-2xl" x-transition.scale>
+                    <div class="app-modal-header border-b border-slate-200 px-5 py-4 flex items-center justify-between gap-3">
                         <div>
                             <h3 class="text-lg font-bold text-slate-900" x-text="confirmAction.type === 'approve' ? 'Approve Early Time-Out' : 'Deny Early Time-Out'"></h3>
                             <p class="mt-1 text-xs text-slate-500" x-text="confirmAction.student_name ? `Request for ${confirmAction.student_name}` : 'Review this early time-out request.'"></p>
                         </div>
-                        <button @click="closeActionModal()" class="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
+                        <button @click="closeActionModal()" class="app-modal-close text-slate-400 hover:text-slate-600 text-2xl leading-none" aria-label="Close review action modal">&times;</button>
                     </div>
                     <div class="px-5 py-5 space-y-4">
                         <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
