@@ -7360,7 +7360,7 @@ def developers_page():
             "role": "Backend Developer",
             "contribution": "Implemented and maintained API services, database transactions, and backend integration for key modules.",
             "email": "pilongoronallen@gmail.com",
-            "profile_photo": url_for("static", filename="developer_photos/real/pilongo-ron-allen.jpg"),
+            "profile_photo": url_for("static", filename="developer_photos/real/pilongo-ron-allen.png"),
             "fallback_photo": url_for("static", filename="developer_photos/dev-pilongo.svg"),
             "links": [{"label": "Email", "url": "mailto:pilongoronallen@gmail.com"}],
         },
@@ -7404,10 +7404,10 @@ def developers_page():
             "name": "GELLA, BRENUS C.",
             "role": "Project Contributor",
             "contribution": "Contributed to project implementation and supported interface and usability refinements for the platform.",
-            "email": "brenus.gella@chs-gate.local",
+            "email": "brenusgella09@gmail.com",
             "profile_photo": url_for("static", filename="developer_photos/real/gella-brenus.jpg"),
             "fallback_photo": url_for("static", filename="developer_photos/dev-gella.svg"),
-            "links": [{"label": "Email", "url": "mailto:brenus.gella@chs-gate.local"}],
+            "links": [{"label": "Email", "url": "mailto:brenusgella09@gmail.com"}],
         },
     ]
 

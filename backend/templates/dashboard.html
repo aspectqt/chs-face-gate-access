@@ -6476,12 +6476,19 @@
                 notificationModalDetailsSection.classList.add('hidden');
                 return;
             }
-            notificationModalDetails.innerHTML = items.map((item) => `
+            notificationModalDetails.innerHTML = items.map((item) => {
+                let displayLabel = item.label || 'Detail';
+                if (displayLabel.toUpperCase() === 'STUDENT ID') {
+                    displayLabel = 'LRN';
+                }
+                
+                return `
         <div class="rounded-xl border border-slate-200 bg-white px-3 py-2">
-            <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">${escapeHtml(item.label || 'Detail')}</p>
+            <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">${escapeHtml(displayLabel)}</p>
             <p class="mt-1 text-sm text-slate-700 break-words">${escapeHtml(item.value || '')}</p>
         </div>
-    `).join('');
+    `;
+            }).join('');
             notificationModalDetailsSection.classList.remove('hidden');
         }
 

@@ -179,7 +179,7 @@
                 <tr data-log-id="{{ log._id }}" class="hover:bg-slate-50 transition">
                   <td class="px-4 py-3">
                     <p class="font-semibold text-slate-800">{{ log.name or '-' }}</p>
-                    <p class="text-xs text-slate-500">ID: {{ log.student_id or '-' }}</p>
+                    <p class="text-xs text-slate-500">LRN: {{ log.student_id or '-' }}</p>
                   </td>
                   <td class="px-4 py-3">
                     <span
@@ -344,7 +344,7 @@
 
             <section x-show="pdfExportScope === 'student'" class="rounded-2xl border border-slate-200 bg-white p-4">
               <label for="gateLogsExportStudentSearch" class="text-sm font-semibold text-slate-900">Student Search</label>
-              <input id="gateLogsExportStudentSearch" x-model="pdfExportStudentQuery" @input.debounce.250ms="pdfExportHandleStudentSearch()" type="search" placeholder="Search by student name, LRN, or student ID" autocomplete="off" class="mt-2 h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-700 transition focus:border-slate-900 focus:ring-2 focus:ring-slate-200">
+              <input id="gateLogsExportStudentSearch" x-model="pdfExportStudentQuery" @input.debounce.250ms="pdfExportHandleStudentSearch()" type="search" placeholder="Search by student name or LRN" autocomplete="off" class="mt-2 h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-700 transition focus:border-slate-900 focus:ring-2 focus:ring-slate-200">
               <p class="mt-2 text-[11px] text-slate-500" x-text="pdfExportStudentHint()"></p>
               <div x-show="pdfExportSelectedStudent" class="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                 <div class="flex items-start justify-between gap-3">
@@ -426,29 +426,19 @@
                   <p class="font-semibold" x-text="detailLog.name || '-'"></p>
                 </div>
                 <div class="rounded-lg border border-slate-200 p-3">
-                  <p class="text-xs text-slate-500">Student ID</p>
+                  <p class="text-xs text-slate-500">LRN</p>
                   <p class="font-semibold" x-text="detailLog.student_id || '-'"></p>
                 </div>
                 <div class="rounded-lg border border-slate-200 p-3">
                   <p class="text-xs text-slate-500">Verification Label</p>
                   <p class="font-semibold" x-text="detailLog.verification_label || '-'"></p>
                 </div>
-                <div class="rounded-lg border border-slate-200 p-3">
-                  <p class="text-xs text-slate-500">Session</p>
-                  <p class="font-semibold" x-text="detailLog.session || '-'"></p>
-                </div>
+
                 <div class="rounded-lg border border-slate-200 p-3">
                   <p class="text-xs text-slate-500">Status</p>
                   <p class="font-semibold" x-text="detailLog.status || '-'"></p>
                 </div>
-                <div class="rounded-lg border border-slate-200 p-3">
-                  <p class="text-xs text-slate-500">Date</p>
-                  <p class="font-semibold" x-text="detailLog.date || '-'"></p>
-                </div>
-                <div class="rounded-lg border border-slate-200 p-3">
-                  <p class="text-xs text-slate-500">Time</p>
-                  <p class="font-semibold" x-text="detailLog.time || '-'"></p>
-                </div>
+
                 <div class="rounded-lg border border-slate-200 p-3 sm:col-span-2">
                   <p class="text-xs text-slate-500">Timestamp</p>
                   <p class="font-semibold break-all" x-text="detailLog.timestamp || '-'"></p>
@@ -783,7 +773,7 @@
           const studentId = (document.getElementById('simulateStudentId')?.value || '').trim();
           if (!studentId) {
             this.simulateType = 'error';
-            this.simulateMessage = 'Please enter a Student ID.';
+            this.simulateMessage = 'Please enter a LRN.';
             return;
           }
           const res = await fetch(`/simulate-gate/${studentId}`, { method: 'POST' });
