@@ -10,12 +10,25 @@ loadLocalEnv(path.join(__dirname, ".env"));
 const DEFAULT_CHANNEL = (process.env.LIVE_MONITORING_CHANNEL || "main-gate").trim() || "main-gate";
 const SIGNALING_HOST = (process.env.LIVE_MONITORING_HOST || "0.0.0.0").trim() || "0.0.0.0";
 const SIGNALING_PORT = parseInteger(process.env.LIVE_MONITORING_SIGNALING_PORT, 5445);
+const FLASK_PORT = parseInteger(process.env.FLASK_PORT, 5444);
 const TOKEN_SECRET = Buffer.from(
   (process.env.LIVE_MONITORING_TOKEN_SECRET || process.env.FLASK_SECRET_KEY || "live-monitoring-secret").trim()
     || "live-monitoring-secret",
   "utf8"
 );
-const ALLOWED_ORIGINS = parseOrigins(process.env.LIVE_MONITORING_ALLOWED_ORIGINS || process.env.APP_BASE_URL || "");
+const CONFIGURED_ORIGINS = new Set(
+  parseOrigins(
+    [
+      process.env.LIVE_MONITORING_ALLOWED_ORIGINS || "",
+      process.env.APP_BASE_URL || "",
+      process.env.LIVE_MONITORING_SIGNALING_URL || "",
+    ]
+      .filter(Boolean)
+      .join(",")
+  )
+    .map(normalizeOrigin)
+    .filter(Boolean)
+);
 
 const publisherByChannel = new Map();
 const viewersByChannel = new Map();
@@ -23,7 +36,12 @@ const viewersByChannel = new Map();
 const server = createServer();
 const io = new Server(server, {
   cors: {
-    origin: ALLOWED_ORIGINS.length ? ALLOWED_ORIGINS : true,
+    // Browsers connect to the signaling service from the Flask app on a different
+    // port. Accept the active app origin on FLASK_PORT so LAN device access works
+    // even when APP_BASE_URL is still pinned to 127.0.0.1.
+    origin: (origin, callback) => {
+      callback(null, isAllowedOrigin(origin));
+    },
     methods: ["GET", "POST"],
     credentials: true,
   },
@@ -305,6 +323,45 @@ function parseOrigins(value) {
     .split(",")
     .map((entry) => entry.trim())
     .filter(Boolean);
+}
+
+function isAllowedOrigin(origin) {
+  const normalizedOrigin = normalizeOrigin(origin);
+  if (!normalizedOrigin) {
+    return true;
+  }
+
+  if (CONFIGURED_ORIGINS.has(normalizedOrigin)) {
+    return true;
+  }
+
+  try {
+    const parsed = new URL(normalizedOrigin);
+    if (!["http:", "https:"].includes(parsed.protocol)) {
+      return false;
+    }
+
+    return parseInteger(parsed.port, defaultPortForProtocol(parsed.protocol)) === FLASK_PORT;
+  } catch (_error) {
+    return false;
+  }
+}
+
+function normalizeOrigin(value) {
+  const normalized = String(value || "").trim();
+  if (!normalized) {
+    return "";
+  }
+
+  try {
+    return new URL(normalized).origin;
+  } catch (_error) {
+    return normalized.replace(/\/+$/, "");
+  }
+}
+
+function defaultPortForProtocol(protocol) {
+  return protocol === "https:" ? 443 : 80;
 }
 
 function parseInteger(value, fallback) {

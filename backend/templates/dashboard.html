@@ -626,21 +626,13 @@
 
         .scan-activity-ghost.scan-activity-exit-trash {
             z-index: 24;
-            transition:
-                opacity 320ms ease,
-                transform 460ms cubic-bezier(0.2, 0.9, 0.24, 1),
-                filter 460ms cubic-bezier(0.2, 0.9, 0.24, 1);
+            transition: none;
             transform-origin: 50% 50%;
             will-change: transform, opacity, filter;
         }
 
         .scan-activity-ghost.scan-activity-exit-trash.scan-activity-exit-active {
-            opacity: 0;
-            filter: blur(10px) saturate(0.84);
-            transform:
-                translate(var(--scan-activity-trash-x, 0px), var(--scan-activity-trash-y, 0px))
-                scale(0.24)
-                rotate(var(--scan-activity-trash-rotate, 12deg));
+            animation: scanActivityFlyToTrash var(--scan-activity-trash-duration, 460ms) cubic-bezier(0.2, 0.9, 0.24, 1) forwards;
         }
 
         .scan-activity-trash-dock {
@@ -770,7 +762,11 @@
         }
 
         .scan-activity-trash-dock.scan-activity-trash-active .scan-activity-trash-lid {
-            transform: translateY(-0.08rem) rotate(-16deg);
+            animation: scanActivityTrashLidOpen 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+        }
+
+        .scan-activity-trash-dock.scan-activity-trash-active .scan-activity-trash-body {
+            animation: scanActivityTrashBodySettle 520ms cubic-bezier(0.22, 1, 0.36, 1);
         }
 
         .scan-activity-item.scan-activity-announce::before {
@@ -981,6 +977,60 @@
             100% {
                 opacity: 0;
                 transform: scale(1.16);
+            }
+        }
+
+        @keyframes scanActivityTrashLidOpen {
+            0% {
+                transform: translateY(0) rotate(0deg);
+            }
+            34% {
+                transform: translateY(-0.18rem) rotate(-24deg);
+            }
+            68% {
+                transform: translateY(-0.09rem) rotate(-13deg);
+            }
+            100% {
+                transform: translateY(-0.08rem) rotate(-16deg);
+            }
+        }
+
+        @keyframes scanActivityTrashBodySettle {
+            0% {
+                transform: translateY(0) scale(1);
+            }
+            34% {
+                transform: translateY(0.02rem) scale(0.985);
+            }
+            62% {
+                transform: translateY(-0.01rem) scale(1.01);
+            }
+            100% {
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        @keyframes scanActivityFlyToTrash {
+            0% {
+                opacity: 1;
+                filter: none;
+                transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
+            }
+            36% {
+                opacity: 0.92;
+                filter: blur(1px) saturate(0.96);
+                transform:
+                    translate3d(var(--scan-activity-trash-mid-x, 0px), var(--scan-activity-trash-mid-y, -14px), 0)
+                    scale(var(--scan-activity-trash-mid-scale, 0.72))
+                    rotate(var(--scan-activity-trash-mid-rotate, 6deg));
+            }
+            100% {
+                opacity: 0;
+                filter: blur(10px) saturate(0.84);
+                transform:
+                    translate3d(var(--scan-activity-trash-x, 0px), var(--scan-activity-trash-y, 0px), 0)
+                    scale(0.24)
+                    rotate(var(--scan-activity-trash-rotate, 12deg));
             }
         }
 
@@ -4605,19 +4655,32 @@
                     const targetCenterY = (trashRect.top - ghostLayerRect.top) + (trashRect.height * 0.62);
                     const travelX = targetCenterX - startCenterX;
                     const travelY = targetCenterY - startCenterY;
+                    const travelDistance = Math.hypot(travelX, travelY);
+                    const travelArc = Math.min(Math.max(travelDistance * 0.12, 10), 28);
                     const travelRotation = (((batchIndex % 2 === 0) ? -1 : 1) * (11 + (Math.min(batchIndex, 4) * 3)));
+                    const midX = travelX * 0.42;
+                    const midY = (travelY * 0.38) - travelArc;
+                    const midRotation = travelRotation * 0.44;
 
                     ghost.style.setProperty('--scan-activity-trash-x', `${Math.round(travelX * 10) / 10}px`);
                     ghost.style.setProperty('--scan-activity-trash-y', `${Math.round(travelY * 10) / 10}px`);
                     ghost.style.setProperty('--scan-activity-trash-rotate', `${travelRotation}deg`);
+                    ghost.style.setProperty('--scan-activity-trash-mid-x', `${Math.round(midX * 10) / 10}px`);
+                    ghost.style.setProperty('--scan-activity-trash-mid-y', `${Math.round(midY * 10) / 10}px`);
+                    ghost.style.setProperty('--scan-activity-trash-mid-scale', '0.72');
+                    ghost.style.setProperty('--scan-activity-trash-mid-rotate', `${Math.round(midRotation * 10) / 10}deg`);
                 } else {
                     transitionDelayMs = 0;
                 }
             }
 
             ghost.classList.add('scan-activity-ghost', exitClass);
+            if (wantsTrashAnimation) {
+                ghost.style.setProperty('--scan-activity-trash-duration', `${Math.round(outroDuration)}ms`);
+            }
             if (transitionDelayMs > 0) {
                 ghost.style.transitionDelay = `${transitionDelayMs}ms`;
+                ghost.style.animationDelay = `${transitionDelayMs}ms`;
             }
 
             item.remove();
@@ -4702,7 +4765,11 @@
         function cleanupOverflowScanActivityEntries() {
             if (!scanActivityFeed || scanActivityFeed.children.length <= SCAN_ACTIVITY_LIMIT) return;
 
-            const overflowItems = Array.from(scanActivityFeed.children).slice(-SCAN_ACTIVITY_TRASH_BATCH_SIZE);
+            const overflowCount = Math.max(scanActivityFeed.children.length - SCAN_ACTIVITY_LIMIT, 0);
+            if (overflowCount <= 0) return;
+
+            const removalCount = Math.max(1, overflowCount);
+            const overflowItems = Array.from(scanActivityFeed.children).slice(-removalCount);
             if (!overflowItems.length) return;
 
             triggerScanActivityTrashInteraction(overflowItems.length);
@@ -5578,7 +5645,7 @@
             viewerBadgeId: 'liveGateMonitoringBadge'
         };
     </script>
-    <script src="{{ url_for('static', filename='live_gate_monitoring.js', v='20260404a') }}"></script>
+    <script src="{{ url_for('static', filename='live_gate_monitoring.js', v='20260428b') }}"></script>
 
     <script>
         const profileService = {

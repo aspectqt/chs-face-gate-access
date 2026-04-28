@@ -4,9 +4,11 @@
     const ROLE_STAFF = "Staff";
     const OFFLINE_FALLBACK_MS = 5000;
     const VIEWER_RECONNECT_MS = 1800;
+    const VIEWER_REQUEST_TIMEOUT_MS = 3200;
     const PUBLISHER_SYNC_INTERVAL_MS = 1200;
     const PUBLISHER_BURST_ATTEMPTS = 10;
     const PUBLISHER_BURST_INTERVAL_MS = 300;
+    const MAX_PENDING_ICE_CANDIDATES = 24;
 
     if (!config.tokenEndpoint || !window.RTCPeerConnection) {
         return;
@@ -24,7 +26,9 @@
             this.viewerPeerSource = "";
             this.viewerReconnectTimer = null;
             this.viewerOfflineTimer = null;
+            this.viewerRequestTimer = null;
             this.viewerLastRequestAt = 0;
+            this.viewerPendingCandidates = [];
             this.publisherPeers = new Map();
             this.publisherSourceStream = null;
             this.publisherSourceCleanup = null;
@@ -179,6 +183,32 @@
             this.viewerOfflineTimer = null;
         }
 
+        clearViewerRequestTimer() {
+            if (!this.viewerRequestTimer) {
+                return;
+            }
+
+            window.clearTimeout(this.viewerRequestTimer);
+            this.viewerRequestTimer = null;
+        }
+
+        scheduleViewerRequestRetry(delayMs = VIEWER_REQUEST_TIMEOUT_MS) {
+            this.clearViewerRequestTimer();
+            this.viewerRequestTimer = window.setTimeout(() => {
+                this.viewerRequestTimer = null;
+
+                if (!this.socket || this.socketMode !== "viewer" || !this.socket.connected) {
+                    return;
+                }
+
+                if (this.viewerPeer?.connectionState === "connected") {
+                    return;
+                }
+
+                this.requestViewerStream(true);
+            }, Math.max(Number(delayMs) || VIEWER_REQUEST_TIMEOUT_MS, 800));
+        }
+
         async startViewer() {
             if (!this.hasViewerPanel()) {
                 return;
@@ -197,6 +227,7 @@
         }
 
         scheduleViewerReconnect() {
+            this.clearViewerRequestTimer();
             if (this.viewerReconnectTimer) {
                 return;
             }
@@ -526,6 +557,7 @@
                     }
 
                     this.clearViewerPeer({ clearMedia: true });
+                    this.clearViewerRequestTimer();
                     this.setViewerState("offline", "Stream offline");
                 });
 
@@ -603,10 +635,15 @@
             }
 
             this.viewerLastRequestAt = now;
+            this.setViewerState("connecting", "Connecting to live stream...");
             this.socket.emit("live-monitor:request-stream", {}, (response) => {
                 if (!response?.ok) {
+                    this.clearViewerRequestTimer();
                     this.showOfflineAfterDelay("Stream offline", 1400);
+                    return;
                 }
+
+                this.scheduleViewerRequestRetry();
             });
         }
 
@@ -623,6 +660,7 @@
 
                 const peer = this.ensureViewerPeer(source);
                 await peer.setRemoteDescription(new RTCSessionDescription(payload.description));
+                await this.flushViewerPendingCandidates(source);
                 const answer = await peer.createAnswer();
                 await peer.setLocalDescription(answer);
                 this.emitSignal(source, {
@@ -630,8 +668,16 @@
                 });
             }
 
-            if (payload.candidate && this.viewerPeer) {
-                await this.viewerPeer.addIceCandidate(new RTCIceCandidate(payload.candidate)).catch(() => null);
+            if (payload.candidate) {
+                if (!this.viewerPeer || this.viewerPeerSource !== source || !this.viewerPeer.remoteDescription) {
+                    this.queueViewerCandidate(source, payload.candidate);
+                    return;
+                }
+
+                await this.viewerPeer.addIceCandidate(new RTCIceCandidate(payload.candidate)).catch(() => {
+                    this.queueViewerCandidate(source, payload.candidate);
+                    return null;
+                });
             }
         }
 
@@ -666,6 +712,7 @@
                 }
 
                 this.clearViewerOfflineTimer();
+                this.clearViewerRequestTimer();
                 const playPromises = [];
                 this.forEachViewerDisplay((display) => {
                     if (!display.video) {
@@ -691,12 +738,21 @@
                 const state = peer.connectionState;
                 if (state === "connected") {
                     this.clearViewerOfflineTimer();
+                    this.clearViewerRequestTimer();
                     this.setViewerState("live", "Live gate feed active");
                     return;
                 }
 
                 if (state === "failed" || state === "disconnected" || state === "closed") {
                     this.clearViewerPeer({ clearMedia: true });
+                    if (this.socket && this.socketMode === "viewer" && this.socket.connected) {
+                        this.setViewerState("connecting", "Reconnecting to live stream...");
+                        this.showOfflineAfterDelay("Stream offline");
+                        this.requestViewerStream(true);
+                        return;
+                    }
+
+                    this.clearViewerRequestTimer();
                     this.setViewerState("offline", "Stream offline");
                 }
             };
@@ -718,6 +774,7 @@
 
             this.viewerPeer = null;
             this.viewerPeerSource = "";
+            this.viewerPendingCandidates = [];
 
             if (clearMedia) {
                 this.forEachViewerDisplay((display) => {
@@ -741,10 +798,19 @@
 
             if (payload.description) {
                 await peerEntry.peer.setRemoteDescription(new RTCSessionDescription(payload.description));
+                await this.flushPublisherPendingCandidates(peerEntry);
             }
 
             if (payload.candidate) {
-                await peerEntry.peer.addIceCandidate(new RTCIceCandidate(payload.candidate)).catch(() => null);
+                if (!peerEntry.peer.remoteDescription) {
+                    this.queuePendingCandidate(peerEntry.pendingCandidates, payload.candidate);
+                    return;
+                }
+
+                await peerEntry.peer.addIceCandidate(new RTCIceCandidate(payload.candidate)).catch(() => {
+                    this.queuePendingCandidate(peerEntry.pendingCandidates, payload.candidate);
+                    return null;
+                });
             }
         }
 
@@ -767,6 +833,7 @@
             const peerEntry = {
                 peer,
                 stream: clonedStream,
+                pendingCandidates: [],
                 viewerId,
             };
             this.publisherPeers.set(viewerId, peerEntry);
@@ -830,6 +897,8 @@
                     }
                 });
             }
+
+            peerEntry.pendingCandidates = [];
         }
 
         emitSignal(target, payload) {
@@ -849,6 +918,77 @@
                 ? this.tokenPayload.ice_servers
                 : [{ urls: ["stun:stun.l.google.com:19302"] }];
             return iceServers.length ? iceServers : [{ urls: ["stun:stun.l.google.com:19302"] }];
+        }
+
+        queuePendingCandidate(queue, candidate) {
+            if (!Array.isArray(queue) || !candidate) {
+                return;
+            }
+
+            queue.push(candidate);
+            while (queue.length > MAX_PENDING_ICE_CANDIDATES) {
+                queue.shift();
+            }
+        }
+
+        queueViewerCandidate(sourceId, candidate) {
+            if (!candidate) {
+                return;
+            }
+
+            this.viewerPendingCandidates.push({
+                sourceId: String(sourceId || "").trim(),
+                candidate,
+            });
+            while (this.viewerPendingCandidates.length > MAX_PENDING_ICE_CANDIDATES) {
+                this.viewerPendingCandidates.shift();
+            }
+        }
+
+        async flushViewerPendingCandidates(sourceId) {
+            if (!this.viewerPeer || !this.viewerPeer.remoteDescription) {
+                return;
+            }
+
+            const normalizedSourceId = String(sourceId || "").trim();
+            const remainingCandidates = [];
+            for (const entry of this.viewerPendingCandidates) {
+                if (!entry?.candidate || entry.sourceId !== normalizedSourceId) {
+                    if (entry?.candidate) {
+                        remainingCandidates.push(entry);
+                    }
+                    continue;
+                }
+
+                try {
+                    await this.viewerPeer.addIceCandidate(new RTCIceCandidate(entry.candidate));
+                } catch (_error) {
+                    remainingCandidates.push(entry);
+                }
+            }
+
+            this.viewerPendingCandidates = remainingCandidates;
+        }
+
+        async flushPublisherPendingCandidates(peerEntry) {
+            if (!peerEntry?.peer?.remoteDescription || !Array.isArray(peerEntry.pendingCandidates) || !peerEntry.pendingCandidates.length) {
+                return;
+            }
+
+            const queuedCandidates = [...peerEntry.pendingCandidates];
+            peerEntry.pendingCandidates = [];
+
+            for (const candidate of queuedCandidates) {
+                if (!candidate) {
+                    continue;
+                }
+
+                try {
+                    await peerEntry.peer.addIceCandidate(new RTCIceCandidate(candidate));
+                } catch (_error) {
+                    this.queuePendingCandidate(peerEntry.pendingCandidates, candidate);
+                }
+            }
         }
 
         disconnectSocket() {

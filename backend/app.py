@@ -7052,10 +7052,10 @@ def logout():
 LIVE_MONITORING_DEFAULT_CHANNEL = os.getenv("LIVE_MONITORING_CHANNEL", "main-gate").strip() or "main-gate"
 LIVE_MONITORING_SIGNALING_PORT = env_int("LIVE_MONITORING_SIGNALING_PORT", FLASK_PORT + 1, minimum=1, maximum=65535)
 LIVE_MONITORING_TOKEN_TTL_SECONDS = env_int("LIVE_MONITORING_TOKEN_TTL_SECONDS", 120, minimum=30, maximum=900)
-LIVE_MONITORING_MANAGED = env_bool(
-    "LIVE_MONITORING_MANAGED",
-    not bool(os.getenv("LIVE_MONITORING_SIGNALING_URL", "").strip()),
-)
+# Keep local signaling management enabled by default so staff/admin live monitoring
+# stays synchronized even when signaling is exposed through another reachable URL.
+# Set LIVE_MONITORING_MANAGED=0 only when using an externally managed signaling service.
+LIVE_MONITORING_MANAGED = env_bool("LIVE_MONITORING_MANAGED", True)
 LIVE_MONITORING_AUTO_START = env_bool("LIVE_MONITORING_AUTO_START", LIVE_MONITORING_MANAGED)
 LIVE_MONITORING_STARTUP_TIMEOUT_SECONDS = env_float(
     "LIVE_MONITORING_STARTUP_TIMEOUT_SECONDS",
