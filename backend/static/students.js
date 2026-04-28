@@ -1796,6 +1796,45 @@
       first.focus();
     }
   };
+
+  const getVerticalScrollContainer = (element) => {
+    let current = element?.parentElement || null;
+    while (current && current !== document.body) {
+      const styles = window.getComputedStyle(current);
+      const overflowY = String(styles.overflowY || "").toLowerCase();
+      const canScroll = (overflowY === "auto" || overflowY === "scroll") && current.scrollHeight > current.clientHeight;
+      if (canScroll) return current;
+      current = current.parentElement;
+    }
+    return null;
+  };
+
+  const ensureAddSectionDropdownOpensDownward = () => {
+    const select = refs.addSectionSelect;
+    if (!select || select.disabled) return;
+    if (state.activeModal !== "addModal") return;
+
+    const viewportHeight = Math.max(window.innerHeight || 0, document.documentElement?.clientHeight || 0);
+    if (!viewportHeight) return;
+
+    const rect = select.getBoundingClientRect();
+    const spaceBelow = Math.max(viewportHeight - rect.bottom, 0);
+    const desiredSpaceBelow = Math.min(360, Math.max(220, Math.round(viewportHeight * 0.45)));
+    if (spaceBelow >= desiredSpaceBelow) return;
+
+    const scrollContainer = getVerticalScrollContainer(select);
+    if (!scrollContainer) return;
+
+    const requiredShift = (desiredSpaceBelow - spaceBelow) + 16;
+    const availableShift = Math.max(Number(scrollContainer.scrollTop || 0), 0);
+    if (availableShift <= 0) return;
+
+    const shift = Math.min(requiredShift, availableShift);
+    if (shift > 0) {
+      scrollContainer.scrollTop = Math.max(scrollContainer.scrollTop - shift, 0);
+    }
+  };
+
   const renderRows = () => {
     if (!state.students.length) {
       refs.studentsTableBody.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-slate-500 text-sm">No students found.</td></tr>';
@@ -3794,6 +3833,25 @@
     refs.addSectionSelect?.addEventListener("change", () => {
       syncAddSectionAssignment();
       validateAddForm({ showAlert: false });
+    });
+
+    refs.addSectionSelect?.addEventListener("mousedown", (event) => {
+      if (event.button !== 0) return;
+      ensureAddSectionDropdownOpensDownward();
+    }, true);
+
+    refs.addSectionSelect?.addEventListener("touchstart", () => {
+      ensureAddSectionDropdownOpensDownward();
+    }, { passive: true });
+
+    refs.addSectionSelect?.addEventListener("focus", () => {
+      ensureAddSectionDropdownOpensDownward();
+    });
+
+    refs.addSectionSelect?.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowDown" || event.key === "Enter" || event.key === " ") {
+        ensureAddSectionDropdownOpensDownward();
+      }
     });
 
     refs.addForm.elements.parent_contact?.addEventListener("input", () => {

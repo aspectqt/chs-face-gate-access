@@ -5146,11 +5146,51 @@
         const FRAME_UPLOAD_MAX_WIDTH = 896;
         const FRAME_UPLOAD_MAX_HEIGHT = 504;
         const FRAME_UPLOAD_QUALITY = 0.8;
+        const FRAME_UPLOAD_MULTI_FACE_WIDTH = 768;
+        const FRAME_UPLOAD_MULTI_FACE_HEIGHT = 432;
+        const FRAME_UPLOAD_MULTI_FACE_QUALITY = 0.74;
+        const FRAME_UPLOAD_BUSY_QUALITY = 0.68;
+        const FRAME_UPLOAD_QUALITY_STEP = 0.02;
+        let frameUploadMaxWidth = FRAME_UPLOAD_MAX_WIDTH;
+        let frameUploadMaxHeight = FRAME_UPLOAD_MAX_HEIGHT;
+        let frameUploadQuality = FRAME_UPLOAD_QUALITY;
 
         function clampFrameSendInterval(nextInterval) {
             const parsed = Number(nextInterval);
             if (!Number.isFinite(parsed)) return FRAME_SEND_BASE_INTERVAL;
             return Math.max(FRAME_SEND_MIN_INTERVAL, Math.min(FRAME_SEND_MAX_INTERVAL, Math.round(parsed)));
+        }
+
+        function resetFrameUploadProfile() {
+            frameUploadMaxWidth = FRAME_UPLOAD_MAX_WIDTH;
+            frameUploadMaxHeight = FRAME_UPLOAD_MAX_HEIGHT;
+            frameUploadQuality = FRAME_UPLOAD_QUALITY;
+        }
+
+        function applyFrameUploadProfile({ busy = false, trackedFaceCount = 0, activeFaceSignal = false } = {}) {
+            if (busy) {
+                frameUploadMaxWidth = FRAME_UPLOAD_MULTI_FACE_WIDTH;
+                frameUploadMaxHeight = FRAME_UPLOAD_MULTI_FACE_HEIGHT;
+                frameUploadQuality = Math.max(FRAME_UPLOAD_BUSY_QUALITY, frameUploadQuality - FRAME_UPLOAD_QUALITY_STEP);
+                return;
+            }
+
+            if (trackedFaceCount > 1) {
+                frameUploadMaxWidth = FRAME_UPLOAD_MULTI_FACE_WIDTH;
+                frameUploadMaxHeight = FRAME_UPLOAD_MULTI_FACE_HEIGHT;
+                const targetQuality = Math.max(FRAME_UPLOAD_MULTI_FACE_QUALITY, FRAME_UPLOAD_BUSY_QUALITY);
+                frameUploadQuality = Math.min(FRAME_UPLOAD_QUALITY, Math.max(targetQuality, frameUploadQuality + (FRAME_UPLOAD_QUALITY_STEP * 0.5)));
+                return;
+            }
+
+            if (activeFaceSignal) {
+                frameUploadMaxWidth = FRAME_UPLOAD_MAX_WIDTH;
+                frameUploadMaxHeight = FRAME_UPLOAD_MAX_HEIGHT;
+                frameUploadQuality = Math.min(FRAME_UPLOAD_QUALITY, frameUploadQuality + FRAME_UPLOAD_QUALITY_STEP);
+                return;
+            }
+
+            resetFrameUploadProfile();
         }
 
         function scheduleNextFrameSend(nextInterval = frameSendIntervalMs) {
@@ -5180,9 +5220,9 @@
             const frameStart = performance.now();
 
             try {
-                const frameBlob = await clientCamera.getFrameAsBlob('image/jpeg', FRAME_UPLOAD_QUALITY, {
-                    maxWidth: FRAME_UPLOAD_MAX_WIDTH,
-                    maxHeight: FRAME_UPLOAD_MAX_HEIGHT,
+                const frameBlob = await clientCamera.getFrameAsBlob('image/jpeg', frameUploadQuality, {
+                    maxWidth: frameUploadMaxWidth,
+                    maxHeight: frameUploadMaxHeight,
                 });
                 if (!frameBlob) {
                     if (isScanning && !clientCamera.isActive()) {
@@ -5233,6 +5273,11 @@
                         void pollScanEventsOnce();
                     }
                 }
+                applyFrameUploadProfile({
+                    busy: processorBusy || !response.ok,
+                    trackedFaceCount,
+                    activeFaceSignal,
+                });
 
                 if (processorBusy || !response.ok) {
                     frameSendIntervalMs = clampFrameSendInterval(
@@ -5250,6 +5295,7 @@
                     return;
                 }
                 console.debug('Frame capture error:', error.message);
+                applyFrameUploadProfile({ busy: true });
                 frameSendIntervalMs = clampFrameSendInterval(frameSendIntervalMs + 18);
                 if (isScanning && !clientCamera.isActive()) {
                     stopScanning({
@@ -5273,6 +5319,7 @@
             if (frameProcessingActive) return;
             frameProcessingActive = true;
             frameSendIntervalMs = FRAME_SEND_BASE_INTERVAL;
+            resetFrameUploadProfile();
             if (frameProcessingTimer) {
                 clearTimeout(frameProcessingTimer);
                 frameProcessingTimer = null;
@@ -5282,6 +5329,7 @@
 
         function stopFrameProcessing() {
             frameProcessingActive = false;
+            resetFrameUploadProfile();
             if (frameProcessingTimer) {
                 clearTimeout(frameProcessingTimer);
                 frameProcessingTimer = null;

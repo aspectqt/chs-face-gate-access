@@ -328,6 +328,12 @@ LIVE_RECOGNITION_LIVENESS_RETRY_SECONDS = env_float("LIVE_RECOGNITION_LIVENESS_R
 LIVE_RECOGNITION_TRACK_MATCH_DISTANCE_RATIO = env_float("LIVE_RECOGNITION_TRACK_MATCH_DISTANCE_RATIO", 0.32, minimum=0.05, maximum=1.0)
 LIVE_RECOGNITION_LOW_LIGHT_ENCODING_RETRY_ENABLED = env_bool("LIVE_RECOGNITION_LOW_LIGHT_ENCODING_RETRY_ENABLED", True)
 LIVE_RECOGNITION_LOW_LIGHT_ENCODING_BRIGHTNESS = env_float("LIVE_RECOGNITION_LOW_LIGHT_ENCODING_BRIGHTNESS", 82.0, minimum=0.0, maximum=255.0)
+LIVE_RECOGNITION_MULTI_FACE_DETECTION_REUSE_MS = env_int(
+    "LIVE_RECOGNITION_MULTI_FACE_DETECTION_REUSE_MS",
+    110,
+    minimum=0,
+    maximum=600,
+)
 LIVE_LIVENESS_ENABLED = env_bool("LIVE_LIVENESS_ENABLED", True)
 # Anti-spoofing is intentionally bypassed in the live gate workflow to keep
 # recognition responsive without changing the rest of the scan pipeline.
@@ -588,6 +594,9 @@ scan_state = {
     "model_status": "idle",
     "known_encodings": [],
     "known_students": [],
+    "face_index_legacy_flat": False,
+    "face_index_legacy_flat_checked": False,
+    "face_index_students_ref_id": 0,
     "face_index_loading": False,
     "session_mode": "auto",
     "liveness_profile": "strict",
@@ -596,6 +605,9 @@ scan_state = {
     "next_face_track_id": 1,
     "face_track_cursor": 0,
     "last_faces_payload": [],
+    "last_detection_ts": 0.0,
+    "last_detection_scale": float(SCAN_RECOGNITION_SCALE),
+    "last_detected_faces_small": [],
 }
 liveness_ai_model = None
 liveness_ai_model_loaded = False
@@ -6395,6 +6407,7 @@ def _refresh_face_index_worker():
     started_at = time.time()
     encoding_matrix = np.empty((0, 128), dtype=np.float64)
     db_students = []
+    legacy_flat_index = False
     model_status = "model_not_ready"
     try:
         db_encodings, db_students = load_face_index_from_db(
@@ -6414,6 +6427,7 @@ def _refresh_face_index_worker():
                 model_status = "legacy_faces_only"
             else:
                 model_status = "no_registered_students"
+        legacy_flat_index = any("encodings" not in (student or {}) for student in db_students)
         elapsed = time.time() - started_at
         total_samples = sum(int(row.get("encoding_count") or 0) for row in db_students)
         print(
@@ -6429,9 +6443,15 @@ def _refresh_face_index_worker():
         with scan_lock:
             if not scan_state.get("active"):
                 scan_state["face_index_loading"] = False
+                scan_state["face_index_legacy_flat"] = False
+                scan_state["face_index_legacy_flat_checked"] = False
+                scan_state["face_index_students_ref_id"] = 0
                 return
             scan_state["known_encodings"] = encoding_matrix
             scan_state["known_students"] = db_students
+            scan_state["face_index_legacy_flat"] = bool(legacy_flat_index)
+            scan_state["face_index_legacy_flat_checked"] = True
+            scan_state["face_index_students_ref_id"] = int(id(db_students))
             scan_state["model_status"] = model_status
             scan_state["face_index_loading"] = False
 
@@ -6476,6 +6496,9 @@ def start_scan_capture():
         scan_state["event_counter"] = 0
         scan_state["known_encodings"] = np.empty((0, 128), dtype=np.float64)
         scan_state["known_students"] = []
+        scan_state["face_index_legacy_flat"] = False
+        scan_state["face_index_legacy_flat_checked"] = False
+        scan_state["face_index_students_ref_id"] = 0
         scan_state["model_status"] = "loading"
         scan_state["face_index_loading"] = False
         scan_state["last_not_registered_ts"] = 0.0
@@ -6485,6 +6508,9 @@ def start_scan_capture():
         scan_state["next_face_track_id"] = 1
         scan_state["face_track_cursor"] = 0
         scan_state["last_faces_payload"] = []
+        scan_state["last_detection_ts"] = 0.0
+        scan_state["last_detection_scale"] = float(SCAN_RECOGNITION_SCALE)
+        scan_state["last_detected_faces_small"] = []
 
     refresh_face_index_async()
     return True, "Scan started (waiting for client frames)"
@@ -6498,6 +6524,9 @@ def stop_scan_capture():
         scan_state["capture"] = None
         scan_state["known_encodings"] = np.empty((0, 128), dtype=np.float64)
         scan_state["known_students"] = []
+        scan_state["face_index_legacy_flat"] = False
+        scan_state["face_index_legacy_flat_checked"] = False
+        scan_state["face_index_students_ref_id"] = 0
         scan_state["model_status"] = "idle"
         scan_state["face_index_loading"] = False
         scan_state["pending_recognition"] = {}
@@ -6505,6 +6534,9 @@ def stop_scan_capture():
         scan_state["next_face_track_id"] = 1
         scan_state["face_track_cursor"] = 0
         scan_state["last_faces_payload"] = []
+        scan_state["last_detection_ts"] = 0.0
+        scan_state["last_detection_scale"] = float(SCAN_RECOGNITION_SCALE)
+        scan_state["last_detected_faces_small"] = []
 
     if capture is not None:
         try:
@@ -8508,6 +8540,53 @@ def get_latest_live_faces_payload():
         return [dict(row) for row in faces if isinstance(row, dict)]
 
 
+def get_reusable_multi_face_locations(scale, now_ts=None):
+    current_ts = float(now_ts if now_ts is not None else time.time())
+    requested_scale = float(scale or 0.0)
+    if requested_scale <= 0.0:
+        return []
+
+    with scan_lock:
+        cached_faces = scan_state.get("last_detected_faces_small")
+        if not isinstance(cached_faces, list) or len(cached_faces) < 2:
+            return []
+
+        last_detection_ts = float(scan_state.get("last_detection_ts") or 0.0)
+        if last_detection_ts <= 0.0:
+            return []
+        max_reuse_seconds = max(float(LIVE_RECOGNITION_MULTI_FACE_DETECTION_REUSE_MS or 0.0), 0.0) / 1000.0
+        if max_reuse_seconds <= 0.0:
+            return []
+        age_seconds = current_ts - last_detection_ts
+        if age_seconds < 0.0 or age_seconds > max_reuse_seconds:
+            return []
+
+        cached_scale = float(scan_state.get("last_detection_scale") or 0.0)
+        if cached_scale <= 0.0 or abs(cached_scale - requested_scale) > 0.03:
+            return []
+
+        reusable = []
+        for row in cached_faces:
+            normalized = _normalized_face_location(row)
+            if normalized:
+                reusable.append(normalized)
+        return reusable
+
+
+def cache_live_face_locations(face_locations_small, scale, now_ts=None):
+    current_ts = float(now_ts if now_ts is not None else time.time())
+    normalized_locations = []
+    for location in list(face_locations_small or []):
+        normalized = _normalized_face_location(location)
+        if normalized:
+            normalized_locations.append(normalized)
+
+    with scan_lock:
+        scan_state["last_detection_ts"] = current_ts
+        scan_state["last_detection_scale"] = float(scale or SCAN_RECOGNITION_SCALE)
+        scan_state["last_detected_faces_small"] = normalized_locations
+
+
 def update_live_face_tracks(face_locations_small, scale_back, frame_shape, now_ts=None):
     current_ts = float(now_ts if now_ts is not None else time.time())
     normalized_locations = []
@@ -9959,8 +10038,19 @@ def process_client_frame(frame_bytes):
             active = scan_state.get("active", False)
             db_encodings = scan_state.get("known_encodings", np.empty((0, 128), dtype=np.float64))
             db_students = scan_state.get("known_students", [])
+            legacy_flat_index = bool(scan_state.get("face_index_legacy_flat", False))
+            legacy_flat_checked = bool(scan_state.get("face_index_legacy_flat_checked", False))
+            legacy_students_ref_id = int(scan_state.get("face_index_students_ref_id") or 0)
             model_status = scan_state.get("model_status", "idle")
             session_mode = normalize_scan_session_mode(scan_state.get("session_mode", "auto"), default="auto")
+
+        current_students_ref_id = int(id(db_students))
+        if (not legacy_flat_checked) or (legacy_students_ref_id != current_students_ref_id):
+            legacy_flat_index = any("encodings" not in (student or {}) for student in db_students)
+            with scan_lock:
+                scan_state["face_index_legacy_flat"] = bool(legacy_flat_index)
+                scan_state["face_index_legacy_flat_checked"] = True
+                scan_state["face_index_students_ref_id"] = current_students_ref_id
         
         if not active:
             return False, "Scan not active", payload
@@ -9979,51 +10069,63 @@ def process_client_frame(frame_bytes):
             if LIVE_SCAN_LIVENESS_ENABLED and (LIVE_LIVENESS_BLINK_ENABLED or LIVE_LIVENESS_LANDMARK_POSE_ENABLED)
             else None
         )
-        
-        # Detect faces
-        face_locations_small = face_recognition.face_locations(
-            rgb_small,
-            number_of_times_to_upsample=0,
-            model="hog",
-        )
-        retry_scale = min(max(float(SCAN_MULTI_FACE_RETRY_SCALE_PERCENT or 0) / 100.0, scale + 0.1), 0.82)
-        should_retry_multi_face_detection = len(face_locations_small) == 0
-        if len(face_locations_small) == 1:
-            frame_area = max(float(rgb_small.shape[0] * rgb_small.shape[1]), 1.0)
-            primary_face_area_ratio = float(_face_location_area(face_locations_small[0])) / frame_area
-            should_retry_multi_face_detection = (
-                primary_face_area_ratio <= float(SCAN_MULTI_FACE_RETRY_MAX_FACE_AREA_RATIO or 0.16)
-            )
-        if should_retry_multi_face_detection and retry_scale > (scale + 0.02):
-            retry_frame = cv2.resize(frame, (0, 0), fx=retry_scale, fy=retry_scale, interpolation=cv2.INTER_LINEAR)
-            retry_rgb = cv2.cvtColor(retry_frame, cv2.COLOR_BGR2RGB)
-            retry_locations = face_recognition.face_locations(
-                retry_rgb,
+        frame_now_ts = time.time()
+
+        # Detect faces. For multi-face scenes, briefly reuse the latest successful
+        # detection to reduce expensive detector invocations between adjacent frames.
+        face_locations_small = get_reusable_multi_face_locations(scale, now_ts=frame_now_ts)
+        used_cached_detection = len(face_locations_small) >= 2
+        pre_filter_face_count = len(face_locations_small)
+        if not used_cached_detection:
+            face_locations_small = face_recognition.face_locations(
+                rgb_small,
                 number_of_times_to_upsample=0,
                 model="hog",
             )
-            if len(retry_locations) > len(face_locations_small):
-                small_frame = retry_frame
-                rgb_small = retry_rgb
-                face_locations_small = retry_locations
-                scale = retry_scale
+            retry_scale = min(max(float(SCAN_MULTI_FACE_RETRY_SCALE_PERCENT or 0) / 100.0, scale + 0.1), 0.82)
+            should_retry_multi_face_detection = len(face_locations_small) == 0
+            if len(face_locations_small) == 1:
+                frame_area = max(float(rgb_small.shape[0] * rgb_small.shape[1]), 1.0)
+                primary_face_area_ratio = float(_face_location_area(face_locations_small[0])) / frame_area
+                should_retry_multi_face_detection = (
+                    primary_face_area_ratio <= float(SCAN_MULTI_FACE_RETRY_MAX_FACE_AREA_RATIO or 0.16)
+                )
+            if should_retry_multi_face_detection and retry_scale > (scale + 0.02):
+                retry_frame = cv2.resize(frame, (0, 0), fx=retry_scale, fy=retry_scale, interpolation=cv2.INTER_LINEAR)
+                retry_rgb = cv2.cvtColor(retry_frame, cv2.COLOR_BGR2RGB)
+                retry_locations = face_recognition.face_locations(
+                    retry_rgb,
+                    number_of_times_to_upsample=0,
+                    model="hog",
+                )
+                if len(retry_locations) > len(face_locations_small):
+                    small_frame = retry_frame
+                    rgb_small = retry_rgb
+                    face_locations_small = retry_locations
+                    scale = retry_scale
+
+            pre_filter_face_count = len(face_locations_small)
+            face_locations_small = filter_live_face_locations(face_locations_small, rgb_small.shape)
+            cache_live_face_locations(face_locations_small, scale, now_ts=frame_now_ts)
+        else:
+            face_locations_small = filter_live_face_locations(face_locations_small, rgb_small.shape)
+
         scale_back = 1.0 / scale if scale > 0 else 1.0
 
         if len(face_locations_small) == 0:
+            if pre_filter_face_count > 0:
+                cache_live_face_locations([], scale, now_ts=frame_now_ts)
+                push_not_registered_event("face_too_small", 0.0)
+                clear_pending_live_recognition()
+                with scan_lock:
+                    scan_state["last_faces_payload"] = []
+                return True, "Face detected but too small for reliable recognition", payload
+            cache_live_face_locations([], scale, now_ts=frame_now_ts)
             clear_pending_live_recognition()
             with scan_lock:
                 scan_state["last_faces_payload"] = []
             return True, "No faces detected", payload
 
-        face_locations_small = filter_live_face_locations(face_locations_small, rgb_small.shape)
-        if len(face_locations_small) == 0:
-            push_not_registered_event("face_too_small", 0.0)
-            clear_pending_live_recognition()
-            with scan_lock:
-                scan_state["last_faces_payload"] = []
-            return True, "Face detected but too small for reliable recognition", payload
-
-        frame_now_ts = time.time()
         face_tracks = update_live_face_tracks(
             face_locations_small,
             scale_back,
@@ -10035,7 +10137,6 @@ def process_client_frame(frame_bytes):
             scan_state["last_faces_payload"] = [dict(row) for row in payload["faces"]]
 
         db_encoding_count = int(len(db_encodings)) if db_encodings is not None else 0
-        legacy_flat_index = any("encodings" not in (student or {}) for student in db_students)
         face_index = {
             "students": db_students,
             "centroids": db_encodings,

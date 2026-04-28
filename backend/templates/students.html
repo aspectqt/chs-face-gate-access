@@ -40,6 +40,17 @@
       max-height: calc(95vh - 72px);
     }
   }
+
+  @media (max-height: 860px) {
+    #addModal {
+      align-items: flex-start;
+    }
+
+    #addModal > div {
+      margin-top: 0.5rem;
+      margin-bottom: 0.5rem;
+    }
+  }
 </style>
 </head>
 <body class="bg-slate-100 h-screen overflow-hidden text-slate-800" data-authenticated="1" data-user-theme="{{ current_theme|default('') }}" data-selected-school-year="{{ selected_school_year }}" data-current-school-year="{{ current_school_year }}" data-archived-view="{% if archived_view %}1{% else %}0{% endif %}" data-can-manage-students="{% if can_manage_students %}1{% else %}0{% endif %}" data-can-register-faces="{% if can_register_faces %}1{% else %}0{% endif %}" x-data="{ mobileMenuOpen: false }">
