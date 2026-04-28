@@ -11,11 +11,7 @@ const DEFAULT_CHANNEL = (process.env.LIVE_MONITORING_CHANNEL || "main-gate").tri
 const SIGNALING_HOST = (process.env.LIVE_MONITORING_HOST || "0.0.0.0").trim() || "0.0.0.0";
 const SIGNALING_PORT = parseInteger(process.env.LIVE_MONITORING_SIGNALING_PORT, 5445);
 const FLASK_PORT = parseInteger(process.env.FLASK_PORT, 5444);
-const TOKEN_SECRET = Buffer.from(
-  (process.env.LIVE_MONITORING_TOKEN_SECRET || process.env.FLASK_SECRET_KEY || "live-monitoring-secret").trim()
-    || "live-monitoring-secret",
-  "utf8"
-);
+const TOKEN_SECRET = Buffer.from(resolveTokenSecret(), "utf8");
 const CONFIGURED_ORIGINS = new Set(
   parseOrigins(
     [
@@ -381,6 +377,14 @@ function createServer() {
   }
 
   return http.createServer();
+}
+
+function resolveTokenSecret() {
+  const secret = String(process.env.LIVE_MONITORING_TOKEN_SECRET || process.env.FLASK_SECRET_KEY || "").trim();
+  if (!secret) {
+    throw new Error("Missing LIVE_MONITORING_TOKEN_SECRET or FLASK_SECRET_KEY.");
+  }
+  return secret;
 }
 
 function isHttpsServer(activeServer) {

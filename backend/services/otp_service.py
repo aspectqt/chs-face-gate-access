@@ -1,4 +1,4 @@
-import random
+import secrets
 from werkzeug.security import check_password_hash, generate_password_hash
 
 
@@ -10,7 +10,7 @@ def generate_otp_code(length=6):
         length = 10
     low = 10 ** (length - 1)
     high = (10 ** length) - 1
-    return str(random.randint(low, high))
+    return str(secrets.randbelow(high - low + 1) + low)
 
 
 def hash_otp_code(otp_code):

@@ -214,6 +214,7 @@ def ensure_indexes():
     _safe_create_index(otp_requests, [("phone", ASCENDING), ("createdAt", DESCENDING)])
     _safe_create_index(otp_requests, [("phone", ASCENDING), ("status", ASCENDING), ("createdAt", DESCENDING)])
     _safe_create_index(otp_requests, [("expiresAt", ASCENDING)])
+    _safe_create_index(otp_requests, [("expiresAtDate", ASCENDING)], expireAfterSeconds=0)
     _safe_create_index(otp_requests, [("status", ASCENDING), ("verifiedAt", DESCENDING)])
 
     _safe_create_index(users, [("username", ASCENDING)], unique=True)
@@ -221,6 +222,8 @@ def ensure_indexes():
     _safe_create_index(users, [("fullName", ASCENDING)])
     _safe_create_index(users, [("role", ASCENDING)])
     _safe_create_index(users, [("twoFactorEnabled", ASCENDING)])
+    _safe_create_index(users, [("passwordResetRequired", ASCENDING)])
+    _safe_create_index(users, [("passwordChangedAt", DESCENDING)])
     _safe_create_index(users, [("updatedAt", DESCENDING)])
 
     ensure_alerts_indexes(alerts)

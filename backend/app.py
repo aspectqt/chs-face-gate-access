@@ -2,7 +2,7 @@ from flask import Flask, render_template, request, redirect, url_for, session, j
 from bson.objectid import ObjectId
 from pymongo.errors import DuplicateKeyError
 from pymongo import ASCENDING, DESCENDING
-from datetime import datetime, timedelta, time as dtime
+from datetime import datetime, timedelta, time as dtime, timezone
 from decimal import Decimal, InvalidOperation
 import atexit
 import os
@@ -186,7 +186,7 @@ def runtime_setting_value(*names, default=""):
 HTTPS_ENABLED = env_bool("HTTPS_ENABLED", False)
 FORCE_HTTPS = env_bool("FORCE_HTTPS", HTTPS_ENABLED)
 TRUST_PROXY_HEADERS = env_bool("TRUST_PROXY_HEADERS", False)
-FLASK_DEBUG_MODE = env_bool("FLASK_DEBUG", True)
+FLASK_DEBUG_MODE = env_bool("FLASK_DEBUG", False)
 DEV_AUTO_RELOAD = env_bool("DEV_AUTO_RELOAD", False)
 SSL_CERT_FILE = os.getenv("SSL_CERT_FILE", "").strip()
 SSL_KEY_FILE = os.getenv("SSL_KEY_FILE", "").strip()
@@ -197,6 +197,21 @@ PREFERRED_URL_SCHEME = (
     os.getenv("PREFERRED_URL_SCHEME", "https" if HTTPS_ENABLED else "http").strip().lower()
     or ("https" if HTTPS_ENABLED else "http")
 )
+
+
+def resolve_flask_secret_key():
+    configured = os.getenv("FLASK_SECRET_KEY", "").strip()
+    if configured:
+        return configured
+
+    generated = secrets.token_urlsafe(48)
+    os.environ["FLASK_SECRET_KEY"] = generated
+    if not os.getenv("LIVE_MONITORING_TOKEN_SECRET", "").strip():
+        os.environ["LIVE_MONITORING_TOKEN_SECRET"] = generated
+    print("[WARNING] FLASK_SECRET_KEY is not set. Generated an ephemeral secret for this process.")
+    return generated
+
+
 REPORT_PREPARED_BY_TITLE = os.getenv("REPORT_PREPARED_BY_TITLE", "Administrator").strip() or "Administrator"
 REPORT_PRINCIPAL_NAME = os.getenv("REPORT_PRINCIPAL_NAME", "").strip()
 REPORT_PRINCIPAL_TITLE = os.getenv("REPORT_PRINCIPAL_TITLE", "Principal").strip() or "Principal"
@@ -217,9 +232,7 @@ PDF_EXPORT_OLD_ENGLISH_FONT_PATHS = (
 # FLASK SETUP
 # =====================================
 app = Flask(__name__)
-app.secret_key = os.getenv("FLASK_SECRET_KEY", "super_secret_key_change_this")
-if app.secret_key == "super_secret_key_change_this":
-    print("[WARNING] FLASK_SECRET_KEY is not set. Using insecure default key.")
+app.secret_key = resolve_flask_secret_key()
 app.permanent_session_lifetime = timedelta(days=14)
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
@@ -448,6 +461,10 @@ ALLOWED_AVATAR_EXTENSIONS = {"jpg", "jpeg", "png", "webp"}
 MAX_AVATAR_SIZE_BYTES = 5 * 1024 * 1024
 MIN_PASSWORD_LENGTH = 8
 MAX_PASSWORD_LENGTH = 128
+DEFAULT_ADMIN_USERNAME = "admin"
+DEFAULT_ADMIN_PASSWORD = "admin123"
+BOOTSTRAP_ADMIN_PASSWORD = os.getenv("BOOTSTRAP_ADMIN_PASSWORD", "").strip()
+ALLOW_DEFAULT_ADMIN_PASSWORD = env_bool("ALLOW_DEFAULT_ADMIN_PASSWORD", False)
 PASSWORD_RESET_TOKEN_TTL_MINUTES = env_int("PASSWORD_RESET_TOKEN_TTL_MINUTES", 30, minimum=5, maximum=120)
 PASSWORD_RESET_REQUEST_WINDOW_MINUTES = env_int("PASSWORD_RESET_REQUEST_WINDOW_MINUTES", 15, minimum=1, maximum=240)
 PASSWORD_RESET_MAX_REQUESTS_PER_WINDOW = env_int("PASSWORD_RESET_MAX_REQUESTS_PER_WINDOW", 3, minimum=1, maximum=20)
@@ -929,9 +946,10 @@ def find_user_by_email(email_value):
 
 
 def get_request_client_ip():
-    xff = request.headers.get("X-Forwarded-For", "").strip()
-    if xff:
-        return xff.split(",")[0].strip()
+    if TRUST_PROXY_HEADERS:
+        xff = request.headers.get("X-Forwarded-For", "").strip()
+        if xff:
+            return xff.split(",")[0].strip()
     return (request.remote_addr or "").strip()
 
 
@@ -1472,6 +1490,8 @@ def require_permission(permission, api=False):
 def is_https_request():
     if request.is_secure:
         return True
+    if not TRUST_PROXY_HEADERS:
+        return False
     proto_header = (request.headers.get("X-Forwarded-Proto") or "").split(",")[0].strip().lower()
     return proto_header == "https"
 
@@ -4474,7 +4494,7 @@ def record_login(username, role):
             "username": username,
             "role": role,
             "timestamp": now_iso(),
-            "ip": request.headers.get("X-Forwarded-For", request.remote_addr),
+            "ip": get_request_client_ip(),
         })
     except Exception as exc:
         print(f"[ERROR] Failed to write login history: {exc}")
@@ -5876,14 +5896,43 @@ def process_pending_sms_retries(max_logs=5):
     return summary
 
 
+def is_default_admin_password_hash(password_hash_value):
+    password_hash = str(password_hash_value or "").strip()
+    if not password_hash:
+        return False
+    try:
+        return check_password_hash(password_hash, DEFAULT_ADMIN_PASSWORD)
+    except Exception:
+        return False
+
+
+def resolve_bootstrap_admin_password():
+    configured_password = BOOTSTRAP_ADMIN_PASSWORD
+    if configured_password:
+        validation_error, _ = validate_password_reset_input(configured_password, configured_password)
+        if not validation_error:
+            return configured_password, False, "configured"
+        print(f"[WARNING] BOOTSTRAP_ADMIN_PASSWORD does not meet password policy: {validation_error}")
+
+    if ALLOW_DEFAULT_ADMIN_PASSWORD:
+        print("[WARNING] Falling back to insecure default admin password because ALLOW_DEFAULT_ADMIN_PASSWORD=1.")
+        return DEFAULT_ADMIN_PASSWORD, True, "default_fallback"
+
+    generated_password = secrets.token_urlsafe(14)
+    print("[WARNING] BOOTSTRAP_ADMIN_PASSWORD is not set. Generated a temporary bootstrap admin password.")
+    print(f"[IMPORTANT] Temporary bootstrap admin password: {generated_password}")
+    return generated_password, True, "generated"
+
+
 def ensure_default_admin_user():
     try:
-        admin = users.find_one({"username": "admin"})
+        admin = users.find_one({"username": DEFAULT_ADMIN_USERNAME})
         if not admin:
             created = now_iso()
+            bootstrap_password, password_reset_required, source = resolve_bootstrap_admin_password()
             users.insert_one({
-                "username": "admin",
-                "password_hash": hash_password("admin123"),
+                "username": DEFAULT_ADMIN_USERNAME,
+                "password_hash": hash_password(bootstrap_password),
                 "role": ROLE_FULL_ADMIN,
                 "fullName": "System Administrator",
                 "email": "admin@chs.local",
@@ -5892,17 +5941,28 @@ def ensure_default_admin_user():
                 "bio": "",
                 "avatarUrl": "",
                 "twoFactorEnabled": False,
+                "passwordResetRequired": bool(password_reset_required),
+                "passwordResetReason": "bootstrap_admin_password" if password_reset_required else "",
                 "theme": "light",
                 "created_at": created,
                 "updated_at": created,
                 "updatedAt": created,
+                "passwordChangedAt": created,
             })
+            if password_reset_required:
+                print(
+                    f"[WARNING] Admin bootstrap password source='{source}'. "
+                    "Change the admin password immediately after first sign-in."
+                )
         else:
             updates = {}
             if "password_hash" not in admin:
-                legacy_pwd = admin.get("password", "admin123")
+                legacy_pwd = str(admin.get("password") or "").strip() or DEFAULT_ADMIN_PASSWORD
                 updates["password_hash"] = hash_password(legacy_pwd)
-            if normalize_account_role(admin.get("role"), "admin") != ROLE_FULL_ADMIN:
+                if legacy_pwd == DEFAULT_ADMIN_PASSWORD:
+                    updates["passwordResetRequired"] = True
+                    updates["passwordResetReason"] = "default_admin_password"
+            if normalize_account_role(admin.get("role"), DEFAULT_ADMIN_USERNAME) != ROLE_FULL_ADMIN:
                 updates["role"] = ROLE_FULL_ADMIN
             if "fullName" not in admin:
                 updates["fullName"] = "System Administrator"
@@ -5920,8 +5980,27 @@ def ensure_default_admin_user():
                 updates["twoFactorEnabled"] = False
             if normalize_theme_value(admin.get("theme"), default="") == "":
                 updates["theme"] = "light"
+            if "passwordResetRequired" not in admin:
+                updates["passwordResetRequired"] = False
+            elif not isinstance(admin.get("passwordResetRequired"), bool):
+                updates["passwordResetRequired"] = bool(admin.get("passwordResetRequired"))
+            if "passwordResetReason" not in admin:
+                updates["passwordResetReason"] = ""
+            if "passwordChangedAt" not in admin:
+                updates["passwordChangedAt"] = (
+                    admin.get("updatedAt")
+                    or admin.get("updated_at")
+                    or admin.get("created_at")
+                    or now_iso()
+                )
             if "updatedAt" not in admin:
                 updates["updatedAt"] = (admin.get("updated_at") or admin.get("created_at") or now_iso())
+
+            effective_password_hash = updates.get("password_hash") or admin.get("password_hash")
+            if is_default_admin_password_hash(effective_password_hash):
+                updates["passwordResetRequired"] = True
+                updates["passwordResetReason"] = "default_admin_password"
+
             if updates:
                 users.update_one({"_id": admin["_id"]}, {"$set": updates})
     except Exception as exc:
@@ -6015,6 +6094,14 @@ def ensure_user_profile_defaults():
                 patch["twoFactorEnabled"] = False
             elif not isinstance(doc.get("twoFactorEnabled"), bool):
                 patch["twoFactorEnabled"] = bool(doc.get("twoFactorEnabled"))
+            if "passwordResetRequired" not in doc:
+                patch["passwordResetRequired"] = False
+            elif not isinstance(doc.get("passwordResetRequired"), bool):
+                patch["passwordResetRequired"] = bool(doc.get("passwordResetRequired"))
+            if "passwordResetReason" not in doc:
+                patch["passwordResetReason"] = ""
+            if "passwordChangedAt" not in doc:
+                patch["passwordChangedAt"] = updated
             if "updatedAt" not in doc:
                 patch["updatedAt"] = updated
             if patch:
@@ -6806,9 +6893,9 @@ def login():
                 outcome="blocked",
                 severity="warn",
                 target_type="user",
-                target_id=username,
-                details={"reason": "lockout", "wait_minutes": wait_minutes},
-            )
+                    target_id=username,
+                    details={"reason": "lockout", "wait_minutes": wait_minutes},
+                )
             return render_template(
                 "login.html",
                 current_year=datetime.now().year,
@@ -6827,11 +6914,28 @@ def login():
 
             if password_ok:
                 role = normalize_account_role(user.get("role"), username)
+                password_reset_required = bool(user.get("passwordResetRequired", False))
+                if username.strip().lower() == DEFAULT_ADMIN_USERNAME and is_default_admin_password_hash(stored_hash):
+                    password_reset_required = True
+                    flag_updated = now_iso()
+                    users.update_one(
+                        {"_id": user["_id"]},
+                        {
+                            "$set": {
+                                "passwordResetRequired": True,
+                                "passwordResetReason": "default_admin_password",
+                                "updatedAt": flag_updated,
+                                "updated_at": flag_updated,
+                            }
+                        },
+                    )
+
                 session.clear()
                 session.permanent = remember_me
                 session["admin"] = username
                 session["role"] = role
                 session["theme"] = normalize_theme_value(user.get("theme"))
+                session["password_reset_required"] = password_reset_required
                 record_login(username, role)
                 clear_login_attempts(username, client_ip)
                 log_audit_event(
@@ -6840,8 +6944,14 @@ def login():
                     severity="info",
                     target_type="user",
                     target_id=username,
-                    details={"role": role},
+                    details={"role": role, "password_reset_required": password_reset_required},
                 )
+                if password_reset_required:
+                    return redirect(url_for(
+                        "dashboard",
+                        message="Security notice: update your password immediately from Profile > Password.",
+                        message_type="error",
+                    ))
                 return redirect(post_login_redirect(role))
 
         register_failed_login_attempt(username, client_ip)
@@ -7021,6 +7131,9 @@ def reset_password():
         {
             "$set": {
                 "password_hash": hash_password(new_password),
+                "passwordResetRequired": False,
+                "passwordResetReason": "",
+                "passwordChangedAt": updated,
                 "updatedAt": updated,
                 "updated_at": updated,
             },
@@ -7074,9 +7187,11 @@ live_monitoring_process_started_by_app = False
 def live_monitoring_secret_bytes():
     secret = (
         os.getenv("LIVE_MONITORING_TOKEN_SECRET", "").strip()
+        or os.getenv("FLASK_SECRET_KEY", "").strip()
         or str(app.secret_key or "").strip()
-        or "live-monitoring-secret"
     )
+    if not secret:
+        raise RuntimeError("Live monitoring token secret is not configured.")
     return secret.encode("utf-8")
 
 
@@ -7787,12 +7902,16 @@ def profile_password_update_api():
         {
             "$set": {
                 "password_hash": hash_password(new_password),
+                "passwordResetRequired": False,
+                "passwordResetReason": "",
+                "passwordChangedAt": updated,
                 "updatedAt": updated,
                 "updated_at": updated,
             },
             "$unset": {"password": ""},
         },
     )
+    session["password_reset_required"] = False
     refreshed = users.find_one({"_id": user_doc["_id"]})
     return jsonify({"status": "ok", "profile": normalize_profile_user_doc(refreshed)})
 
@@ -7801,9 +7920,10 @@ def profile_password_update_api():
 # SMS / OTP API
 # =====================================
 def get_client_ip():
-    xff = request.headers.get("X-Forwarded-For", "").strip()
-    if xff:
-        return xff.split(",")[0].strip()
+    if TRUST_PROXY_HEADERS:
+        xff = request.headers.get("X-Forwarded-For", "").strip()
+        if xff:
+            return xff.split(",")[0].strip()
     return (request.remote_addr or "").strip()
 
 
@@ -7839,6 +7959,76 @@ def otp_rate_limit_check(phone, client_ip):
             return False, "Too many OTP requests from this IP. Please try again later."
 
     return True, ""
+
+
+otp_expiration_backfill_done = False
+otp_expiration_backfill_lock = threading.Lock()
+
+
+def parse_otp_expiration_datetime(value):
+    if isinstance(value, datetime):
+        if value.tzinfo is not None:
+            return value.astimezone(timezone.utc).replace(tzinfo=None)
+        return value
+
+    text = str(value or "").strip()
+    if not text:
+        return None
+
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+
+    if parsed.tzinfo is not None:
+        return parsed.astimezone(timezone.utc).replace(tzinfo=None)
+
+    try:
+        epoch_seconds = time.mktime(parsed.timetuple())
+    except (OverflowError, OSError, ValueError):
+        return None
+    return datetime.utcfromtimestamp(epoch_seconds)
+
+
+def ensure_otp_request_expiration_dates():
+    global otp_expiration_backfill_done
+    if otp_expiration_backfill_done:
+        return
+
+    with otp_expiration_backfill_lock:
+        if otp_expiration_backfill_done:
+            return
+
+        try:
+            cursor = otp_requests.find(
+                {"expiresAtDate": {"$exists": False}, "expiresAt": {"$type": "string"}},
+                {"expiresAt": 1},
+            )
+            updated = 0
+            for doc in cursor:
+                expires_at_dt = parse_otp_expiration_datetime(doc.get("expiresAt"))
+                if not expires_at_dt:
+                    continue
+                otp_requests.update_one(
+                    {"_id": doc["_id"]},
+                    {"$set": {"expiresAtDate": expires_at_dt}},
+                )
+                updated += 1
+
+            if updated:
+                print(f"[INFO] Backfilled expiresAtDate for {updated} OTP request(s).")
+        except Exception as exc:
+            print(f"[WARNING] Failed to backfill OTP expiration dates: {exc}")
+        finally:
+            otp_expiration_backfill_done = True
+
+
+def get_otp_request_expiration_datetime(otp_record):
+    if not otp_record:
+        return None
+    return parse_otp_expiration_datetime(
+        otp_record.get("expiresAtDate") or otp_record.get("expiresAt")
+    )
 
 
 @app.route("/api/sms/send", methods=["POST"])
@@ -7944,6 +8134,7 @@ def api_sms_balance():
 
 @app.route("/api/auth/otp/request", methods=["POST"])
 def api_otp_request():
+    ensure_otp_request_expiration_dates()
     payload = parse_json_payload()
     phone_raw = (payload.get("phone") or "").strip()
     if not phone_raw:
@@ -7976,6 +8167,7 @@ def api_otp_request():
         "phone": normalized_phone,
         "otpHash": otp_hash,
         "expiresAt": expires_at,
+        "expiresAtDate": parse_otp_expiration_datetime(expires_at) or (datetime.utcnow() + timedelta(minutes=OTP_EXPIRES_MINUTES)),
         "attempts": 0,
         "verifiedAt": None,
         "status": "pending",
@@ -8032,6 +8224,7 @@ def api_otp_request():
 
 @app.route("/api/auth/otp/verify", methods=["POST"])
 def api_otp_verify():
+    ensure_otp_request_expiration_dates()
     payload = parse_json_payload()
     phone_raw = (payload.get("phone") or "").strip()
     otp_code = (payload.get("otp") or "").strip()
@@ -8051,8 +8244,15 @@ def api_otp_verify():
         return jsonify({"status": "error", "message": "No active OTP request found."}), 404
 
     now_ts = now_iso()
+    expires_at_dt = get_otp_request_expiration_datetime(otp_record)
+    if expires_at_dt and datetime.utcnow() >= expires_at_dt:
+        otp_requests.update_one(
+            {"_id": otp_record["_id"]},
+            {"$set": {"status": "expired", "updatedAt": now_ts}},
+        )
+        return jsonify({"status": "error", "message": "OTP has expired."}), 400
     expires_at = (otp_record.get("expiresAt") or "").strip()
-    if expires_at and now_ts > expires_at:
+    if not expires_at_dt and expires_at and now_ts > expires_at:
         otp_requests.update_one(
             {"_id": otp_record["_id"]},
             {"$set": {"status": "expired", "updatedAt": now_ts}},
@@ -11212,10 +11412,13 @@ def add_user():
         "bio": "",
         "avatarUrl": "",
         "twoFactorEnabled": False,
+        "passwordResetRequired": False,
+        "passwordResetReason": "",
         "theme": "light",
         "created_at": created,
         "updated_at": created,
         "updatedAt": created,
+        "passwordChangedAt": created,
     })
     signal_data_change("users")
     create_alert("info", f"New user '{username}' added with role {role}.", "system")
@@ -11312,6 +11515,9 @@ def reset_staff_user_password(user_id):
         {
             "$set": {
                 "password_hash": hash_password(new_password),
+                "passwordResetRequired": True,
+                "passwordResetReason": "admin_reset",
+                "passwordChangedAt": updated,
                 "updated_at": updated,
                 "updatedAt": updated,
             },

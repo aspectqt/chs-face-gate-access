@@ -412,6 +412,7 @@
     }
 
     function openForgotModal() {
+        if (!forgotModal || !forgotEmail) return;
         clearForgotMessages();
         forgotModal.classList.remove('hidden');
         forgotEmail.value = '';
@@ -419,26 +420,34 @@
     }
 
     function closeForgotModal() {
+        if (!forgotModal || !forgotSubmitButton || !forgotSubmitText || !forgotSpinner) return;
         forgotModal.classList.add('hidden');
         forgotSubmitButton.disabled = false;
         forgotSubmitText.textContent = 'Send Reset Link';
         forgotSpinner.classList.add('hidden');
     }
 
-    togglePassword.addEventListener('click', () => {
-        const isPassword = passwordInput.type === 'password';
-        passwordInput.type = isPassword ? 'text' : 'password';
-        togglePassword.setAttribute('aria-pressed', isPassword ? 'true' : 'false');
-        togglePassword.setAttribute('aria-label', isPassword ? 'Hide password' : 'Show password');
-    });
+    if (togglePassword && passwordInput) {
+        togglePassword.addEventListener('click', () => {
+            const isPassword = passwordInput.type === 'password';
+            passwordInput.type = isPassword ? 'text' : 'password';
+            togglePassword.setAttribute('aria-pressed', isPassword ? 'true' : 'false');
+            togglePassword.setAttribute('aria-label', isPassword ? 'Hide password' : 'Show password');
+        });
+    }
 
     loginForm.addEventListener('submit', (event) => {
         clearClientError();
 
         const username = usernameInput.value.trim();
-        const password = passwordInput.value;
+        if (!username) {
+            event.preventDefault();
+            showClientError('Username is required.');
+            return;
+        }
 
-        if (!username || !password) {
+        const password = passwordInput ? passwordInput.value : '';
+        if (!password) {
             event.preventDefault();
             showClientError('Username and password are required.');
             return;
@@ -458,17 +467,17 @@
         loginSpinner.classList.remove('hidden');
     });
 
-    forgotLinkButton.addEventListener('click', openForgotModal);
-    forgotCloseButton.addEventListener('click', closeForgotModal);
-    forgotBackdrop.addEventListener('click', closeForgotModal);
+    if (forgotLinkButton) forgotLinkButton.addEventListener('click', openForgotModal);
+    if (forgotCloseButton) forgotCloseButton.addEventListener('click', closeForgotModal);
+    if (forgotBackdrop) forgotBackdrop.addEventListener('click', closeForgotModal);
 
     document.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape' && !forgotModal.classList.contains('hidden')) {
+        if (event.key === 'Escape' && forgotModal && !forgotModal.classList.contains('hidden')) {
             closeForgotModal();
         }
     });
 
-    forgotForm.addEventListener('submit', async (event) => {
+    if (forgotForm) forgotForm.addEventListener('submit', async (event) => {
         event.preventDefault();
         clearForgotMessages();
 
