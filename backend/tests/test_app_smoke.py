@@ -1003,6 +1003,140 @@ class AppSmokeTests(unittest.TestCase):
         finally:
             self.app_module.set_scan_session_mode(original_mode)
 
+    def test_manual_lrn_scan_api_processes_entry_and_emits_verified_event(self):
+        client = self.make_client(username="staff_user", role=self.app_module.ROLE_STAFF)
+        csrf_headers = {self.app_module.CSRF_HEADER_NAME: "test-csrf-token"}
+        student_id = f"MANLRN-{uuid.uuid4().hex[:8]}"
+        fake_student = {
+            "student_id": student_id,
+            "name": "Manual LRN Student",
+            "parent_contact": "09171234567",
+            "status": "Active",
+        }
+        fake_result = {
+            "student_id": student_id,
+            "student_name": "Manual LRN Student",
+            "status": "Present",
+            "session": "Manual Out 8:01 AM",
+            "timestamp": "2026-04-30T08:01:02",
+            "date": "2026-04-30",
+            "time": "08:01:02",
+            "gate_action": "OUT",
+            "verification_label": "Thank You",
+            "display_message": "Thank You",
+            "voice_message": "Thank you",
+            "duplicate": False,
+            "duplicate_reason": "",
+            "feed_update": True,
+            "activity_entry": {
+                "student_id": student_id,
+                "name": "Manual LRN Student",
+                "gate_action": "OUT",
+                "status": "Present",
+                "verification_label": "Thank You",
+                "timestamp": "2026-04-30T08:01:02",
+                "time": "8:01 AM",
+                "label": "Manual LRN Student (OUT)",
+            },
+            "tracking_mode": "manual_out",
+            "sms_status": "queued",
+        }
+
+        self.app_module.last_scanned.pop(student_id, None)
+        try:
+            with patch.object(self.app_module.students, "find_one", return_value=fake_student), patch.object(
+                self.app_module, "log_attendance_and_sms", return_value=fake_result
+            ), patch.object(
+                self.app_module, "get_scan_session_mode", return_value="manual_out"
+            ), patch.object(
+                self.app_module, "resolve_live_scan_repeat_hold_seconds", return_value=7.5
+            ), patch.object(
+                self.app_module, "mark_persistent_face_scan"
+            ) as mark_persistent_mock, patch.object(
+                self.app_module, "push_scan_event"
+            ) as push_scan_event_mock:
+                response = client.post(
+                    "/api/scan/manual-lrn",
+                    json={"lrn": student_id},
+                    headers=csrf_headers,
+                )
+
+            self.assertEqual(response.status_code, 200)
+            payload = response.get_json()
+            self.assertEqual(payload["status"], "ok")
+            self.assertFalse(payload["duplicate"])
+            self.assertTrue(payload["event_emitted"])
+            self.assertEqual(payload["gate_action"], "OUT")
+            self.assertEqual(payload["student_id"], student_id)
+            self.assertEqual(payload["tracking_mode"], "manual_out")
+
+            push_scan_event_mock.assert_called_once()
+            event_type, event_payload = push_scan_event_mock.call_args.args
+            self.assertEqual(event_type, "verified")
+            self.assertEqual(event_payload["student_id"], student_id)
+            self.assertEqual(event_payload["gate_action"], "OUT")
+            self.assertEqual(event_payload["tracking_mode"], "manual_out")
+            mark_persistent_mock.assert_called_once()
+
+            cooldown_entry = self.app_module.last_scanned.get(student_id)
+            self.assertIsNotNone(cooldown_entry)
+            self.assertEqual(cooldown_entry.get("gate_action"), "OUT")
+            self.assertEqual(cooldown_entry.get("mode"), "manual_out")
+            self.assertGreater(float(cooldown_entry.get("until_ts", 0.0)), 0.0)
+        finally:
+            self.app_module.last_scanned.pop(student_id, None)
+
+    def test_manual_lrn_scan_api_duplicate_keeps_response_ok_without_event_emission(self):
+        client = self.make_client(username="staff_user", role=self.app_module.ROLE_STAFF)
+        csrf_headers = {self.app_module.CSRF_HEADER_NAME: "test-csrf-token"}
+        student_id = f"MANLRN-DUP-{uuid.uuid4().hex[:8]}"
+        fake_student = {
+            "student_id": student_id,
+            "name": "Duplicate Manual LRN Student",
+            "parent_contact": "09171234567",
+            "status": "Active",
+        }
+        fake_result = {
+            "student_id": student_id,
+            "student_name": "Duplicate Manual LRN Student",
+            "status": "Present",
+            "session": "Live IN 8:01 AM",
+            "timestamp": "2026-04-30T08:01:02",
+            "date": "2026-04-30",
+            "time": "08:01:02",
+            "gate_action": "IN",
+            "verification_label": "Already Recorded",
+            "display_message": "Already recorded moments ago.",
+            "voice_message": "Already recorded",
+            "duplicate": True,
+            "duplicate_reason": "duplicate_key",
+            "feed_update": False,
+            "activity_entry": None,
+            "tracking_mode": "auto",
+            "sms_status": "skipped",
+        }
+
+        with patch.object(self.app_module.students, "find_one", return_value=fake_student), patch.object(
+            self.app_module, "log_attendance_and_sms", return_value=fake_result
+        ), patch.object(
+            self.app_module, "get_scan_session_mode", return_value="auto"
+        ), patch.object(
+            self.app_module, "push_scan_event"
+        ) as push_scan_event_mock:
+            response = client.post(
+                "/api/scan/manual-lrn",
+                json={"lrn": student_id},
+                headers=csrf_headers,
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload["status"], "ok")
+        self.assertTrue(payload["duplicate"])
+        self.assertFalse(payload["event_emitted"])
+        self.assertEqual(payload["duplicate_reason"], "duplicate_key")
+        push_scan_event_mock.assert_not_called()
+
     def test_gate_logs_action_filter_matches_smart_in_out_records(self):
         client = self.make_client()
         school_year_label = self.app_module.get_current_school_year_label()

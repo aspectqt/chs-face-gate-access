@@ -8378,6 +8378,104 @@ def stop_scan():
     return jsonify({"status": "ok", "message": "Scan stopped"})
 
 
+@app.route("/api/scan/manual-lrn", methods=["POST"])
+@require_permission("scan", api=True)
+def api_scan_manual_lrn():
+    payload = request_payload()
+    lrn_input = payload.get("lrn", payload.get("student_id", ""))
+    lrn_value, lrn_error = validate_lrn_value(lrn_input)
+    if lrn_error:
+        return jsonify({"status": "error", "message": lrn_error, "field": "lrn"}), 400
+
+    student = students.find_one(
+        {
+            "$and": [
+                build_lrn_duplicate_query(lrn_value),
+                {
+                    "$or": [
+                        {"status": "Active"},
+                        {"status": {"$exists": False}},
+                        {"status": ""},
+                    ]
+                },
+            ]
+        }
+    )
+    if not student:
+        return jsonify({
+            "status": "error",
+            "message": "Student not found or inactive for the provided LRN.",
+            "field": "lrn",
+        }), 404
+
+    current_mode = get_scan_session_mode()
+    result = log_attendance_and_sms(student, source="manual_lrn_fallback", mode=current_mode)
+    if not result:
+        return jsonify({
+            "status": "error",
+            "message": "Unable to process manual LRN scan right now. Please try again.",
+        }), 400
+
+    student_id = str(result.get("student_id") or student.get("student_id") or lrn_value).strip()
+    student_name = str(result.get("student_name") or student.get("name") or student_id).strip()
+    result_gate_action = normalize_gate_action_value(result.get("gate_action"))
+    now_ts = time.time()
+    event_emitted = False
+
+    if not result.get("duplicate"):
+        repeat_hold_seconds = resolve_live_scan_repeat_hold_seconds(result, now_ts=now_ts)
+        with scan_lock:
+            last_scanned[student_id] = {
+                "until_ts": now_ts + max(repeat_hold_seconds, 0.0),
+                "gate_action": result_gate_action,
+                "mode": normalize_scan_session_mode(current_mode, default="auto"),
+            }
+        mark_persistent_face_scan(student_id, now_ts, gate_action=result_gate_action)
+        push_scan_event("verified", {
+            "student_id": student_id,
+            "name": student_name,
+            "verified": True,
+            "attendance_status": result["status"],
+            "sms_status": result["sms_status"],
+            "gate_action": result["gate_action"],
+            "verification_label": result["verification_label"],
+            "session": str(result.get("session") or ""),
+            "display_message": result["display_message"],
+            "voice_message": result["voice_message"],
+            "voice_key": f"{student_id}:{result['gate_action']}:{result['timestamp']}",
+            "confidence": 100.0,
+            "confidence_pct": 100.0,
+            "duplicate": False,
+            "duplicate_reason": "",
+            "time": format_time_for_display(result.get("time"), result.get("timestamp")),
+            "timestamp_display": format_timestamp_for_display(result.get("timestamp"), result.get("time")),
+            "feed_update": bool(result.get("feed_update")),
+            "activity_entry": result.get("activity_entry"),
+            "tracking_mode": result.get("tracking_mode", current_mode),
+        })
+        event_emitted = True
+
+    return jsonify({
+        "status": "ok",
+        "message": str(result.get("display_message") or "Attendance recorded."),
+        "student_id": student_id,
+        "student_name": student_name,
+        "gate_action": result.get("gate_action", ""),
+        "attendance_status": result.get("status", ""),
+        "verification_label": result.get("verification_label", ""),
+        "session": str(result.get("session") or ""),
+        "tracking_mode": result.get("tracking_mode", current_mode),
+        "sms_status": result.get("sms_status", ""),
+        "duplicate": bool(result.get("duplicate")),
+        "duplicate_reason": str(result.get("duplicate_reason") or ""),
+        "time": format_time_for_display(result.get("time"), result.get("timestamp")),
+        "timestamp_display": format_timestamp_for_display(result.get("timestamp"), result.get("time")),
+        "feed_update": bool(result.get("feed_update")),
+        "activity_entry": result.get("activity_entry"),
+        "event_emitted": event_emitted,
+    })
+
+
 def filter_live_face_locations(face_locations, frame_shape):
     if not isinstance(face_locations, list):
         return []

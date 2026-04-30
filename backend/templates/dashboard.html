@@ -364,7 +364,7 @@
             align-items: center;
             gap: 0 !important;
             color: rgba(226, 232, 240, 0.88) !important;
-            font-size: clamp(0.7rem, 1.14vw, 0.82rem) !important;
+            font-size: clamp(0.84rem, 1.34vw, 0.98rem) !important;
             font-weight: 600 !important;
             letter-spacing: 0.05em;
             text-transform: uppercase;
@@ -374,7 +374,7 @@
 
         #status {
             color: #e2e8f0 !important;
-            font-size: clamp(0.82rem, 1.34vw, 1rem) !important;
+            font-size: clamp(1.02rem, 1.7vw, 1.28rem) !important;
             font-weight: 700 !important;
             letter-spacing: 0.01em;
             animation: scanStatusDrift 3.2s ease-in-out infinite reverse;
@@ -386,7 +386,7 @@
         #scanEventBadge {
             display: inline-flex !important;
             color: rgba(191, 219, 254, 0.9) !important;
-            font-size: clamp(0.68rem, 1.06vw, 0.8rem) !important;
+            font-size: clamp(0.8rem, 1.2vw, 0.94rem) !important;
             font-weight: 600 !important;
             letter-spacing: 0.02em;
             opacity: 0.92;
@@ -472,21 +472,21 @@
         #scanFrame:-webkit-full-screen #scanStateBadge,
         #scanFrame:-moz-full-screen #scanStateBadge,
         #scanFrame:-ms-fullscreen #scanStateBadge {
-            font-size: clamp(0.78rem, 1.25vw, 1.05rem) !important;
+            font-size: clamp(0.92rem, 1.4vw, 1.22rem) !important;
         }
 
         #scanFrame:fullscreen #status,
         #scanFrame:-webkit-full-screen #status,
         #scanFrame:-moz-full-screen #status,
         #scanFrame:-ms-fullscreen #status {
-            font-size: clamp(1rem, 1.74vw, 1.5rem) !important;
+            font-size: clamp(1.2rem, 1.95vw, 1.85rem) !important;
         }
 
         #scanFrame:fullscreen #scanEventBadge,
         #scanFrame:-webkit-full-screen #scanEventBadge,
         #scanFrame:-moz-full-screen #scanEventBadge,
         #scanFrame:-ms-fullscreen #scanEventBadge {
-            font-size: clamp(0.72rem, 1.18vw, 1rem) !important;
+            font-size: clamp(0.84rem, 1.3vw, 1.16rem) !important;
         }
 
         #scanOverlay.scan-camera-status {
@@ -509,15 +509,15 @@
             }
 
             #scanStateBadge {
-                font-size: 0.72rem !important;
+                font-size: 0.82rem !important;
             }
 
             #status {
-                font-size: 0.84rem !important;
+                font-size: 1rem !important;
             }
 
             #scanEventBadge {
-                font-size: 0.7rem !important;
+                font-size: 0.78rem !important;
             }
         }
 
@@ -2369,6 +2369,18 @@
                                                     <span>Manual OUT</span>
                                                 </button>
                                             </div>
+                                            <form id="manualLrnForm" class="mt-4 space-y-2" autocomplete="off">
+                                                <label for="manualLrnInput" class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Manual LRN Backup</label>
+                                                <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+                                                    <input id="manualLrnInput" name="manual_lrn" type="text" maxlength="32" inputmode="numeric" placeholder="Enter learner LRN"
+                                                        class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm transition focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100">
+                                                    <button id="manualLrnSubmitBtn" type="submit"
+                                                        class="inline-flex shrink-0 items-center justify-center rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700">
+                                                        Process LRN
+                                                    </button>
+                                                </div>
+                                                <p id="manualLrnFeedback" class="hidden text-xs font-medium text-slate-500" role="status" aria-live="polite"></p>
+                                            </form>
                                             <p class="mt-3 text-[11px] leading-5 text-slate-500"></p>
                                         </div>
                                     </aside>
@@ -3255,6 +3267,10 @@
         const sessionModeHint = document.getElementById('sessionModeHint');
         const manualInModeBtn = document.getElementById('manualInModeBtn');
         const manualOutModeBtn = document.getElementById('manualOutModeBtn');
+        const manualLrnForm = document.getElementById('manualLrnForm');
+        const manualLrnInput = document.getElementById('manualLrnInput');
+        const manualLrnSubmitBtn = document.getElementById('manualLrnSubmitBtn');
+        const manualLrnFeedback = document.getElementById('manualLrnFeedback');
         const sessionActionHint = document.getElementById('sessionActionHint');
         const sessionActionIcon = document.getElementById('sessionActionIcon');
         const sessionActionText = document.getElementById('sessionActionText');
@@ -3297,6 +3313,7 @@
         let scanSessionMode = 'auto';
         let scanModelStatus = 'idle';
         let scanSessionModeUpdating = false;
+        let manualLrnSubmitting = false;
         let dashboardChangesStream = null;
         let dashboardChangesReconnectTimer = null;
         let dashboardStatsRefreshTimer = null;
@@ -3841,6 +3858,7 @@
                 tone: 'manual_out',
                 disabled,
             });
+            setManualLrnControls();
         }
 
         function updateCurrentSessionBadge(sessionInfo = null, mode = scanSessionMode) {
@@ -3887,6 +3905,112 @@
             updateCurrentSessionBadge(sessionInfo, scanSessionMode);
             updateSessionActionHint(sessionInfo, scanSessionMode);
             updateSessionModeButtons();
+        }
+
+        function setManualLrnFeedback(level = 'neutral', message = '') {
+            if (!manualLrnFeedback) return;
+            const text = String(message || '').trim();
+            if (!text) {
+                manualLrnFeedback.className = 'hidden text-xs font-medium text-slate-500';
+                manualLrnFeedback.textContent = '';
+                return;
+            }
+            let toneClass = 'text-slate-600';
+            if (level === 'success') toneClass = 'text-emerald-700';
+            if (level === 'warning') toneClass = 'text-amber-700';
+            if (level === 'error') toneClass = 'text-rose-700';
+            if (level === 'info') toneClass = 'text-blue-700';
+            manualLrnFeedback.className = `text-xs font-medium ${toneClass}`;
+            manualLrnFeedback.textContent = text;
+        }
+
+        function setManualLrnControls() {
+            const disabled = manualLrnSubmitting || scanSessionModeUpdating || isPreviousYearSelected();
+            if (manualLrnInput) {
+                manualLrnInput.disabled = disabled;
+                manualLrnInput.classList.toggle('opacity-60', disabled);
+                manualLrnInput.classList.toggle('cursor-not-allowed', disabled);
+            }
+            if (manualLrnSubmitBtn) {
+                manualLrnSubmitBtn.disabled = disabled;
+                manualLrnSubmitBtn.classList.toggle('opacity-60', disabled);
+                manualLrnSubmitBtn.classList.toggle('cursor-not-allowed', disabled);
+                manualLrnSubmitBtn.textContent = manualLrnSubmitting ? 'Processing...' : 'Process LRN';
+            }
+        }
+
+        async function submitManualLrnFallback(event) {
+            event?.preventDefault?.();
+            if (!manualLrnInput || !manualLrnSubmitBtn) return;
+            if (manualLrnSubmitting || scanSessionModeUpdating || isPreviousYearSelected()) return;
+
+            const enteredLrn = String(manualLrnInput.value || '').trim();
+            if (!enteredLrn) {
+                setManualLrnFeedback('warning', 'Enter an LRN to continue.');
+                manualLrnInput.focus();
+                return;
+            }
+
+            manualLrnSubmitting = true;
+            setManualLrnControls();
+            setManualLrnFeedback('info', 'Processing manual LRN scan...');
+
+            try {
+                const res = await fetch('/api/scan/manual-lrn', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ lrn: enteredLrn }),
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok || data.status !== 'ok') {
+                    throw new Error(data.message || 'Failed to process manual LRN scan.');
+                }
+
+                const studentName = String(data.student_name || '').trim();
+                const studentId = String(data.student_id || enteredLrn).trim();
+                const gateAction = String(data.gate_action || '').toUpperCase() === 'OUT' ? 'OUT' : 'IN';
+                const duplicate = Boolean(data.duplicate);
+                const serverMessage = String(data.message || '').trim();
+                const defaultMessage = duplicate
+                    ? `${studentName || studentId} already has a recent ${gateAction} record.`
+                    : `${studentName || studentId} recorded ${gateAction}.`;
+                const feedbackMessage = serverMessage || defaultMessage;
+
+                setManualLrnFeedback(duplicate ? 'warning' : 'success', feedbackMessage);
+
+                if (!duplicate) {
+                    manualLrnInput.value = '';
+                }
+
+                if (data.feed_update && data.activity_entry) {
+                    upsertScanActivityEntry(data.activity_entry);
+                }
+
+                if (isScanning && data.event_emitted) {
+                    void pollScanEventsOnce();
+                } else {
+                    showScanEventBadge(duplicate ? 'warning' : 'success', feedbackMessage);
+                    setScanState(duplicate ? 'warning' : 'success', `Status: ${feedbackMessage}`);
+                    if (duplicate) {
+                        playErrorTone();
+                    } else {
+                        playNotificationTone();
+                        setStatusChip(faceStatusChip, 'Face: Manual', 'info');
+                        setStatusChip(accessStatusChip, `Access: ${gateAction}`, gateAction === 'OUT' ? 'warning' : 'success');
+                    }
+                }
+
+                refreshDashboardStats();
+            } catch (error) {
+                const errorMessage = String(error?.message || 'Failed to process manual LRN scan.');
+                setManualLrnFeedback('error', errorMessage);
+                showScanEventBadge('error', errorMessage);
+                setScanState('error', `Status: ${errorMessage}`);
+                playErrorTone();
+            } finally {
+                manualLrnSubmitting = false;
+                setManualLrnControls();
+            }
         }
 
         function applyScanModelStatus(status, registeredFaces = 0, force = false) {
@@ -3994,6 +4118,7 @@
             startBtn.classList.toggle('cursor-not-allowed', startBtn.disabled);
             stopBtn.classList.toggle('cursor-not-allowed', stopBtn.disabled);
             updateSessionModeButtons();
+            setManualLrnControls();
         }
 
         function animateScanHudText(node, nextText = '') {
@@ -5481,6 +5606,17 @@
             saveScanSessionModeState(nextMode);
         });
 
+        manualLrnForm?.addEventListener('submit', (event) => {
+            void submitManualLrnFallback(event);
+        });
+
+        manualLrnInput?.addEventListener('input', () => {
+            if (manualLrnSubmitting) return;
+            if ((manualLrnFeedback?.textContent || '').trim()) {
+                setManualLrnFeedback('neutral', '');
+            }
+        });
+
         startBtn.addEventListener('click', async () => {
             if (isScanning) return;
             primeVerificationVoiceEngine();
@@ -5614,6 +5750,7 @@
         });
         updateScanningConsoleForYear();
         setScanButtons();
+        setManualLrnFeedback('neutral', '');
         setScanState('idle', 'Status: Idle');
         applyGateStatusDefaults();
         normalizeScanActivityFeed();
